@@ -1,0 +1,28 @@
+{
+  "_comment": [
+    "The evolution tree, loaded when the game starts. Tower stats are in towers.json.",
+    "lines: each line starts with a tower bought from the panel (in this order, hotkeys 1, 2, 3...).",
+    "  Two identical tier 1 towers fuse into the tier 2 tower; two identical tier 2 towers fuse into",
+    "  one of the two tier 3 towers, and the player picks which.",
+    "finals: a cross-type tier 4 tower and the two tier 3 towers, from different lines, that fuse into it."
+  ],
+  "lines": {
+    "gun": {"tier1": "gun", "tier2": "rifle", "tier3": ["minigun", "sniper"]},
+    "cannon": {"tier1": "cannon", "tier2": "mortar", "tier3": ["bombard", "incinerator"]},
+    "frost": {"tier1": "frost", "tier2": "chiller", "tier3": ["blizzard", "shatter"]}
+  },
+  "finals": {
+    "flak": ["minigun", "bombard"],
+    "dragon": ["minigun", "incinerator"],
+    "railgun": ["sniper", "bombard"],
+    "solar": ["sniper", "incinerator"],
+    "hailstorm": ["minigun", "blizzard"],
+    "tesla": ["minigun", "shatter"],
+    "zero": ["sniper", "blizzard"],
+    "lance": ["sniper", "shatter"],
+    "avalanche": ["bombard", "blizzard"],
+    "breaker": ["bombard", "shatter"],
+    "thermal": ["incinerator", "blizzard"],
+    "obsidian": ["incinerator", "shatter"]
+  }
+}
