@@ -1,7 +1,7 @@
 [project]
 name = "py-tower-defense"
 version = "0.1.0"
-description = "Add your description here"
+description = "A pygame-ce tower defense game where towers evolve by fusing, across 20 themed levels with boss fights"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
