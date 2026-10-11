@@ -10,6 +10,8 @@ never overwritten.
 
 Each file has:
   level, economy, waves      what happened, wave by wave
+  strongest_comp             the most valuable set of towers on the map at any point (value =
+                             gold put into them), when it was reached, and what was in it
   towers_by_kind             damage, DPS, overkill, kills per tower kind (towers that
                              evolved count toward each kind for the time they spent as it)
   enemies_by_kind            spawned / killed / leaked, HP vs damage taken, time to kill
@@ -79,6 +81,7 @@ class LevelLog:
         self.waves = []
         self.earned = defaultdict(int)
         self.spent = defaultdict(int)
+        self.strongest_comp = None  # the most valuable set of towers on the map during the level
         self.written = None
 
     # ---- recording -----------------------------------------------------------
@@ -88,6 +91,28 @@ class LevelLog:
     def add_tower(self, tower):
         if tower not in self.towers:
             self.towers.append(tower)
+
+    def check_comp(self, t, towers, trigger):
+        """Keep `towers` as the level's strongest composition if their total value beats the record.
+
+        The value on the map only goes down when a tower is sold (fusing and moving keep it, buying
+        adds to it), so checking just before every sell and at the end of the level finds the peak.
+        A tie keeps the earlier composition."""
+        towers = sorted(towers, key=lambda tw: (-tw.spent, tw.uid))
+        value = sum(tw.spent for tw in towers)
+        if not towers or (self.strongest_comp and value <= self.strongest_comp["value"]):
+            return
+        wave = self.current_wave()
+        by_kind = defaultdict(int)
+        for tw in towers:
+            by_kind[tw.kind] += 1
+        self.strongest_comp = {
+            "value": value, "t": r(t, 2), "trigger": trigger, "wave": wave["wave"] if wave else 0,
+            "during_wave": bool(wave) and "t_end" not in wave, "tower_count": len(towers),
+            "by_kind": dict(by_kind),
+            "towers": [{"id": tw.uid, "kind": tw.kind, "tier": tw.tier, "gold_spent": tw.spent, "tile": list(tw.tile)}
+                       for tw in towers],
+        }
 
     def start_wave(self, t, number, hp_mult, kinds, lives, gold):
         counts = defaultdict(int)
@@ -121,6 +146,7 @@ class LevelLog:
                       "path_length_px": r(self.path_length)},
             "economy": {"gold_start": self.gold_start, "gold_end": gold,
                         "earned": dict(self.earned), "spent": dict(self.spent)},
+            "strongest_comp": self.strongest_comp,
             "waves": self.waves,
             "towers_by_kind": self.towers_by_kind(),
             "enemies_by_kind": self.enemies_by_kind(t),

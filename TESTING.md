@@ -28,6 +28,7 @@ uv run pytest --durations=10             # list the slowest tests
 | `test_data.py` | Loading `towers.json` and `evolution.json`, the error messages for broken files, the level paths and wave generation |
 | `test_fusion.py`, `test_combat.py` | Game rules: buying, fusing, moving and selling towers; tower mechanics; enemies and bosses |
 | `test_controls.py`, `test_launch.py` | Input and the game loop: keys, clicks at every display scale, the settings screen, saved settings, quitting |
+| `test_progress.py` | Moving between levels: the wave lock after a level change, Rebuild, the saved checkpoint and Continue |
 | `test_balance_log.py` | The per-level balance logs: file names, uniqueness, and cross-checks that their numbers add up |
 | `test_rendering.py` | Drawing: every screen at every display scale, plus pixel snapshots |
 | `test_playthrough.py` | Long simulations with a bot player (marked `slow`) |
@@ -42,8 +43,8 @@ your machine:
 
 - **Headless**: SDL's dummy video and audio drivers are used, so no window opens and the tests
   run without a display (over SSH, in CI).
-- **No writes to the repo**: `settings.json` and the `logs/` folder are redirected to a
-  temporary directory per test.
+- **No writes to the repo**: `settings.json`, `savegame.json` and the `logs/` folder are
+  redirected to a temporary directory per test.
 - **Reset state**: the display scale goes back to 100% and the random seed is fixed before each
   test, so runs are repeatable.
 

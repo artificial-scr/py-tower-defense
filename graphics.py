@@ -467,6 +467,8 @@ class GameView:
             boss = ENEMY_TYPES[BOSS_LEVELS[self.level_idx + 1]]["boss"]
             sub = self.font.render(f"BOSS LEVEL - {boss} waits at the end of wave {WAVES_PER_LEVEL}",
                                    True, self.theme.accent)
+        elif self.rebuild_layout:
+            sub = self.font.render("Press B to rebuild your towers, then Space to send the first wave", True, TEXT)
         else:
             sub = self.font.render("Build towers, then press Space to send the first wave", True, TEXT)
         band.blit(title, title.get_rect(center=sp((MAP_W / 2, 42))))
@@ -489,6 +491,9 @@ class GameView:
             lines = [("GAME OVER", BAD, self.font_xl),
                      (f"You reached level {self.level_idx + 1}, wave {self.wave_idx}", TEXT, self.font_l),
                      ("Press R or click to try again", TEXT, self.font)]
+            if self.can_continue:
+                lines.append((f"Press C to continue from level {self.save['level'] + 1} (last checkpoint)", GOLD,
+                              self.font))
         elif self.state == "victory":
             lines = [("VICTORY!", GOLD, self.font_xl),
                      (f"All {len(LEVELS)} levels defended with {self.lives} lives left", TEXT, self.font_l),
@@ -576,6 +581,10 @@ class GameView:
     def settings_close_button():
         return pygame.Rect(MAP_W / 2 - 110, 420, 220, 50)
 
+    @staticmethod
+    def settings_continue_button():
+        return pygame.Rect(MAP_W / 2 - 150, 482, 300, 50)
+
     def draw_settings(self):
         self.shade_map(225)
         self.text(self.font_xl, "SETTINGS", GOLD, (MAP_W / 2, 90), "midtop")
@@ -600,9 +609,19 @@ class GameView:
         sdraw.rect(self.screen, self.theme.accent, b, 3, border_radius=8)
         label = "Play  [Enter]" if self.state == "build" and self.wave_idx == 0 and not self.towers else \
             "Resume  [Enter]"
+        hint_y = 500
+        if self.can_continue:
+            label = "New game  [Enter]"
+            c = self.settings_continue_button()
+            theme = LEVELS[self.save["level"]][0]
+            sdraw.rect(self.screen, (90, 90, 108) if c.collidepoint(mouse) else (70, 70, 85), c, border_radius=8)
+            sdraw.rect(self.screen, theme.accent, c, 3, border_radius=8)
+            self.text(self.font, f"Continue: level {self.save['level'] + 1}, {theme.name}  [C]", TEXT, c.center,
+                      "center")
+            hint_y = 560
         self.text(self.font, label, TEXT, b.center, "center")
         self.text(self.font_s, "Press O in game to come back here. The choice is saved for next time.",
-                  TEXT_DIM, (MAP_W / 2, 500), "midtop")
+                  TEXT_DIM, (MAP_W / 2, hint_y), "midtop")
 
     def draw_button(self, b, label, enabled=True, active=False, font=None):
         hover = b.rect.collidepoint(mouse_pos())
@@ -672,6 +691,11 @@ class GameView:
             self.text(self.font_s, "Drop two matching towers", TEXT_DIM, (x, 400))
             self.text(self.font_s, "together to evolve them", TEXT_DIM, (x, 418))
             self.text(self.font_s, "T: see the evolution tree", GOLD, (x, 444))
+            if self.can_rebuild:
+                n = len(self.rebuild_layout)
+                affordable = self.gold >= min(e["spent"] for e in self.rebuild_layout)
+                self.draw_button(self.rebuild_button, f"Rebuild {n} tower{'s' * (n > 1)}  [B]", affordable,
+                                 active=affordable and self.state == "build" and self.wave_idx == 0)
 
         self.text(self.font_s, "Enemies", TEXT_DIM, (x, 520))
         for i, spec in enumerate(s for s in ENEMY_TYPES.values() if "boss" not in s):
@@ -682,7 +706,7 @@ class GameView:
                 sdraw.polygon(screen, spec["color"], regular_polygon(c, 9, spec["sides"], -90))
 
         if self.state == "build":
-            label, enabled = f"Send wave {self.wave_idx + 1}  [Space]", True
+            label, enabled = f"Send wave {self.wave_idx + 1}  [Space]", self.wave_lock <= 0
         elif self.state == "level_complete":
             label, enabled = "Next level  [Space]", True
         elif self.state in ("game_over", "victory"):

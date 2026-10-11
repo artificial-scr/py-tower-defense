@@ -21,12 +21,20 @@ Drag a tower   move it to any free tile, at any time; drop it on a tower it can
 Right click    cancel placement / deselect (Esc also works)
 Esc            cancel / close; with nothing to cancel it asks to quit (Esc again quits)
 S              sell the selected tower
+B              rebuild the previous level's towers (see below)
+C              continue from the saved checkpoint (on the start screen or after a game over)
 T              show the evolution tree
 Space          start the next wave (or continue to the next level)
 F              cycle game speed: 1x, 2x, 4x, 10x (Shift+F goes back)
 P              pause
 O              settings (display scale); also shown at launch
 R              restart after game over or victory
+
+Moving to the next level refunds every tower; Rebuild then buys them back as they were
+(same kinds, same price), strongest first, each on the free tile covering the most path.
+
+Each new level is a checkpoint saved to savegame.json: gold, lives and the towers to
+rebuild. Continue starts that level over, even after a game over; winning clears the save.
 
 Tower stats and looks live in towers.json, the evolution tree in evolution.json; both
 are read at startup, so towers can be rebalanced or added without touching the code.
@@ -64,9 +72,11 @@ from towers import TOWER_ORDER, TOWERS, fusion_options
 # --------------------------------------------------------------------------
 FPS = 60
 SPEEDS = (1, 2, 4, 10)  # game steps per frame
+WAVE_LOCK = 1.0  # seconds after a level change before Space can send a wave (stops double presses)
 
 LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
 SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "settings.json")
+SAVE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "savegame.json")
 
 
 # --------------------------------------------------------------------------
@@ -90,6 +100,44 @@ def save_settings(settings):
 
 
 # --------------------------------------------------------------------------
+# Checkpoint: the start of the latest level reached
+# --------------------------------------------------------------------------
+def load_save():
+    """The saved checkpoint as {"level", "gold", "lives", "layout"}, or None if there's no valid one."""
+    try:
+        with open(SAVE_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+        level, gold, lives = data["level"], data["gold"], data["lives"]
+        if not all(isinstance(v, int) for v in (level, gold, lives)) or not 0 < level < len(LEVELS) or lives <= 0:
+            return None
+        # towers whose kind no longer exists in towers.json are dropped
+        layout = [{"kind": e["kind"], "spent": int(e["spent"]), "tile": tuple(int(v) for v in e["tile"][:2])}
+                  for e in data["layout"] if e["kind"] in TOWERS]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    return {"level": level, "gold": gold, "lives": lives, "layout": layout}
+
+
+def write_save(save):
+    try:
+        tmp = SAVE_FILE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump({**save, "layout": [{**e, "tile": list(e["tile"])} for e in save["layout"]]}, f, indent=1)
+        os.replace(tmp, SAVE_FILE)  # never leaves a half-written save behind
+    except OSError as err:
+        print(f"Could not save the game: {err}")
+
+
+def delete_save():
+    try:
+        os.remove(SAVE_FILE)
+    except FileNotFoundError:
+        pass
+    except OSError as err:
+        print(f"Could not delete the save: {err}")
+
+
+# --------------------------------------------------------------------------
 # Game
 # --------------------------------------------------------------------------
 def spec_snapshot():
@@ -106,6 +154,7 @@ class Game(GameView):
         self.log = None
         self.show_settings = False
         self.confirm_quit = False
+        self.save = load_save()
         self.build_view()
 
         x = MAP_W + 12
@@ -113,6 +162,7 @@ class Game(GameView):
         third = (w - 8) // 3
         self.tower_buttons = {k: Button((x, 196 + i * 58, w, 52), k) for i, k in enumerate(TOWER_ORDER)}
         self.sell_button = Button((x, 470, w, 36), "Sell")
+        self.rebuild_button = Button((x, 470, w, 36), "Rebuild")  # shown in the Sell spot when nothing is selected
         self.wave_button = Button((x, HEIGHT - 98, w, 40), "Next wave")
         self.speed_button = Button((x, HEIGHT - 50, third, 38), "Speed")
         self.pause_button = Button((x + third + 4, HEIGHT - 50, third, 38), "Pause")
@@ -121,15 +171,24 @@ class Game(GameView):
 
     # ---- state ------------------------------------------------------------
     def reset(self):
+        self.start_run(0, START_GOLD, START_LIVES)
+
+    def continue_game(self):
+        """Start the saved level over, with the gold, lives and towers to rebuild it had when reached."""
+        if self.save:
+            self.start_run(self.save["level"], self.save["gold"], self.save["lives"], self.save["layout"])
+
+    def start_run(self, idx, gold, lives, layout=()):
         self.finish_log("abandoned")
         if self.log_session:
             self.log_session.run += 1
-        self.gold = START_GOLD
-        self.lives = START_LIVES
+        self.gold = gold
+        self.lives = lives
         self.speed = 1
         self.paused = False
         self.show_tree = False
-        self.load_level(0)
+        self.load_level(idx)
+        self.rebuild_layout = list(layout)
 
     def load_level(self, idx):
         self.clock = 0.0  # game time in this level; unaffected by pauses, sped up by the speed setting
@@ -150,6 +209,8 @@ class Game(GameView):
         self.state = "build"  # build | wave | level_complete | game_over | victory
         self.banner_timer = 3.5 if self.is_boss_level else 3.0
         self.boss_alert = 0.0
+        self.wave_lock = 0.0
+        self.rebuild_layout = []  # towers refunded at the end of the last level: {"kind", "spent", "tile"}
         self.build_kind = None
         self.selected = None
         self.dragging = None
@@ -170,6 +231,7 @@ class Game(GameView):
             return None
         for t in self.towers.values():
             self.log.add_tower(t)
+        self.log.check_comp(self.clock, self.towers.values(), "level_end")
         path = self.log.finish(outcome, self.clock, self.lives, self.gold)
         print(f"Balance log written: {path}")
         return path
@@ -189,13 +251,63 @@ class Game(GameView):
         return self.level_idx + 1 in BOSS_LEVELS
 
     @property
+    def can_continue(self):
+        """Continue is offered at the start of a fresh game and after a game over."""
+        fresh = self.level_idx == 0 and self.state == "build" and self.wave_idx == 0 and not self.towers
+        return self.save is not None and (fresh or self.state == "game_over")
+
+    @property
+    def can_rebuild(self):
+        """Whether the Rebuild button shows (in the Sell button's spot, so only with nothing selected)."""
+        return bool(self.rebuild_layout) and self.state in ("build", "wave") and not self.selected
+
+    @property
     def frozen(self):
         return self.paused or self.show_tree or self.show_settings or self.confirm_quit or self.choice is not None
 
     def next_level(self):
-        # The map changes, so every tower is refunded at full price.
+        # The map changes, so every tower is refunded at full price; Rebuild can buy them back.
+        layout = [{"kind": t.kind, "spent": t.spent, "tile": t.tile} for t in self.towers.values()]
         self.gold += sum(t.spent for t in self.towers.values())
         self.load_level(self.level_idx + 1)
+        self.rebuild_layout = layout
+        self.wave_lock = WAVE_LOCK
+        self.save = {"level": self.level_idx, "gold": self.gold, "lives": self.lives, "layout": layout}
+        write_save(self.save)
+
+    def rebuild(self):
+        """Buy back the last level's towers, most expensive first, each on the free tile covering the
+        most path within its range (ties go to the tile closest to where it stood). Towers that can't
+        be afforded or placed stay on the list for later."""
+        if self.state not in ("build", "wave") or not self.rebuild_layout:
+            return
+        path = [tile_center(*c) for c in self.path_cells]
+        coverage = {}  # range -> {tile: path cells in range}
+        left, placed = [], 0
+        for entry in sorted(self.rebuild_layout, key=lambda e: -e["spent"]):
+            rng = TOWERS[entry["kind"]]["range"]
+            if rng not in coverage:
+                coverage[rng] = {(tx, ty): sum(1 for p in path if p.distance_to(tile_center(tx, ty)) <= rng)
+                                 for tx in range(COLS) for ty in range(ROWS)}
+            free = [tile for tile in coverage[rng] if self.is_free(tile)]
+            if self.gold < entry["spent"] or not free:
+                left.append(entry)
+                continue
+            ox, oy = entry["tile"]
+            tile = max(free, key=lambda t: (coverage[rng][t], -((t[0] - ox) ** 2 + (t[1] - oy) ** 2)))
+            tower = Tower(entry["kind"], tile, entry["spent"])
+            self.gold -= tower.spent
+            tower.history.append({"t": round(self.clock, 2), "event": "rebuilt", "kind": tower.kind})
+            if self.log:
+                self.log.add_tower(tower)
+                self.log.spent["towers"] += tower.spent
+            self.log_event("rebuild", tower=tower.uid, kind=tower.kind, tile=list(tile), cost=tower.spent)
+            self.towers[tile] = tower
+            self.effects.append(Ring(tower.pos, 30, GOLD, 0.4))
+            placed += 1
+        self.rebuild_layout = left
+        if placed:
+            self.popups.append(Popup((MAP_W / 2, MAP_H / 2), f"Rebuilt {placed} tower{'s' * (placed > 1)}", GOLD))
 
     def start_wave(self):
         if self.state != "build" or self.wave_idx >= WAVES_PER_LEVEL:
@@ -292,6 +404,8 @@ class Game(GameView):
     def sell_selected(self):
         t = self.selected
         if t:
+            if self.log:
+                self.log.check_comp(self.clock, self.towers.values(), "sell")  # the comp just before it shrinks
             t.status = "sold"
             t.history.append({"t": round(self.clock, 2), "event": "sold", "value": t.sell_value})
             self.log_event("sell", tower=t.uid, kind=t.kind, value=t.sell_value)
@@ -309,6 +423,7 @@ class Game(GameView):
         # banners are read in real time, so they don't flash past at high speed
         self.banner_timer -= dt / self.speed
         self.boss_alert -= dt / self.speed
+        self.wave_lock -= dt / self.speed
         self.effects = [e for e in self.effects if e.update(dt)]
         self.popups = [p for p in self.popups if p.update(dt)]
         if self.state not in ("build", "wave"):
@@ -376,6 +491,9 @@ class Game(GameView):
             else:
                 self.state = "level_complete" if self.level_idx + 1 < len(LEVELS) else "victory"
                 self.finish_log("cleared")
+                if self.state == "victory":
+                    self.save = None
+                    delete_save()
 
     def summon_minions(self, dt):
         for boss in [e for e in self.enemies if e.alive and "summon" in e.spec]:
@@ -440,12 +558,18 @@ class Game(GameView):
                 self.apply_scale(fitting[max(0, min(len(fitting) - 1, i + step))])
             elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE, pygame.K_ESCAPE, pygame.K_o):
                 self.close_settings()
+            elif event.key == pygame.K_c and self.can_continue:
+                self.close_settings()
+                self.continue_game()
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             for scale, rect in self.scale_buttons():
                 if rect.collidepoint(event.pos) and self.scale_fits(scale):
                     self.apply_scale(scale)
             if self.settings_close_button().collidepoint(event.pos):
                 self.close_settings()
+            elif self.can_continue and self.settings_continue_button().collidepoint(event.pos):
+                self.close_settings()
+                self.continue_game()
 
     def close_settings(self):
         self.show_settings = False
@@ -463,6 +587,10 @@ class Game(GameView):
                 self.show_tree = False
         elif key == pygame.K_r and self.state in ("game_over", "victory"):
             self.reset()
+        elif key == pygame.K_c and self.can_continue:
+            self.continue_game()
+        elif key == pygame.K_b:
+            self.rebuild()
         elif key == pygame.K_SPACE:
             self.advance()
         elif key == pygame.K_p:
@@ -485,7 +613,8 @@ class Game(GameView):
 
     def advance(self):
         if self.state == "build":
-            self.start_wave()
+            if self.wave_lock <= 0:  # a quick second press after "Next level" must not send a wave
+                self.start_wave()
         elif self.state == "level_complete":
             self.next_level()
         elif self.state in ("game_over", "victory"):
@@ -513,8 +642,10 @@ class Game(GameView):
         for kind, b in self.tower_buttons.items():
             if b.rect.collidepoint(pos):
                 self.pick_tower(kind)
-        if self.sell_button.rect.collidepoint(pos):
+        if self.sell_button.rect.collidepoint(pos) and self.selected:
             self.sell_selected()
+        elif self.rebuild_button.rect.collidepoint(pos) and self.can_rebuild:
+            self.rebuild()
         elif self.wave_button.rect.collidepoint(pos):
             self.advance()
         elif self.speed_button.rect.collidepoint(pos):

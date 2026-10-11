@@ -4,11 +4,12 @@ import glob
 import json
 import os
 
+import pygame
 import pytest
 
 import balance_log
 import main
-from helpers import bot_play, put, ranked_spots, run_wave
+from helpers import bot_play, build, key, put, ranked_spots, run_wave
 
 
 def check_log(path):
@@ -32,6 +33,12 @@ def check_log(path):
     ids = [t["id"] for t in d["towers"]]
     assert len(ids) == len(set(ids))
     assert "railgun" in d["specs"]["towers"] and "warden" in d["specs"]["enemies"]
+    comp = d["strongest_comp"]
+    if comp:
+        assert comp["value"] == sum(t["gold_spent"] for t in comp["towers"])
+        assert sum(comp["by_kind"].values()) == comp["tower_count"] == len(comp["towers"])
+        on_map_at_end = sum(t["gold_spent"] for t in d["towers"] if t["status"] == "active")
+        assert comp["value"] >= on_map_at_end, "the end of the level is checked too"
     return d
 
 
@@ -72,6 +79,47 @@ def test_events_are_logged(logged_game):
     types = {e["type"] for e in d["events"]}
     assert {"buy", "fuse", "evolve", "move", "sell"} <= types
     assert d["level"]["outcome"] == "cleared" and d["level"]["waves_started"] == 5
+
+
+def finish_and_read(g, outcome="quit"):
+    with open(g.finish_log(outcome), encoding="utf-8") as f:
+        return json.load(f)
+
+
+def test_strongest_comp_is_the_one_before_a_sell(logged_game):
+    g = logged_game
+    build(g, "cannon", (1, 1))
+    build(g, "gun", (2, 1))
+    g.start_wave()
+    g.selected = g.towers[(1, 1)]
+    g.handle_event(key(pygame.K_s))  # 140 on the map just before the sell
+    build(g, "frost", (1, 1))  # back up to 120
+    d = finish_and_read(g)
+    comp = d["strongest_comp"]
+    assert comp["value"] == 140 and comp["trigger"] == "sell"
+    assert comp["by_kind"] == {"cannon": 1, "gun": 1} and comp["wave"] == 1 and comp["during_wave"]
+    assert [t["kind"] for t in comp["towers"]] == ["cannon", "gun"], "most valuable first"
+
+
+def test_strongest_comp_at_level_end(logged_game):
+    g = logged_game
+    build(g, "gun", (1, 1))
+    g.selected = g.towers[(1, 1)]
+    g.sell_selected()  # 50 before the sell
+    build(g, "gun", (1, 1))
+    build(g, "gun", (1, 1))  # fused into a rifle: 100
+    g.start_wave()
+    d = finish_and_read(g)
+    comp = d["strongest_comp"]
+    assert comp["value"] == 100 and comp["trigger"] == "level_end"
+    assert comp["towers"] == [{"id": g.towers[(1, 1)].uid, "kind": "rifle", "tier": 2, "gold_spent": 100,
+                               "tile": [1, 1]}]
+
+
+def test_no_towers_no_comp(logged_game):
+    g = logged_game
+    g.start_wave()
+    assert finish_and_read(g)["strongest_comp"] is None
 
 
 def test_boss_level_log(logged_game, monkeypatch):

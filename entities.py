@@ -189,13 +189,14 @@ class Projectile:
 
 
 class Tower:
-    def __init__(self, kind, tile):
+    def __init__(self, kind, tile, spent=None):
+        """`spent` is the gold put into the tower; only towers bought from the panel have a cost of their own."""
         self.kind = kind
         self.tile = tile
         self.pos = tile_center(*tile)
         self.cooldown = 0.0
         self.aim = -90.0
-        self.spent = TOWERS[kind]["cost"]
+        self.spent = TOWERS[kind]["cost"] if spent is None else spent
         self.uid = next(TOWER_IDS)
         self.stats = defaultdict(new_kind_stats)  # tower kind -> stats while it was that kind
         self.status = "active"

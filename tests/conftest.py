@@ -1,5 +1,5 @@
 """Shared fixtures. Tests run headless (SDL dummy video driver) and never touch the repo's
-logs/ or settings.json: every test gets its own temporary copies.
+logs/, settings.json or savegame.json: every test gets its own temporary copies.
 """
 
 import os
@@ -25,6 +25,7 @@ def isolated(tmp_path, monkeypatch):
     random.seed(0)
     monkeypatch.setattr(main, "SETTINGS_FILE", str(tmp_path / "settings.json"))
     monkeypatch.setattr(main, "LOG_DIR", str(tmp_path / "logs"))
+    monkeypatch.setattr(main, "SAVE_FILE", str(tmp_path / "savegame.json"))
     yield
     graphics.set_scale(1.0)
 

@@ -30,9 +30,17 @@ them. Each enemy that gets through costs you lives, and you lose when your lives
 - You earn gold for every kill, plus a bonus for clearing a wave (`20 + 5 × wave number`).
 - Selling a tower gives back **70%** of everything spent on it, including the towers fused into it.
 - When you move to the next level the map changes, so all your towers are **refunded at full
-  price**.
+  price**. Press **B** (or the Rebuild button) to buy them all back in one go: same towers, same
+  price, most expensive first, each on the free tile that covers the most path. You can drag them
+  wherever you like afterwards.
 - Enemies get tougher across the whole game, not just within a level. Waves grow longer and enemy
   HP goes up.
+
+### Saving
+
+The start of each level is a checkpoint, saved to `savegame.json` with your gold, lives and the
+towers to rebuild. When you launch the game, or after a game over, press **C** to continue from
+the start of the last level you reached. Winning the game deletes the save.
 
 ### Enemies
 
@@ -91,8 +99,10 @@ what the fusion would produce.
 | Right click / `Esc` | Cancel placement / deselect |
 | `Esc` (nothing selected) | Ask to quit. Press `Esc` again to quit |
 | `S` | Sell the selected tower |
+| `B` | Rebuild the previous level's towers |
+| `C` | Continue from the last checkpoint (on the start screen or after a game over) |
 | `T` | Show the evolution tree |
-| `Space` | Start the next wave / continue to the next level |
+| `Space` | Start the next wave / continue to the next level (sending a wave is blocked for 1 s after a level change, so a double press can't start one on an empty map) |
 | `F` / `Shift+F` | Change game speed: 1×, 2×, 4×, 10× |
 | `P` | Pause |
 | `O` | Settings (display scale, from 75% to 200%) |
@@ -122,6 +132,8 @@ Each level you play writes a JSON log to `logs/<session>/`, for example
 - damage, DPS, overkill and kills per tower and per tower kind
 - spawns, kills, leaks and damage taken per enemy kind
 - the economy and a wave-by-wave summary
+- the level's strongest composition: the most valuable set of towers you had on the map at once
+  (value = gold put into them), when you had it, and which towers were in it
 - every buy, fusion, branch choice, move and sell
 - a snapshot of the tower and enemy stats that were in effect
 
@@ -140,7 +152,8 @@ These logs are meant for tuning `towers.json`. Pass `--no-log` to turn them off.
 | `balance_log.py` | Per-level balance logs |
 | `tests/` | The pytest suite |
 
-Your display scale is saved in `settings.json`. That file and `logs/` are git-ignored.
+Your display scale is saved in `settings.json` and your progress in `savegame.json`. Both files
+and `logs/` are git-ignored.
 
 ## Testing
 
