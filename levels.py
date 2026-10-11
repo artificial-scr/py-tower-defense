@@ -1,9 +1,11 @@
-"""Levels, enemies and waves: the map grid, each level's color theme and path, enemy
-types (bosses included), and how waves are built.
+"""Levels and waves: the map grid, each level's color theme and path, and how waves are
+built. Enemy types are in monsters.json (see monsters.py).
 """
 
 import random
 from dataclasses import dataclass
+
+from monsters import ENEMY_TYPES
 
 COLS, ROWS = 20, 16  # map size in tiles
 WAVES_PER_LEVEL = 5
@@ -70,25 +72,6 @@ BOSS_LEVELS = {10: "warden", 20: "overlord"}  # 1-based level number -> boss tha
 
 
 # --------------------------------------------------------------------------
-# Enemies
-# --------------------------------------------------------------------------
-ENEMY_TYPES = {
-    "basic": dict(hp=30, speed=60, reward=5, size=11, color=(230, 70, 70), sides=0, damage=1, gap=0.8),
-    "fast": dict(hp=18, speed=115, reward=6, size=11, color=(250, 215, 60), sides=3, damage=1, gap=0.45),
-    "tank": dict(hp=110, speed=38, reward=12, size=13, color=(70, 130, 235), sides=4, damage=2, gap=1.1),
-    "elite": dict(hp=400, speed=30, reward=80, size=19, color=(255, 90, 200), sides=6, damage=5, gap=2.0),
-    # Bosses: huge, resist slows (slow_floor), summon minions (kind, count, every N seconds),
-    # and end the game if they get through.
-    "warden": dict(hp=1500, speed=22, reward=400, size=30, color=(200, 40, 50), sides=8, damage=START_LIVES,
-                   gap=0, boss="The Warden", inner=("square", 13, (70, 12, 18)), summon=("fast", 3, 6.0),
-                   slow_floor=0.6),
-    "overlord": dict(hp=1300, speed=20, reward=1000, size=34, color=(255, 200, 40), sides=5, shape="star",
-                     damage=START_LIVES, gap=0, boss="The Overlord", inner=("hexagon", 12, (60, 30, 10)),
-                     summon=("tank", 2, 10.0), slow_floor=0.7),
-}
-
-
-# --------------------------------------------------------------------------
 # Paths and waves
 # --------------------------------------------------------------------------
 def build_path_cells(waypoints):
@@ -107,13 +90,18 @@ def build_path_cells(waypoints):
     return cells
 
 
-def make_wave(level_idx, wave_idx):
-    """Return (enemy kinds, hp multiplier) for a wave. Difficulty grows across all levels."""
+def wave_hp_mult(level_idx, wave_idx):
+    """How much tougher than its base HP every monster in a wave is. Grows across all levels."""
     d = level_idx * WAVES_PER_LEVEL + wave_idx
-    hp_mult = 1 + 0.5 * d + 0.04 * d * d
+    return 1 + 0.5 * d + 0.04 * d * d
+
+
+def make_wave(level_idx, wave_idx, rng=random):
+    """Return (enemy kinds, hp multiplier) for a generated wave. Difficulty grows across all levels."""
+    d = level_idx * WAVES_PER_LEVEL + wave_idx
     kinds = []
     for _ in range(8 + min(d, 64) // 2):
-        r = random.random()
+        r = rng.random()
         if d >= 2 and r < 0.25:
             kinds.append("fast")
         elif d >= 4 and r < 0.25 + min(0.3, 0.03 * d):
@@ -122,4 +110,11 @@ def make_wave(level_idx, wave_idx):
             kinds.append("basic")
     if wave_idx == WAVES_PER_LEVEL - 1:
         kinds.append(BOSS_LEVELS.get(level_idx + 1, "elite"))
-    return kinds, hp_mult
+    return kinds, wave_hp_mult(level_idx, wave_idx)
+
+
+def wave_value(level_idx, wave_idx):
+    """The monster player's budget for a wave before bonuses: what the generated wave is worth (the sum
+    of its monsters' costs). The wave is generated with its own seed, so the value never changes."""
+    kinds, _ = make_wave(level_idx, wave_idx, random.Random(level_idx * WAVES_PER_LEVEL + wave_idx))
+    return sum(ENEMY_TYPES[k]["cost"] for k in kinds)

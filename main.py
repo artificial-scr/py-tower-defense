@@ -1,4 +1,4 @@
-"""A simple tower defense game built with pygame-ce.
+"""A roguelike tower defense game built with pygame-ce (the full design is in DESIGN.md).
 
 Towers are never upgraded directly: they evolve by fusing.
 
@@ -10,9 +10,16 @@ Towers are never upgraded directly: they evolve by fusing.
 
 There are 20 levels, each with its own color theme and path. Levels 10 and 20
 are boss levels: their last wave ends with a boss that summons minions, resists
-slows, and costs the game if it gets through.
+slows, and takes every life if it gets through.
 
-Controls
+A run is a series of passes of the 20 levels, switching sides after level 20:
+Towers (build and defend) then Monsters (attack.py: draft waves against your own
+tower records) then Towers again (against your own monster records), and so on.
+Losing a level ends the run. Records, unlock cards and milestones are permanent
+(progress.Profile, in profile.json); the run in progress is saved to
+savegame.json at the start of every level.
+
+Controls (Towers side; the Monsters side's are in attack.py)
 --------
 1 / 2 / 3      pick a tower to build (Gun, Cannon, Frost)
 Left click     place the picked tower / select an existing tower
@@ -22,49 +29,56 @@ Right click    cancel placement / deselect (Esc also works)
 Esc            cancel / close; with nothing to cancel it asks to quit (Esc again quits)
 S              sell the selected tower
 B              rebuild the previous level's towers (see below)
-C              continue from the saved checkpoint (on the start screen or after a game over)
+C              continue the saved run (on the start screen)
 T              show the evolution tree
-Space          start the next wave (or continue to the next level)
+Space          start the next wave, continue to the next level, or switch sides after level 20
 F              cycle game speed: 1x, 2x, 4x, 10x (Shift+F goes back)
 P              pause
 O              settings (display scale); also shown at launch
-R              restart after game over or victory
+R              a new run, once the run is over
 
 Moving to the next level refunds every tower; Rebuild then buys them back as they were
 (same kinds, same price), strongest first, each on the free tile covering the most path.
 
-Each new level is a checkpoint saved to savegame.json: gold, lives and the towers to
-rebuild. Continue starts that level over, even after a game over; winning clears the save.
-
-Tower stats and looks live in towers.json, the evolution tree in evolution.json; both
-are read at startup, so towers can be rebalanced or added without touching the code.
+Towers live in towers.json and evolution.json, monsters and abilities in monsters.json,
+unlock cards in unlocks.json; all are read at startup, so the game can be rebalanced
+without touching the code.
 
 Every level writes a balance log (damage per tower, damage taken per enemy, waves,
 economy, fusions...) to logs/<session>/ as JSON; see balance_log.py. Run with
---no-log to turn this off.
+--no-log to turn this off, and with --monsters to start on the Monsters side.
 
 Modules:
-  main.py       the Game state machine (waves, fusing, input, logging hooks) and main()
-  towers.py     loads towers.json and evolution.json
-  levels.py     level themes and paths, enemy types, wave generation
-  entities.py   Enemy, Projectile, Tower: the combat rules
-  graphics.py   everything drawn on screen
+  main.py         the Game state machine (waves, fusing, runs and passes, rewards, input,
+                  logging hooks) and main()
+  attack.py       the Monsters side (mixed into Game); attack_view.py draws it
+  progress.py     the permanent profile: records, unlock cards, milestones
+  towers.py       loads towers.json and evolution.json
+  monsters.py     loads monsters.json
+  levels.py       level themes and paths, wave generation and wave values
+  entities.py     Enemy, Projectile, Tower: the combat rules, monster mechanics, abilities
+  graphics.py     everything drawn on screen
   balance_log.py
 """
 
 import json
 import os
+import random
 import sys
 
 import pygame
 
 import graphics
+from attack import DEFENDER_LIVES, AttackMixin
+from attack_view import AttackView
 from balance_log import LevelLog, LogSession
-from entities import Enemy, Tower
+from entities import Enemy, Tower, cast_ability, heal_auras
 from graphics import (BAD, GOLD, HEIGHT, MAP_H, MAP_W, PANEL_W, SCALES, TILE, Button, GameView, Popup, Ring,
-                      mouse_pos, render_map, set_scale, tile_center, to_logical, window_size)
+                      CastWarning, mouse_pos, render_map, set_scale, tile_center, to_logical, window_size)
 from levels import (BOSS_LEVELS, COLS, ENEMY_TYPES, LEVELS, ROWS, START_GOLD, START_LIVES, WAVES_PER_LEVEL,
                     build_path_cells, make_wave)
+from monsters import ABILITIES, BUDGET
+from progress import UNLOCKS, Profile, comp_snapshot, stronger
 from towers import TOWER_ORDER, TOWERS, fusion_options
 
 # --------------------------------------------------------------------------
@@ -72,11 +86,13 @@ from towers import TOWER_ORDER, TOWERS, fusion_options
 # --------------------------------------------------------------------------
 FPS = 60
 SPEEDS = (1, 2, 4, 10)  # game steps per frame
+CAST_WARNING = 1.0  # seconds a replayed ability is shown before it lands
 WAVE_LOCK = 1.0  # seconds after a level change before Space can send a wave (stops double presses)
 
 LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
 SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "settings.json")
 SAVE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "savegame.json")
+PROFILE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "profile.json")
 
 
 # --------------------------------------------------------------------------
@@ -100,22 +116,28 @@ def save_settings(settings):
 
 
 # --------------------------------------------------------------------------
-# Checkpoint: the start of the latest level reached
+# The run in progress, saved at the start of every level (see DESIGN.md)
 # --------------------------------------------------------------------------
 def load_save():
-    """The saved checkpoint as {"level", "gold", "lives", "layout"}, or None if there's no valid one."""
+    """The run in progress as {"side", "pass", "levels_won", "monster_wins", "level", "gold", "lives", "layout"}, or None
+    if there's no valid one. Saves from before passes existed count as pass 1 on the Towers side."""
     try:
         with open(SAVE_FILE, encoding="utf-8") as f:
             data = json.load(f)
         level, gold, lives = data["level"], data["gold"], data["lives"]
-        if not all(isinstance(v, int) for v in (level, gold, lives)) or not 0 < level < len(LEVELS) or lives <= 0:
+        side, pass_no = data.get("side", "towers"), data.get("pass", 1)
+        levels_won, monster_wins = data.get("levels_won", level), data.get("monster_wins", 0)
+        numbers = (level, gold, lives, pass_no, levels_won, monster_wins)
+        if (not all(isinstance(v, int) for v in numbers) or not 0 <= level < len(LEVELS) or lives <= 0
+                or side not in ("towers", "monsters") or pass_no < 1 or levels_won < 0 or monster_wins < 0):
             return None
         # towers whose kind no longer exists in towers.json are dropped
         layout = [{"kind": e["kind"], "spent": int(e["spent"]), "tile": tuple(int(v) for v in e["tile"][:2])}
                   for e in data["layout"] if e["kind"] in TOWERS]
-    except (OSError, ValueError, KeyError, TypeError):
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
         return None
-    return {"level": level, "gold": gold, "lives": lives, "layout": layout}
+    return {"side": side, "pass": pass_no, "levels_won": levels_won, "monster_wins": monster_wins, "level": level,
+            "gold": gold, "lives": lives, "layout": layout}
 
 
 def write_save(save):
@@ -147,14 +169,19 @@ def spec_snapshot():
                         for k, s in ENEMY_TYPES.items()}}
 
 
-class Game(GameView):
-    def __init__(self, screen, log_dir=LOG_DIR):
+class Game(AttackMixin, AttackView, GameView):
+    def __init__(self, screen, log_dir=LOG_DIR, side="towers"):
+        """`side` is who the player plays: "towers" (build and defend) or "monsters" (attack.py)."""
         self.screen = screen
+        self.side = side
         self.log_session = LogSession(log_dir) if log_dir else None
         self.log = None
         self.show_settings = False
         self.confirm_quit = False
         self.save = load_save()
+        self.profile = Profile.load(PROFILE_FILE)
+        self.picking_side = False  # the new-run screen: choose Towers or Monsters
+        self.side_chosen = False  # this launch already chose how to start (side pick or Continue)
         self.build_view()
 
         x = MAP_W + 12
@@ -171,17 +198,36 @@ class Game(GameView):
 
     # ---- state ------------------------------------------------------------
     def reset(self):
-        self.start_run(0, START_GOLD, START_LIVES)
+        self.new_run(self.side)
+
+    def new_run(self, side):
+        """Level 1 of pass 1 on `side`, with nothing won yet."""
+        gold, lives = self.pass_start_purse()
+        self.start_run(0, gold, lives, side=side)
+
+    def pass_start_purse(self):
+        """Gold and lives at the start of a Towers pass, tower cards included."""
+        cards = self.profile.tower_mods()
+        return START_GOLD + cards["gold"], START_LIVES + cards["lives"]
 
     def continue_game(self):
         """Start the saved level over, with the gold, lives and towers to rebuild it had when reached."""
         if self.save:
-            self.start_run(self.save["level"], self.save["gold"], self.save["lives"], self.save["layout"])
+            self.side_chosen = True
+            s = self.save
+            self.start_run(s["level"], s["gold"], s["lives"], s["layout"], s["side"], s["pass"], s["levels_won"],
+                           s["monster_wins"])
+            self.untouched = False
 
-    def start_run(self, idx, gold, lives, layout=()):
+    def start_run(self, idx, gold, lives, layout=(), side="towers", pass_no=1, levels_won=0, monster_wins=0):
         self.finish_log("abandoned")
         if self.log_session:
             self.log_session.run += 1
+        self.side = side
+        self.pass_no = pass_no
+        self.levels_won = levels_won  # this run's score
+        self.monster_wins = monster_wins  # Monsters levels won this run: each raises the budget share
+        self.untouched = True  # nothing played yet: Continue is still on offer
         self.gold = gold
         self.lives = lives
         self.speed = 1
@@ -189,6 +235,48 @@ class Game(GameView):
         self.show_tree = False
         self.load_level(idx)
         self.rebuild_layout = list(layout)
+
+    def checkpoint(self, layout=()):
+        """Save the run at the start of the current level."""
+        self.save = {"side": self.side, "pass": self.pass_no, "levels_won": self.levels_won,
+                     "monster_wins": self.monster_wins, "level": self.level_idx, "gold": self.gold, "lives": self.lives,
+                     "layout": list(layout)}
+        write_save(self.save)
+
+    def level_won(self):
+        self.levels_won += 1
+        self.profile.note_run(self.levels_won)
+
+    def run_over(self):
+        """A level was lost: the run ends. The save goes; the profile (records, unlocks) stays."""
+        self.state = "game_over"
+        self.aiming = None
+        self.finish_log("lost")
+        self.profile.note_run(self.levels_won)
+        self.save = None
+        delete_save()
+
+    def end_run(self):
+        """After the run-over screen: a new run, on a side of the player's choice once that's unlocked."""
+        if self.profile.milestones["monsters_side"]:
+            self.picking_side = True
+        else:
+            self.new_run("towers")
+
+    def pick_side(self, side):
+        self.picking_side = False
+        self.side_chosen = True
+        self.new_run(side)
+
+    def next_pass(self):
+        """Level 20 is won: switch sides and start level 1 again, facing the records just set."""
+        self.side = "monsters" if self.side == "towers" else "towers"
+        self.pass_no += 1
+        if self.side == "towers":
+            self.gold, self.lives = self.pass_start_purse()
+        self.load_level(0)
+        self.wave_lock = WAVE_LOCK
+        self.checkpoint()
 
     def load_level(self, idx):
         self.clock = 0.0  # game time in this level; unaffected by pauses, sped up by the speed setting
@@ -215,10 +303,24 @@ class Game(GameView):
         self.selected = None
         self.dragging = None
         self.choice = None  # (tower, [kind, kind]) while the player picks a branch
+        self.strongest_comp = None  # the most valuable set of towers on the map this level (progress.comp_snapshot)
+        self.comps_by_wave = {}  # wave number -> the same, for that wave's window (see check_comp)
+        self.wave_mods = {}  # monster modifiers for the current wave (entities.Enemy)
+        self.card_mods = self.profile.tower_mods()  # the player's tower cards (towers.NO_TOWER_MODS)
+        self.reward_cards = []  # card ids on offer after a win (see offer_rewards)
+        self.reward_pool = None
+        self.starter_picks = None  # Monsters side, first time: starter cards still to offer
+        self.wave_started_at = 0.0
+        self.replay = []  # Towers side: recorded ability casts still to come this wave
+        self.aiming, self.queue, self.budget, self.cooldowns = None, [], 0, {}  # Monsters side (attack.py)
+        if self.side == "monsters":
+            self.lives = DEFENDER_LIVES
         if self.log_session:
             path_length = sum(a.distance_to(b) for a, b in zip(self.path_pts, self.path_pts[1:]))
             self.log = LevelLog(self.log_session, idx + 1, self.theme.name, self.is_boss_level, path_length,
-                                self.lives, self.gold, spec_snapshot())
+                                self.lives, self.gold, spec_snapshot(), self.side)
+        if self.side == "monsters":
+            self.setup_attack_level()
 
     # ---- balance log ------------------------------------------------------
     def log_event(self, event_type, **data):
@@ -231,10 +333,28 @@ class Game(GameView):
             return None
         for t in self.towers.values():
             self.log.add_tower(t)
-        self.log.check_comp(self.clock, self.towers.values(), "level_end")
-        path = self.log.finish(outcome, self.clock, self.lives, self.gold)
+        if self.side == "towers":
+            self.check_comp("level_end")
+        path = self.log.finish(outcome, self.clock, self.lives, self.gold, self.strongest_comp, self.comps_by_wave)
         print(f"Balance log written: {path}")
         return path
+
+    def check_comp(self, trigger):
+        """Keep the towers on the map as the level's strongest comp, and as the current wave's, where
+        they beat what's stored (a tie keeps the earlier one).
+
+        A wave's window runs from the end of the previous wave to the end of this one, so the build
+        phase counts toward the wave it prepares for. The value on the map only drops when a tower is
+        sold (buying adds to it, fusing and moving keep it), so checking just before every sell and
+        when a window closes finds every peak."""
+        if not self.towers:
+            return
+        wave = min(self.wave_idx + (self.state == "build"), WAVES_PER_LEVEL)
+        comp = comp_snapshot(self.towers.values(), self.clock, trigger, wave, self.state == "wave")
+        if stronger(comp, self.strongest_comp):
+            self.strongest_comp = comp
+        if stronger(comp, self.comps_by_wave.get(wave)):
+            self.comps_by_wave[wave] = comp
 
     def register_enemy(self, enemy, origin):
         enemy.origin = origin
@@ -252,9 +372,8 @@ class Game(GameView):
 
     @property
     def can_continue(self):
-        """Continue is offered at the start of a fresh game and after a game over."""
-        fresh = self.level_idx == 0 and self.state == "build" and self.wave_idx == 0 and not self.towers
-        return self.save is not None and (fresh or self.state == "game_over")
+        """Continue (the saved run) is offered until something is played in the run on screen."""
+        return self.save is not None and self.untouched and self.state == "build" and self.wave_idx == 0
 
     @property
     def can_rebuild(self):
@@ -263,17 +382,42 @@ class Game(GameView):
 
     @property
     def frozen(self):
-        return self.paused or self.show_tree or self.show_settings or self.confirm_quit or self.choice is not None
+        return (self.paused or self.show_tree or self.show_settings or self.confirm_quit or self.choice is not None
+                or bool(self.reward_cards) or self.picking_side)
+
+    # ---- unlock cards -------------------------------------------------------
+    def offer_rewards(self, side_won):
+        """After a win: three cards from that side's pool to pick one from (if it gives cards yet)."""
+        self.reward_pool = self.profile.reward_side(side_won)
+        self.reward_cards = self.profile.draw_cards(self.reward_pool, random) if self.reward_pool else []
+
+    def pick_reward(self, index):
+        card = self.reward_cards[index]
+        self.profile.unlock(self.reward_pool, card)
+        self.log_event("unlock", pool=self.reward_pool, card=card, rank=self.profile.rank(self.reward_pool, card),
+                       offered=self.reward_cards)
+        self.popups.append(Popup((MAP_W / 2, MAP_H / 2 + 120), f"Unlocked: {UNLOCKS[self.reward_pool][card]['name']}",
+                                 GOLD))
+        self.reward_cards = []
+        if self.starter_picks is not None:
+            self.offer_starter_pick()
+            if self.starter_picks <= 0 and not self.reward_cards:
+                self.starter_picks = None
 
     def next_level(self):
+        self.untouched = False
+        if self.side == "monsters":
+            self.load_level(self.level_idx + 1)
+            self.wave_lock = WAVE_LOCK
+            self.checkpoint()
+            return
         # The map changes, so every tower is refunded at full price; Rebuild can buy them back.
         layout = [{"kind": t.kind, "spent": t.spent, "tile": t.tile} for t in self.towers.values()]
         self.gold += sum(t.spent for t in self.towers.values())
         self.load_level(self.level_idx + 1)
         self.rebuild_layout = layout
         self.wave_lock = WAVE_LOCK
-        self.save = {"level": self.level_idx, "gold": self.gold, "lives": self.lives, "layout": layout}
-        write_save(self.save)
+        self.checkpoint(layout)
 
     def rebuild(self):
         """Buy back the last level's towers, most expensive first, each on the free tile covering the
@@ -296,6 +440,7 @@ class Game(GameView):
             ox, oy = entry["tile"]
             tile = max(free, key=lambda t: (coverage[rng][t], -((t[0] - ox) ** 2 + (t[1] - oy) ** 2)))
             tower = Tower(entry["kind"], tile, entry["spent"])
+            tower.mods = self.card_mods
             self.gold -= tower.spent
             tower.history.append({"t": round(self.clock, 2), "event": "rebuilt", "kind": tower.kind})
             if self.log:
@@ -310,11 +455,27 @@ class Game(GameView):
             self.popups.append(Popup((MAP_W / 2, MAP_H / 2), f"Rebuilt {placed} tower{'s' * (placed > 1)}", GOLD))
 
     def start_wave(self):
+        if self.state == "build":
+            self.untouched = False
+        if self.side == "monsters":
+            return self.send_wave()
         if self.state != "build" or self.wave_idx >= WAVES_PER_LEVEL:
             return
-        self.spawn_queue, self.hp_mult = make_wave(self.level_idx, self.wave_idx)
+        recorded = self.profile.monster_record(self.level_idx + 1).get(self.wave_idx + 1)
+        if recorded:  # the player's own strongest wave from the Monsters side, abilities included
+            self.spawn_queue = [k for k in recorded["queue"] if k in ENEMY_TYPES]
+            self.hp_mult = recorded["hp_mult"]
+            self.wave_mods = dict(recorded["mods"])
+            self.replay = sorted((dict(c, warned=False) for c in recorded["casts"] if c["ability"] in ABILITIES),
+                                 key=lambda c: c["t"])
+            self.popups.append(Popup((MAP_W / 2, MAP_H / 2 - 40), "Your monsters' record attacks!", BAD))
+        else:
+            self.spawn_queue, self.hp_mult = make_wave(self.level_idx, self.wave_idx)
+            self.wave_mods, self.replay = {}, []
+        self.wave_mods["armor"] = self.card_mods["armor"]
         self.wave_idx += 1
         self.spawn_timer = 0.0
+        self.wave_started_at = self.clock
         self.state = "wave"
         if self.log:
             self.log.start_wave(self.clock, self.wave_idx, self.hp_mult, self.spawn_queue, self.lives, self.gold)
@@ -334,6 +495,7 @@ class Game(GameView):
 
     def place_tower(self, tile):
         tower = Tower(self.build_kind, tile)
+        tower.mods = self.card_mods
         self.gold -= tower.spent
         other = self.towers.get(tile)
         tower.history.append({"t": round(self.clock, 2), "event": "bought", "kind": tower.kind})
@@ -403,9 +565,8 @@ class Game(GameView):
 
     def sell_selected(self):
         t = self.selected
-        if t:
-            if self.log:
-                self.log.check_comp(self.clock, self.towers.values(), "sell")  # the comp just before it shrinks
+        if t and self.side == "towers":
+            self.check_comp("sell")  # the comp just before it shrinks
             t.status = "sold"
             t.history.append({"t": round(self.clock, 2), "event": "sold", "value": t.sell_value})
             self.log_event("sell", tower=t.uid, kind=t.kind, value=t.sell_value)
@@ -432,12 +593,16 @@ class Game(GameView):
         if self.state == "wave":
             for t in self.towers.values():
                 t.stats[t.kind]["wave_seconds"] += dt
+            if self.side == "monsters":
+                self.tick_cooldowns(dt)
+            else:
+                self.replay_casts()
 
         if self.state == "wave" and self.spawn_queue:
             self.spawn_timer -= dt
             if self.spawn_timer <= 0:
                 kind = self.spawn_queue.pop(0)
-                self.register_enemy(Enemy(kind, self.path_pts, self.hp_mult), "wave")
+                self.register_enemy(Enemy(kind, self.path_pts, self.hp_mult, self.wave_mods), "wave")
                 self.spawn_timer = ENEMY_TYPES[kind]["gap"]
                 if "boss" in ENEMY_TYPES[kind]:
                     self.boss_alert = 3.0
@@ -446,6 +611,7 @@ class Game(GameView):
 
         for e in self.enemies:
             e.update(dt)
+        heal_auras(self.enemies, dt)
         self.summon_minions(dt)
         for t in self.towers.values():
             t.update(dt, self.enemies, self.projectiles, self.effects)
@@ -454,30 +620,40 @@ class Game(GameView):
         self.projectiles = [p for p in self.projectiles if not p.done]
 
         wave_log = self.log.current_wave() if self.log else None
+        splits = []
         for e in self.enemies:
             if e.alive:
                 continue
+            splits += [(child, e.kind) for child in e.split()]
             e.end_t = self.clock
             if e.escaped:
-                self.lives -= e.spec["damage"]
+                lost = self.lives if e.spec.get("fatal") else e.spec["damage"]
+                self.lives -= lost
                 self.effects.append(Ring(e.pos, 30, BAD, 0.4))
                 if wave_log:
                     wave_log["leaks"] += 1
-                    wave_log["lives_lost"] += e.spec["damage"]
-            else:
-                self.gold += e.spec["reward"]
-                self.popups.append(Popup(e.pos, f"+{e.spec['reward']}", GOLD))
+                    wave_log["lives_lost"] += lost
+            elif self.side == "towers":
+                reward = e.spec["cost"]  # a monster is worth what it costs to draft
+                self.gold += reward
+                self.popups.append(Popup(e.pos, f"+{reward}", GOLD))
                 self.effects.append(Ring(e.pos, e.spec["size"] + 8, e.spec["color"], 0.3))
                 if wave_log:
                     wave_log["kills"] += 1
-                    wave_log["kill_gold"] += e.spec["reward"]
-                    self.log.earned["kills"] += e.spec["reward"]
+                    wave_log["kill_gold"] += reward
+                    self.log.earned["kills"] += reward
         self.enemies = [e for e in self.enemies if e.alive]
+        for child, parent in splits:
+            self.register_enemy(child, f"split:{parent}")
 
-        if self.lives <= 0:
+        if self.side == "monsters":
+            if self.lives <= 0:
+                self.win_attack_level()
+            elif self.state == "wave" and not self.spawn_queue and not self.enemies:
+                self.end_attack_wave()
+        elif self.lives <= 0:
             self.lives = 0
-            self.state = "game_over"
-            self.finish_log("lost")
+            self.run_over()
         elif self.state == "wave" and not self.spawn_queue and not self.enemies:
             bonus = 20 + 5 * self.wave_idx
             self.gold += bonus
@@ -486,14 +662,35 @@ class Game(GameView):
                 self.log.end_wave(self.clock, self.lives, self.gold, bonus)
             self.popups.append(Popup((MAP_W / 2, MAP_H / 2), f"Wave cleared! +{bonus}", GOLD))
             self.projectiles.clear()
+            self.check_comp("wave_end")  # closes this wave's window
             if self.wave_idx < WAVES_PER_LEVEL:
                 self.state = "build"
             else:
                 self.state = "level_complete" if self.level_idx + 1 < len(LEVELS) else "victory"
-                self.finish_log("cleared")
+                self.profile.record_towers(self.level_idx + 1, self.comps_by_wave, self.card_mods)
                 if self.state == "victory":
-                    self.save = None
-                    delete_save()
+                    self.profile.reach("monsters_side")
+                self.level_won()
+                self.offer_rewards("towers")
+                self.finish_log("cleared")
+
+    def replay_casts(self):
+        """Towers side: fire the recorded wave's abilities at their recorded time and place, each
+        announced CAST_WARNING seconds ahead (a pulsing circle, or a shout for whole-wave ones)."""
+        t = self.clock - self.wave_started_at
+        for c in self.replay:
+            spec = ABILITIES[c["ability"]]
+            pos = pygame.Vector2(c["pos"]) if c["pos"] else None
+            if not c["warned"] and t >= c["t"] - CAST_WARNING:
+                c["warned"] = True
+                if pos is not None:
+                    self.effects.append(CastWarning(pos, spec["radius"], spec["color"], CAST_WARNING))
+                else:
+                    self.popups.append(Popup((MAP_W / 2, 80), f"{spec['name']} incoming!", spec["color"]))
+            if t >= c["t"]:
+                cast_ability(spec, pos, self.towers.values(), self.enemies, self.effects, self.card_mods["grounding"])
+                self.log_event("ability", ability=c["ability"], wave=self.wave_idx, pos=c["pos"], replayed=True)
+        self.replay = [c for c in self.replay if t < c["t"]]
 
     def summon_minions(self, dt):
         for boss in [e for e in self.enemies if e.alive and "summon" in e.spec]:
@@ -503,7 +700,7 @@ class Game(GameView):
             kind, count, interval = boss.spec["summon"]
             boss.summon_timer = interval
             for _ in range(count):
-                minion = Enemy(kind, self.path_pts, self.hp_mult)
+                minion = Enemy(kind, self.path_pts, boss.hp_mult, boss.mods)
                 minion.follow(boss)
                 self.register_enemy(minion, f"summon:{boss.kind}")
             self.effects.append(Ring(boss.pos, boss.spec["size"] + 30, boss.spec["color"], 0.5))
@@ -516,6 +713,10 @@ class Game(GameView):
             self.handle_quit_event(event)
         elif self.show_settings:
             self.handle_settings_event(event)
+        elif self.picking_side:
+            self.handle_side_pick_event(event)
+        elif self.reward_cards:
+            self.handle_reward_event(event)
         elif self.choice:
             self.handle_choice_event(event)
         elif event.type == pygame.KEYDOWN:
@@ -523,6 +724,8 @@ class Game(GameView):
         elif event.type == pygame.MOUSEBUTTONDOWN:
             if self.show_tree:
                 self.show_tree = False
+            elif self.side == "monsters" and self.handle_attack_click(event.pos, event.button):
+                pass
             elif event.button == 3:
                 self.build_kind = None
                 self.selected = None
@@ -539,6 +742,25 @@ class Game(GameView):
             for i, rect in enumerate(self.choice_cards()):
                 if rect.collidepoint(event.pos):
                     self.choose(i)
+
+    def handle_side_pick_event(self, event):
+        if event.type == pygame.KEYDOWN and event.key in (pygame.K_1, pygame.K_2):
+            self.pick_side(("towers", "monsters")[event.key - pygame.K_1])
+        elif event.type == pygame.KEYDOWN and event.key == pygame.K_o:
+            self.show_settings = True
+        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            for side, rect in self.side_pick_rects():
+                if rect.collidepoint(event.pos):
+                    self.pick_side(side)
+
+    def handle_reward_event(self, event):
+        if event.type == pygame.KEYDOWN and pygame.K_1 <= event.key < pygame.K_1 + len(self.reward_cards):
+            self.pick_reward(event.key - pygame.K_1)
+        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            for i, rect in enumerate(self.reward_card_rects()):
+                if rect.collidepoint(event.pos):
+                    self.pick_reward(i)
+                    return
 
     def handle_quit_event(self, event):
         """Esc / Enter / Y confirms; any other key or a click keeps playing."""
@@ -559,8 +781,8 @@ class Game(GameView):
             elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE, pygame.K_ESCAPE, pygame.K_o):
                 self.close_settings()
             elif event.key == pygame.K_c and self.can_continue:
+                self.continue_game()  # first, so closing the settings doesn't ask for a side
                 self.close_settings()
-                self.continue_game()
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             for scale, rect in self.scale_buttons():
                 if rect.collidepoint(event.pos) and self.scale_fits(scale):
@@ -568,11 +790,13 @@ class Game(GameView):
             if self.settings_close_button().collidepoint(event.pos):
                 self.close_settings()
             elif self.can_continue and self.settings_continue_button().collidepoint(event.pos):
-                self.close_settings()
                 self.continue_game()
+                self.close_settings()
 
     def close_settings(self):
         self.show_settings = False
+        if self.untouched and not self.side_chosen and self.profile.milestones["monsters_side"]:
+            self.picking_side = True  # a new run, and the Monsters side is open: pick one
         settings = load_settings()
         if settings.get("scale") != graphics.SCALE:
             save_settings({**settings, "scale": graphics.SCALE})
@@ -585,8 +809,12 @@ class Game(GameView):
         elif self.show_tree:
             if key == pygame.K_ESCAPE:
                 self.show_tree = False
-        elif key == pygame.K_r and self.state in ("game_over", "victory"):
-            self.reset()
+        elif self.side == "monsters" and self.handle_attack_key(key):
+            pass
+        elif self.side == "monsters" and key in (pygame.K_b, pygame.K_s):
+            pass  # nothing to rebuild or sell on the Monsters side
+        elif key == pygame.K_r and self.state == "game_over":
+            self.end_run()
         elif key == pygame.K_c and self.can_continue:
             self.continue_game()
         elif key == pygame.K_b:
@@ -617,8 +845,10 @@ class Game(GameView):
                 self.start_wave()
         elif self.state == "level_complete":
             self.next_level()
-        elif self.state in ("game_over", "victory"):
-            self.reset()
+        elif self.state == "victory":
+            self.next_pass()
+        elif self.state == "game_over":
+            self.end_run()
 
     def pick_tower(self, kind):
         if self.build_kind == kind:
@@ -640,9 +870,9 @@ class Game(GameView):
                 self.selected = self.dragging = self.towers.get(tile)
             return
         for kind, b in self.tower_buttons.items():
-            if b.rect.collidepoint(pos):
+            if b.rect.collidepoint(pos) and self.side == "towers":
                 self.pick_tower(kind)
-        if self.sell_button.rect.collidepoint(pos) and self.selected:
+        if self.sell_button.rect.collidepoint(pos) and self.selected and self.side == "towers":
             self.sell_selected()
         elif self.rebuild_button.rect.collidepoint(pos) and self.can_rebuild:
             self.rebuild()
@@ -680,7 +910,8 @@ def main():
     screen = pygame.display.set_mode(window_size())
     pygame.display.set_caption("Tower Defense")
     clock = pygame.time.Clock()
-    game = Game(screen, log_dir=None if "--no-log" in sys.argv else LOG_DIR)
+    side = "monsters" if "--monsters" in sys.argv else "towers"  # a debug shortcut until run flow lands
+    game = Game(screen, log_dir=None if "--no-log" in sys.argv else LOG_DIR, side=side)
     game.show_settings = True  # start on the settings screen; Enter to play
     while True:
         dt = min(clock.tick(FPS) / 1000, 0.05)

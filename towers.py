@@ -122,6 +122,16 @@ def load_evolution(path, towers):
 
 TOWERS = load_towers(TOWERS_FILE)
 TOWER_ORDER, LINES, EVOLVE, CROSS = load_evolution(EVOLUTION_FILE, TOWERS)
+# kind -> the lines it belongs to: one for tiers 1-3, both parents' lines for a final
+TOWER_LINES = {k: (s["line"],) if s["line"] else () for k, s in TOWERS.items()}
+for parents, final in CROSS.items():
+    TOWER_LINES[final] = tuple(sorted(TOWERS[p]["line"] for p in parents))
+
+# What tower cards (unlocks.json) change, with no cards: damage multiplier per line, range multiplier,
+# extra starting gold and lives, sell refund share, whether towers can target phased monsters, the
+# armor multiplier towers impose on monsters, and how long area abilities last on towers.
+NO_TOWER_MODS = {"damage": {line: 1.0 for line in LINES}, "range": 1.0, "gold": 0, "lives": 0, "refund": 0.7,
+                 "detector": False, "armor": 1.0, "grounding": 1.0}
 
 
 def fusion_options(a, b):

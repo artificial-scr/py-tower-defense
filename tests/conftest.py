@@ -1,5 +1,5 @@
 """Shared fixtures. Tests run headless (SDL dummy video driver) and never touch the repo's
-logs/, settings.json or savegame.json: every test gets its own temporary copies.
+logs/, settings.json, savegame.json or profile.json: every test gets its own temporary copies.
 """
 
 import os
@@ -7,6 +7,7 @@ import os
 os.environ["SDL_VIDEODRIVER"] = "dummy"  # before pygame is imported anywhere
 os.environ["SDL_AUDIODRIVER"] = "dummy"
 
+import json  # noqa: E402
 import random  # noqa: E402
 
 import pygame  # noqa: E402
@@ -26,6 +27,9 @@ def isolated(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "SETTINGS_FILE", str(tmp_path / "settings.json"))
     monkeypatch.setattr(main, "LOG_DIR", str(tmp_path / "logs"))
     monkeypatch.setattr(main, "SAVE_FILE", str(tmp_path / "savegame.json"))
+    monkeypatch.setattr(main, "PROFILE_FILE", str(tmp_path / "profile.json"))
+    # The Monsters side's one-time starter cards would cover every Monsters-side test; tests of them remove this.
+    (tmp_path / "profile.json").write_text(json.dumps({"version": 1, "milestones": {"starter_pack": True}}))
     yield
     graphics.set_scale(1.0)
 

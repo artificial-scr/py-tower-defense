@@ -2,14 +2,17 @@
 
 These double as balance checks. The bot clears every regular level, but the bosses beat it
 about half the time (3 wins out of seeds 0-5), so only the regular levels are asserted on
-several seeds, and a full win on one seed known to win.
+several seeds, and a full win on one seed known to win. On the Monsters side, scripted drafts
+against the bot's own tower records check that the first levels stay winnable, and that how the
+budget is spent matters.
 """
 
 import random
 
 import pytest
 
-from helpers import bot_play, free_tiles, put
+import main
+from helpers import bot_play, free_tiles, put, scripted_attack
 from towers import TOWERS
 
 pytestmark = pytest.mark.slow
@@ -45,3 +48,44 @@ def test_stress_at_10x(game):
             game.update(1 / 60)
         game.draw()
     assert game.state in ("victory", "game_over")
+
+
+# ---- the Monsters side -------------------------------------------------------------------
+@pytest.fixture
+def records(game):
+    """Tower records for levels 1-2, set by the bot on a known seed (the same profile file is shared)."""
+    random.seed(1)
+    bot_play(game, until_level=3)
+    assert game.profile.tower_record(2)
+
+
+@pytest.mark.parametrize("save_for_last, wins", [(True, True), (False, False)])
+def test_monsters_level_1_is_won_by_saving_up(records, screen, save_for_last, wins):
+    """With no unlocks, the first Monsters level falls to one big push but holds against even waves.
+    It must stay winnable: monster cards only come from Monsters wins."""
+    g = main.Game(screen, log_dir=None, side="monsters")
+    assert scripted_attack(g, ["tank", "basic", "elite"], save_for_last) == wins
+
+
+@pytest.mark.parametrize("save_for_last, wins", [(True, False), (False, True)])
+def test_monsters_level_2_is_won_by_pacing(records, screen, save_for_last, wins):
+    """Level 2's record ends on Dragon + Absolute Zero, which melts one big push but not steady waves."""
+    g = main.Game(screen, log_dir=None, side="monsters")
+    g.monster_wins = 1  # as after winning level 1
+    g.load_level(1)
+    assert scripted_attack(g, ["tank", "basic", "elite"], save_for_last) == wins
+
+
+def test_a_full_loop_towers_monsters_towers(records, screen):
+    """Records from the Towers side feed the Monsters side, whose win feeds the Towers side again."""
+    g = main.Game(screen, log_dir=None, side="monsters")
+    assert scripted_attack(g, ["tank", "basic", "elite"], save_for_last=True)
+    g.reward_cards = []
+    push = g.profile.monster_record(1)
+    assert list(push) == [5], "empty waves aren't recorded"
+    towers = main.Game(screen, log_dir=None)
+    towers.start_wave()
+    assert "basic" in towers.spawn_queue and len(towers.spawn_queue) == 8, "no record for wave 1: the generated one"
+    towers.state, towers.wave_idx = "build", 4
+    towers.start_wave()
+    assert towers.spawn_queue == push[5]["queue"]

@@ -98,7 +98,7 @@ def test_level_change_saves_a_checkpoint(game):
     game.advance()
     with open(main.SAVE_FILE, encoding="utf-8") as f:
         data = json.load(f)
-    assert data == {"level": 1, "gold": game.gold, "lives": game.lives,
+    assert data == {"side": "towers", "pass": 1, "levels_won": 0, "monster_wins": 0, "level": 1, "gold": game.gold, "lives": game.lives,
                     "layout": [{"kind": "rifle", "spent": 100, "tile": [1, 1]}]}
 
 
@@ -127,13 +127,17 @@ def test_continue_button_on_the_start_screen(screen):
     assert (game.level_idx, game.gold, game.lives) == (4, 900, 12)
 
 
-def test_continue_after_game_over(screen):
+def test_game_over_ends_the_run_and_its_save(screen):
     main.write_save({"level": 6, "gold": 3000, "lives": 15, "layout": []})
     game = main.Game(screen, log_dir=None)
-    game.state = "game_over"
+    game.continue_game()
+    game.lives = 1
+    game.start_wave()
+    run_wave(game)
+    assert game.state == "game_over" and main.load_save() is None and not game.can_continue
     game.draw()
     game.handle_event(key(pygame.K_c))
-    assert (game.level_idx, game.gold, game.lives, game.state) == (6, 3000, 15, "build")
+    assert game.state == "game_over"
 
 
 def test_no_continue_mid_game(screen):
@@ -144,19 +148,10 @@ def test_no_continue_mid_game(screen):
     assert game.level_idx == 0
 
 
-def test_victory_clears_the_save(game):
-    finish_level(game)
-    game.advance()
-    assert main.load_save()
-    game.load_level(len(main.LEVELS) - 1)
-    game.wave_idx = main.WAVES_PER_LEVEL
-    game.state = "wave"
-    game.update(1 / 60)
-    assert game.state == "victory" and main.load_save() is None and not game.can_continue
-
-
 def test_broken_saves_are_ignored(tmp_path):
-    for content in ("not json", "[]", '{"level": 0, "gold": 1, "lives": 1, "layout": []}',
+    for content in ("not json", "[]", '{"level": -1, "gold": 1, "lives": 1, "layout": []}',
+                    '{"level": 3, "gold": 1, "lives": 1, "layout": [], "side": "wizards"}',
+                    '{"level": 3, "gold": 1, "lives": 1, "layout": [], "pass": 0}',
                     '{"level": 99, "gold": 1, "lives": 1, "layout": []}',
                     '{"level": 3, "gold": "x", "lives": 1, "layout": []}'):
         with open(main.SAVE_FILE, "w", encoding="utf-8") as f:

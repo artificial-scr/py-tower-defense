@@ -2,7 +2,10 @@
 
 Every level played (cleared, lost, or quit part-way) writes one JSON file:
 
-    logs/<session>/run<NN>_level<NN>_<theme>_<outcome>.json
+    logs/<session>/run<NN>_[monsters_]level<NN>_<theme>_<outcome>.json
+
+(monsters_ marks a level played on the Monsters side; its economy is the defender's, which
+never changes, and the draft budget goes in each wave's gold fields.)
 
 <session> is the launch time plus a random suffix, a new run starts each time the
 game is restarted, and files are opened in exclusive-create mode, so a log is
@@ -12,6 +15,8 @@ Each file has:
   level, economy, waves      what happened, wave by wave
   strongest_comp             the most valuable set of towers on the map at any point (value =
                              gold put into them), when it was reached, and what was in it
+  strongest_comp_by_wave     the same for each wave: from the end of the previous wave to the
+                             end of this one (the build phase plus the wave itself)
   towers_by_kind             damage, DPS, overkill, kills per tower kind (towers that
                              evolved count toward each kind for the time they spent as it)
   enemies_by_kind            spawned / killed / leaked, HP vs damage taken, time to kill
@@ -64,8 +69,9 @@ class LogSession:
 class LevelLog:
     """Collects everything that happens during one level and writes it out at the end."""
 
-    def __init__(self, session, level_number, theme_name, boss, path_length, lives, gold, specs):
+    def __init__(self, session, level_number, theme_name, boss, path_length, lives, gold, specs, side="towers"):
         self.session = session
+        self.side = side
         self.specs = specs
         self.run = session.run
         self.level_number = level_number
@@ -81,7 +87,6 @@ class LevelLog:
         self.waves = []
         self.earned = defaultdict(int)
         self.spent = defaultdict(int)
-        self.strongest_comp = None  # the most valuable set of towers on the map during the level
         self.written = None
 
     # ---- recording -----------------------------------------------------------
@@ -91,28 +96,6 @@ class LevelLog:
     def add_tower(self, tower):
         if tower not in self.towers:
             self.towers.append(tower)
-
-    def check_comp(self, t, towers, trigger):
-        """Keep `towers` as the level's strongest composition if their total value beats the record.
-
-        The value on the map only goes down when a tower is sold (fusing and moving keep it, buying
-        adds to it), so checking just before every sell and at the end of the level finds the peak.
-        A tie keeps the earlier composition."""
-        towers = sorted(towers, key=lambda tw: (-tw.spent, tw.uid))
-        value = sum(tw.spent for tw in towers)
-        if not towers or (self.strongest_comp and value <= self.strongest_comp["value"]):
-            return
-        wave = self.current_wave()
-        by_kind = defaultdict(int)
-        for tw in towers:
-            by_kind[tw.kind] += 1
-        self.strongest_comp = {
-            "value": value, "t": r(t, 2), "trigger": trigger, "wave": wave["wave"] if wave else 0,
-            "during_wave": bool(wave) and "t_end" not in wave, "tower_count": len(towers),
-            "by_kind": dict(by_kind),
-            "towers": [{"id": tw.uid, "kind": tw.kind, "tier": tw.tier, "gold_spent": tw.spent, "tile": list(tw.tile)}
-                       for tw in towers],
-        }
 
     def start_wave(self, t, number, hp_mult, kinds, lives, gold):
         counts = defaultdict(int)
@@ -130,7 +113,8 @@ class LevelLog:
         w.update(t_end=r(t, 2), duration=r(t - w["t_start"], 2), lives_end=lives, gold_end=gold, bonus=bonus)
 
     # ---- output --------------------------------------------------------------
-    def finish(self, outcome, t, lives, gold):
+    def finish(self, outcome, t, lives, gold, strongest_comp=None, comps_by_wave=None):
+        """Write the log. The comps are tracked by the game (see progress.comp_snapshot)."""
         if self.written:
             return self.written
         if self.waves and "t_end" not in self.waves[-1]:
@@ -138,7 +122,7 @@ class LevelLog:
             w.update(t_end=r(t, 2), duration=r(t - w["t_start"], 2), lives_end=lives, gold_end=gold,
                      unfinished=True)
         data = {
-            "level": {"number": self.level_number, "theme": self.theme_name, "boss_level": self.boss,
+            "level": {"number": self.level_number, "theme": self.theme_name, "boss_level": self.boss, "side": self.side,
                       "run": self.run, "outcome": outcome, "game_seconds": r(t, 2),
                       "real_seconds": r((datetime.now() - self.started).total_seconds(), 1),
                       "started_at": self.started.isoformat(timespec="seconds"),
@@ -146,7 +130,8 @@ class LevelLog:
                       "path_length_px": r(self.path_length)},
             "economy": {"gold_start": self.gold_start, "gold_end": gold,
                         "earned": dict(self.earned), "spent": dict(self.spent)},
-            "strongest_comp": self.strongest_comp,
+            "strongest_comp": strongest_comp,
+            "strongest_comp_by_wave": {str(w): c for w, c in sorted((comps_by_wave or {}).items())},
             "waves": self.waves,
             "towers_by_kind": self.towers_by_kind(),
             "enemies_by_kind": self.enemies_by_kind(t),
@@ -156,7 +141,8 @@ class LevelLog:
             "specs": self.specs,
         }
         slug = re.sub(r"[^a-z0-9]+", "-", self.theme_name.lower()).strip("-")
-        name = f"run{self.run:02d}_level{self.level_number:02d}_{slug}_{outcome}"
+        side = "monsters_" if self.side == "monsters" else ""
+        name = f"run{self.run:02d}_{side}level{self.level_number:02d}_{slug}_{outcome}"
         self.written = self.session.write(name, data)
         return self.written
 

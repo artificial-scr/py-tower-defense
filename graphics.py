@@ -9,9 +9,13 @@ This module doesn't import main (that would load the game twice when it's run as
 script); GameView reads the game state through `self`.
 """
 
+import math
+
 import pygame
 
 from levels import BOSS_LEVELS, COLS, ENEMY_TYPES, LEVELS, ROWS, WAVES_PER_LEVEL
+from monsters import ABILITIES
+from progress import UNLOCKS
 from towers import CROSS, EVOLVE, LINES, TOWERS
 
 # --------------------------------------------------------------------------
@@ -33,6 +37,18 @@ GOOD = (90, 220, 110)
 BAD = (235, 80, 80)
 GOLD = (255, 210, 70)
 TIER_RIM = {1: (15, 15, 20), 2: (176, 116, 64), 3: (205, 205, 220), 4: GOLD}
+
+
+def wrap(text, width):
+    """Split text into lines of at most `width` characters, at spaces."""
+    lines, line = [], ""
+    for word in text.split():
+        if line and len(line) + 1 + len(word) > width:
+            lines.append(line)
+            line = word
+        else:
+            line = f"{line} {word}".strip()
+    return lines + [line] if line else lines
 
 
 def shade(color, k):
@@ -158,11 +174,42 @@ def draw_tower_shape(surf, spec, pos, aim=-90.0):
         sdraw.circle(surf, GOLD, (base.left + 6 + i * 7, base.bottom - 5), 2)
 
 
+def draw_enemy_icon(surf, spec, pos, size):
+    """A small still picture of an enemy type, for lists and the draft queue."""
+    if "shape" in spec:
+        draw_shape(surf, spec["shape"], pos, size, spec["color"], -90, outline=1)
+    elif spec["sides"] == 0:
+        sdraw.circle(surf, spec["color"], pos, size)
+    else:
+        sdraw.polygon(surf, spec["color"], regular_polygon(pos, size + 1, spec["sides"], -90))
+    if "inner" in spec:
+        shape, r, color = spec["inner"]
+        draw_shape(surf, shape, pos, max(2, r * size / spec["size"]), color, outline=1)
+
+
+def draw_tower_status(surf, fx, tower):
+    """EMP: a dark tile crossed out. Smokescreen: a grey haze on the effects layer."""
+    if tower.disabled:
+        r = TILE // 2 - 3
+        sdraw.fill(fx, (10, 10, 30, 150), (tower.pos.x - r, tower.pos.y - r, 2 * r, 2 * r))
+        for a, b in (((-1, -1), (1, 1)), ((-1, 1), (1, -1))):
+            sdraw.line(surf, (120, 200, 255), tower.pos + pygame.Vector2(a) * (r - 4),
+                       tower.pos + pygame.Vector2(b) * (r - 4), 3)
+    if tower.smoke_timer > 0:
+        sdraw.circle(fx, (150, 150, 150, 90), tower.pos, TILE * 0.7)
+
+
 def draw_enemy(surf, enemy):
     spec = enemy.spec
     size = spec["size"]
     color = spec["color"]
     sides = spec["sides"]
+    if enemy.phased:  # out of reach: just a faint outline
+        if sides == 0:
+            sdraw.circle(surf, color, enemy.pos, size, 2)
+        else:
+            sdraw.polygon(surf, color, regular_polygon(enemy.pos, size, sides, enemy.heading.as_polar()[1]), 2)
+        return
     if "shape" in spec:
         draw_shape(surf, spec["shape"], enemy.pos, size, color, enemy.spin, outline=3)
     elif sides == 0:
@@ -181,6 +228,11 @@ def draw_enemy(surf, enemy):
         sdraw.circle(surf, (255, 120, 20), enemy.pos, max(3, size // 3))
     if enemy.slowed:
         sdraw.circle(surf, (150, 230, 255), enemy.pos, size + 4, 2)
+    if enemy.shield_timer > 0:
+        sdraw.circle(surf, (240, 220, 120), enemy.pos, size + 7, 2)
+    if enemy.haste_timer > 0:
+        tail = enemy.pos - enemy.heading * (size + 8)
+        sdraw.line(surf, (255, 120, 60), enemy.pos - enemy.heading * size, tail, 3)
     if enemy.hp < enemy.max_hp:
         w = size * 2 + 4
         bar = pygame.Rect(0, 0, w, 4)
@@ -216,6 +268,26 @@ def render_map(theme, waypoints):
 # --------------------------------------------------------------------------
 # Visual effects (they only age; they don't affect the game)
 # --------------------------------------------------------------------------
+class CastWarning:
+    """A pulsing circle marking where a monster ability is about to land."""
+
+    def __init__(self, pos, radius, color, duration):
+        self.pos = pygame.Vector2(pos)
+        self.radius = radius
+        self.color = color
+        self.duration = duration
+        self.t = 0.0
+
+    def update(self, dt):
+        self.t += dt
+        return self.t < self.duration
+
+    def draw(self, surf):
+        pulse = 0.5 + 0.5 * math.sin(self.t * 14)
+        sdraw.circle(surf, (*self.color, int(30 + 40 * pulse)), self.pos, self.radius)
+        sdraw.circle(surf, (*self.color, 220), self.pos, self.radius * (1 - 0.6 * self.t / self.duration), 2)
+
+
 class Ring:
     """An expanding, fading ring."""
 
@@ -336,12 +408,15 @@ class GameView:
         for t in self.towers.values():
             if t is not self.dragging:
                 draw_tower_shape(screen, t.spec, t.pos, t.aim)
+                draw_tower_status(screen, fx, t)
         for e in self.enemies:
             draw_enemy(screen, e)
         for p in self.projectiles:
             draw_projectile(screen, p)
         for ef in self.effects:
             ef.draw(fx)
+        if self.side == "monsters":
+            self.draw_attack_map(fx)
         screen.blit(fx, (0, 0))
         mx, my = mouse_pos()
         hover = tile_center(mx // TILE, my // TILE)
@@ -357,14 +432,19 @@ class GameView:
             screen.blit(img, img.get_rect(center=sp(p.pos)))
 
         self.draw_boss_bar()
-        if not (self.show_settings or self.confirm_quit or self.show_tree or self.choice):
+        if not (self.show_settings or self.confirm_quit or self.show_tree or self.choice or self.reward_cards
+                or self.picking_side):
             self.draw_banner()
-        if not self.confirm_quit:
+        if not (self.confirm_quit or self.reward_cards or self.picking_side):
             self.draw_overlay()
         if self.show_settings:
             self.draw_settings()
         elif self.confirm_quit:
             self.draw_quit_prompt()
+        elif self.picking_side:
+            self.draw_side_pick()
+        elif self.reward_cards:
+            self.draw_rewards()
         elif self.choice:
             self.draw_choice()
         elif self.show_tree:
@@ -462,8 +542,12 @@ class GameView:
         alpha = int(255 * min(1.0, self.banner_timer / 0.8))
         band = pygame.Surface(sp((MAP_W, 110)), pygame.SRCALPHA)
         band.fill((0, 0, 0, int(alpha * 0.55)))
-        title = self.font_xl.render(f"LEVEL {self.level_idx + 1}: {self.theme.name.upper()}", True, self.theme.accent)
-        if self.is_boss_level:
+        pass_label = f"PASS {self.pass_no}  -  " if self.pass_no > 1 else ""
+        title = self.font_xl.render(f"{pass_label}LEVEL {self.level_idx + 1}: {self.theme.name.upper()}", True,
+                                    self.theme.accent)
+        if self.side == "monsters":
+            sub = self.font.render("MONSTERS: draft a wave in the panel, then press Space to send it", True, TEXT)
+        elif self.is_boss_level:
             boss = ENEMY_TYPES[BOSS_LEVELS[self.level_idx + 1]]["boss"]
             sub = self.font.render(f"BOSS LEVEL - {boss} waits at the end of wave {WAVES_PER_LEVEL}",
                                    True, self.theme.accent)
@@ -482,22 +566,31 @@ class GameView:
         self.screen.blit(shade, (0, 0))
 
     def draw_overlay(self):
-        if self.state == "level_complete":
+        run_over = [(f"Levels won this run: {self.levels_won}   (best: {self.profile.best_run})", TEXT, self.font_l),
+                    ("Records and unlocks are kept. Press R or click for a new run.", TEXT, self.font)]
+        if self.state == "level_complete" and self.side == "monsters":
+            lines = [(f"{self.theme.name} has fallen!", self.theme.accent, self.font_xl),
+                     (f"Next up: {LEVELS[self.level_idx + 1][0].name}", TEXT, self.font_l),
+                     ("Press Space or click to continue.", TEXT, self.font)]
+        elif self.state == "level_complete":
             nxt = LEVELS[self.level_idx + 1][0]
             lines = [(f"{self.theme.name} cleared!", self.theme.accent, self.font_xl),
                      (f"Next up: {nxt.name}", nxt.accent, self.font_l),
                      ("Towers are refunded in full. Press Space or click to continue.", TEXT, self.font)]
+        elif self.state == "game_over" and self.side == "monsters":
+            lines = [("THE TOWERS HELD - RUN OVER", BAD, self.font_xl),
+                     (f"Level {self.level_idx + 1}: they kept {self.lives} lives", TEXT, self.font)] + run_over
         elif self.state == "game_over":
-            lines = [("GAME OVER", BAD, self.font_xl),
-                     (f"You reached level {self.level_idx + 1}, wave {self.wave_idx}", TEXT, self.font_l),
-                     ("Press R or click to try again", TEXT, self.font)]
-            if self.can_continue:
-                lines.append((f"Press C to continue from level {self.save['level'] + 1} (last checkpoint)", GOLD,
-                              self.font))
+            lines = [("RUN OVER", BAD, self.font_xl),
+                     (f"Lost at level {self.level_idx + 1}, wave {self.wave_idx}", TEXT, self.font)] + run_over
+        elif self.state == "victory" and self.side == "monsters":
+            lines = [("EVERY DEFENSE BROKEN!", GOLD, self.font_xl),
+                     (f"Pass {self.pass_no} complete. Next: defend against your own waves.", TEXT, self.font_l),
+                     ("Press Space or click to switch sides.", TEXT, self.font)]
         elif self.state == "victory":
-            lines = [("VICTORY!", GOLD, self.font_xl),
-                     (f"All {len(LEVELS)} levels defended with {self.lives} lives left", TEXT, self.font_l),
-                     ("Press R or click to play again", TEXT, self.font)]
+            lines = [("PASS COMPLETE!", GOLD, self.font_xl),
+                     (f"All {len(LEVELS)} levels defended. Next: break your own defenses.", TEXT, self.font_l),
+                     ("Press Space or click to switch sides.", TEXT, self.font)]
         elif self.paused:
             lines = [("PAUSED", TEXT, self.font_xl), ("Press P to resume", TEXT_DIM, self.font)]
         else:
@@ -507,6 +600,35 @@ class GameView:
         for s, color, font in lines:
             r = self.text(font, s, color, (MAP_W / 2, y), "midtop")
             y = r.bottom / SCALE + 14
+
+    def side_pick_rects(self):
+        return [(side, pygame.Rect(MAP_W / 2 - 330 + i * 340, MAP_H / 2 - 100, 320, 230))
+                for i, side in enumerate(("towers", "monsters"))]
+
+    def draw_side_pick(self):
+        """The new-run screen: start on the Towers or the Monsters side."""
+        self.shade_map(225)
+        self.text(self.font_xl, "NEW RUN", GOLD, (MAP_W / 2, 90), "midtop")
+        self.text(self.font, f"Pick the side you start on. Best run so far: {self.profile.best_run} levels won.",
+                  TEXT_DIM, (MAP_W / 2, 160), "midtop")
+        about = {"towers": ("TOWERS", ["Build and fuse towers to hold", "all 20 levels against your own",
+                                       "recorded monster waves."]),
+                 "monsters": ("MONSTERS", ["Draft waves and use abilities", "to break your own recorded",
+                                           "tower defenses, level by level."])}
+        mouse = mouse_pos()
+        for i, (side, rect) in enumerate(self.side_pick_rects()):
+            title, desc = about[side]
+            sdraw.rect(self.screen, (55, 55, 68) if rect.collidepoint(mouse) else (38, 38, 48), rect, border_radius=12)
+            sdraw.rect(self.screen, self.theme.accent, rect, 3, border_radius=12)
+            icon = pygame.Vector2(rect.centerx, rect.top + 46)
+            if side == "towers":
+                draw_tower_shape(self.screen, TOWERS["railgun"], icon)
+            else:
+                draw_enemy_icon(self.screen, ENEMY_TYPES["juggernaut"], icon, 16)
+            self.text(self.font_l, title, TEXT, (rect.centerx, rect.top + 80), "midtop")
+            for j, line in enumerate(desc):
+                self.text(self.font_s, line, TEXT_DIM, (rect.centerx, rect.top + 124 + j * 20), "midtop")
+            self.text(self.font, f"[{i + 1}]", GOLD, (rect.centerx, rect.bottom - 12), "midbottom")
 
     def draw_quit_prompt(self):
         self.shade_map(190)
@@ -532,6 +654,45 @@ class GameView:
             self.text(self.font_l, spec["name"], spec["color"], (rect.centerx, rect.top + 66), "midtop")
             self.text(self.font_s, spec["desc"], TEXT, (rect.centerx, rect.top + 100), "midtop")
             self.text(self.font_s, self.stat_line(spec), TEXT_DIM, (rect.centerx, rect.top + 122), "midtop")
+            self.text(self.font, f"[{i + 1}]", GOLD, (rect.centerx, rect.bottom - 12), "midbottom")
+
+    def reward_card_rects(self):
+        n = len(self.reward_cards)
+        return [pygame.Rect(MAP_W / 2 - (n * 240 - 20) / 2 + i * 240, MAP_H / 2 - 110, 220, 250) for i in range(n)]
+
+    def draw_rewards(self):
+        """Pick one of three unlock cards after a win."""
+        self.shade_map(200)
+        monster = self.reward_pool == "monster"
+        self.text(self.font_l, "VICTORY SPOILS - PICK ONE", GOLD, (MAP_W / 2, MAP_H / 2 - 190), "midtop")
+        note = "Monster unlocks: for your waves on the Monsters side" if monster else \
+            "Tower cards: they power up your towers"
+        self.text(self.font_s, note, TEXT_DIM, (MAP_W / 2, MAP_H / 2 - 150), "midtop")
+        mouse = mouse_pos()
+        for i, (rect, key) in enumerate(zip(self.reward_card_rects(), self.reward_cards)):
+            card = UNLOCKS[self.reward_pool][key]
+            rank = self.profile.rank(self.reward_pool, key)
+            hover = rect.collidepoint(mouse)
+            sdraw.rect(self.screen, (55, 55, 68) if hover else (38, 38, 48), rect, border_radius=10)
+            sdraw.rect(self.screen, GOLD if card["rare"] else PANEL_LINE, rect, 4 if card["rare"] else 2,
+                       border_radius=10)
+            icon = pygame.Vector2(rect.centerx, rect.top + 44)
+            if card["effect"] == "type":
+                draw_enemy_icon(self.screen, ENEMY_TYPES[card["type"]], icon, 16)
+            elif card["effect"] == "ability":
+                sdraw.circle(self.screen, ABILITIES[card["ability"]]["color"], icon, 16)
+            else:
+                sdraw.circle(self.screen, GOLD if card["rare"] else TEXT_DIM, icon, 12, 3)
+            self.text(self.font, card["name"], GOLD if card["rare"] else TEXT, (rect.centerx, rect.top + 76), "midtop")
+            y = rect.top + 106
+            for line in wrap(card["desc"], 26):
+                self.text(self.font_s, line, TEXT, (rect.centerx, y), "midtop")
+                y += 20
+            if card["max"] > 1:
+                label = f"Rank {rank + 1} of {card['max']}" if rank else f"New - up to {card['max']} ranks"
+                self.text(self.font_s, label, TEXT_DIM, (rect.centerx, rect.bottom - 64), "midtop")
+            if card["rare"]:
+                self.text(self.font_s, "RARE", GOLD, (rect.right - 10, rect.top + 8), "topright")
             self.text(self.font, f"[{i + 1}]", GOLD, (rect.centerx, rect.bottom - 12), "midbottom")
 
     @staticmethod
@@ -607,8 +768,7 @@ class GameView:
         b = self.settings_close_button()
         sdraw.rect(self.screen, (90, 90, 108) if b.collidepoint(mouse) else (70, 70, 85), b, border_radius=8)
         sdraw.rect(self.screen, self.theme.accent, b, 3, border_radius=8)
-        label = "Play  [Enter]" if self.state == "build" and self.wave_idx == 0 and not self.towers else \
-            "Resume  [Enter]"
+        label = "Play  [Enter]" if self.untouched else "Resume  [Enter]"
         hint_y = 500
         if self.can_continue:
             label = "New game  [Enter]"
@@ -642,20 +802,12 @@ class GameView:
         return f"+ {t.spec['name']} -> " + " / ".join(TOWERS[k]["name"] for k in options)
 
     def draw_panel(self):
+        if self.side == "monsters":
+            self.draw_attack_panel()
+            return
         screen = self.screen
-        x0 = MAP_W
-        sdraw.fill(screen, PANEL_BG, (x0, 0, PANEL_W, HEIGHT))
-        sdraw.line(screen, self.theme.accent, (x0, 0), (x0, HEIGHT), 4)
-        x = x0 + 12
-
-        # Level header in the level's accent color.
-        header = pygame.Rect(x, 12, PANEL_W - 24, 56)
-        sdraw.rect(screen, self.theme.accent, header, border_radius=8)
-        name_font = self.font_l if self.font_l.size(self.theme.name)[0] <= (header.width - 12) * SCALE else self.font
-        self.text(name_font, self.theme.name, (20, 20, 25), (header.centerx, header.top + 20), "center")
-        level_label = f"Level {self.level_idx + 1} of {len(LEVELS)}" + ("  -  BOSS" if self.is_boss_level else "")
-        self.text(self.font_s, level_label, (20, 20, 25), (header.centerx, header.bottom - 6), "midbottom")
-
+        x = MAP_W + 12
+        self.draw_panel_header()
         self.text(self.font, f"Wave  {self.wave_idx} / {WAVES_PER_LEVEL}", TEXT, (x, 84))
         self.text(self.font, f"Lives  {self.lives}", BAD if self.lives <= 5 else TEXT, (x, 110))
         self.text(self.font, f"Gold  {self.gold}", GOLD, (x, 136))
@@ -698,19 +850,37 @@ class GameView:
                                  active=affordable and self.state == "build" and self.wave_idx == 0)
 
         self.text(self.font_s, "Enemies", TEXT_DIM, (x, 520))
-        for i, spec in enumerate(s for s in ENEMY_TYPES.values() if "boss" not in s):
+        for i, spec in enumerate(s for s in ENEMY_TYPES.values() if s["draft"] == "starter"):
             c = pygame.Vector2(x + 74 + i * 30, 526)
             if spec["sides"] == 0:
                 sdraw.circle(screen, spec["color"], c, 8)
             else:
                 sdraw.polygon(screen, spec["color"], regular_polygon(c, 9, spec["sides"], -90))
 
+        self.draw_panel_footer()
+
+    def draw_panel_header(self):
+        """Panel background and the level header in the level's accent color."""
+        screen = self.screen
+        sdraw.fill(screen, PANEL_BG, (MAP_W, 0, PANEL_W, HEIGHT))
+        sdraw.line(screen, self.theme.accent, (MAP_W, 0), (MAP_W, HEIGHT), 4)
+        header = pygame.Rect(MAP_W + 12, 12, PANEL_W - 24, 56)
+        sdraw.rect(screen, self.theme.accent, header, border_radius=8)
+        name_font = self.font_l if self.font_l.size(self.theme.name)[0] <= (header.width - 12) * SCALE else self.font
+        self.text(name_font, self.theme.name, (20, 20, 25), (header.centerx, header.top + 20), "center")
+        level_label = f"Level {self.level_idx + 1} of {len(LEVELS)}" + ("  -  BOSS" if self.is_boss_level else "")
+        self.text(self.font_s, level_label, (20, 20, 25), (header.centerx, header.bottom - 6), "midbottom")
+
+    def draw_panel_footer(self):
+        """The wave button and the speed / pause / tree row."""
         if self.state == "build":
             label, enabled = f"Send wave {self.wave_idx + 1}  [Space]", self.wave_lock <= 0
         elif self.state == "level_complete":
             label, enabled = "Next level  [Space]", True
-        elif self.state in ("game_over", "victory"):
-            label, enabled = "Restart  [R]", True
+        elif self.state == "victory":
+            label, enabled = "Switch sides  [Space]", True
+        elif self.state == "game_over":
+            label, enabled = "New run  [R]", True
         else:
             left = len(self.enemies) + len(self.spawn_queue)
             label, enabled = f"{left} {'enemy' if left == 1 else 'enemies'} left", False

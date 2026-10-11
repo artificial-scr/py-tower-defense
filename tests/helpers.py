@@ -141,3 +141,21 @@ def run_wave(game, max_frames=200_000):
             return
         game.update(1 / 60)
     raise AssertionError("wave never ended")
+
+
+def scripted_attack(game, kinds, save_for_last):
+    """Play the current Monsters level drafting `kinds` in turn with all the budget, either every wave or
+    only the last one (sending the first four empty to save up). No abilities. Returns whether it won."""
+    while game.state in ("build", "wave"):
+        if game.state == "build":
+            if not save_for_last or game.wave_idx == 4:
+                i = 0
+                while any(game.can_draft(k) for k in kinds):
+                    kind = kinds[i % len(kinds)]
+                    i += 1
+                    if game.can_draft(kind):
+                        game.draft(kind)
+            game.send_wave()
+        else:
+            game.update(1 / 60)
+    return game.state in ("level_complete", "victory")

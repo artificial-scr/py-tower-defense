@@ -1,8 +1,12 @@
 # py-tower-defense
 
-A tower defense game built with [pygame-ce](https://pyga.me/). You never upgrade a tower directly.
-Instead, towers evolve by **fusing** two of them into a stronger one. There are 20 levels, each with
-its own color theme and path, and boss fights on levels 10 and 20.
+A roguelike tower defense game built with [pygame-ce](https://pyga.me/). You never upgrade a tower
+directly. Instead, towers evolve by **fusing** two of them into a stronger one. There are 20 levels,
+each with its own color theme and path, and boss fights on levels 10 and 20.
+
+Beat all 20 levels and the game flips: you play the **monsters** against your own best tower
+defenses, level by level. Beat those, and you defend against your own monster waves. A run goes on,
+switching sides every 20 levels, until you lose a level.
 
 ## Quick start
 
@@ -18,42 +22,106 @@ The game opens on the settings screen, where you can choose a display scale. Pre
 | Option | Effect |
 |---|---|
 | `--no-log` | Don't write balance logs (see [Balance logs](#balance-logs)) |
+| `--monsters` | Debug shortcut: start straight on the Monsters side |
 
-## How to play
+## The run
+
+```
+Pass 1: Towers  L1 ... L20  ──beat L20──▶  Pass 2: Monsters  L1 ... L20  ──beat L20──▶  Pass 3: Towers ...
+         │                                          │
+         └──── lose any level ──▶  RUN OVER  ◀──────┘
+```
+
+- **Losing a level ends the run.** Your score is the number of levels won. The best run is kept.
+- **Records:** every level you win becomes a record the other side plays against next time. Clearing
+  a Towers level records the strongest set of towers you had during each of its 5 waves. Winning a
+  Monsters level records the waves you sent, including where and when you used abilities. A record
+  only ever gets replaced by a stronger one, so the challenge never gets easier.
+- **Unlocks:** after a win, pick one of three cards. They're permanent and survive the end of a run.
+  Monsters wins give monster cards. Towers wins give tower cards once you've beaten Monsters level 20.
+- **New run:** once you've beaten Towers level 20, every new run lets you pick which side to start on.
+
+The full design, and the reasoning behind each rule, is in [DESIGN.md](DESIGN.md).
+
+## The Towers side
 
 Enemies follow the path from one edge of the map to the other. Build towers on free tiles to stop
 them. Each enemy that gets through costs you lives, and you lose when your lives run out.
 
-- You start with **150 gold** and **20 lives**.
+- You start each Towers pass with **150 gold** and **20 lives** (more with the Treasury and Fortify
+  cards).
 - Each level has **5 waves**. You start each wave yourself, so you can build as long as you like
   between waves.
-- You earn gold for every kill, plus a bonus for clearing a wave (`20 + 5 × wave number`).
+- You earn each monster's cost in gold when you kill it, plus a bonus for clearing a wave
+  (`20 + 5 × wave number`).
 - Selling a tower gives back **70%** of everything spent on it, including the towers fused into it.
 - When you move to the next level the map changes, so all your towers are **refunded at full
   price**. Press **B** (or the Rebuild button) to buy them all back in one go: same towers, same
   price, most expensive first, each on the free tile that covers the most path. You can drag them
   wherever you like afterwards.
-- Enemies get tougher across the whole game, not just within a level. Waves grow longer and enemy
-  HP goes up.
+- Waves come from your **monster record** for that level when one exists, abilities included. A
+  pulsing circle warns you a second before an area ability lands. Without a record, the game
+  generates the wave, and those get tougher across the whole game.
 
-### Saving
+## The Monsters side
 
-The start of each level is a checkpoint, saved to `savegame.json` with your gold, lives and the
-towers to rebuild. When you launch the game, or after a game over, press **C** to continue from
-the start of the last level you reached. Winning the game deletes the save.
+The towers on the map are your **tower record** for the level, and you have to get through them.
 
-### Enemies
+- **The defender grows wave by wave:** before each wave you see the comp it had during that wave
+  in your record. Click a tower to see its range.
+- **Draft** each wave between waves. Click a monster in the panel (or press its number) to add it
+  to the queue, and hold Shift to add 5. The queue shows along the bottom of the map, and clicking an
+  icon removes it. Then press Space to send the wave.
+- **Budget:** each wave adds the larger of what the generated wave was worth and a **share of the
+  defender's comp value** (40% to start, +2% for every Monsters level you win in the run). Unspent
+  budget carries over to the next wave, so you can save up for one big push, or pace your waves.
+  Different levels reward different plans.
+- **Abilities:** during a wave, press their number (or click them) once they're ready. Area
+  abilities then need a click on the map.
+- **You win** by draining the defender's 20 lives within the 5 waves. If the towers still stand
+  after wave 5, the run is over.
+- **Starter pack:** the first time you play the Monsters side, you pick 3 cards to begin with.
 
-| Enemy | Traits |
-|---|---|
-| Basic | Average speed and HP |
-| Fast | Quick and fragile, shows up from the 3rd wave |
-| Tank | Slow and tough, costs 2 lives if it gets through |
-| Elite | Arrives at the end of the last wave of every non-boss level, costs 5 lives |
-| **The Warden** (level 10) | Boss: summons Fast minions and resists slows |
-| **The Overlord** (level 20) | Final boss: summons Tanks and resists slows even more |
+## Monsters
 
-If a boss gets through, the game is over, no matter how many lives you have left.
+| Monster | Traits | Unlock |
+|---|---|---|
+| Basic | Average speed and HP | Always |
+| Fast | Quick and fragile | Always |
+| Tank | Slow and tough, costs 2 lives if it gets through | Always |
+| Elite | Very tough, costs 5 lives | Always |
+| Swarmling | Tiny, cheap, fast; comes in crowds | Card |
+| Armored | Blocks a flat part of every hit (not burns): shrugs off rapid fire | Card |
+| Healer | Heals the monsters around it | Card |
+| Splitter | Breaks into 3 Swarmlings when killed | Card |
+| Phantom | Every 4 s it can't be targeted for 1.5 s (splash still hits it) | Card |
+| Juggernaut | Huge and immune to slows | Rare card |
+| **The Warden** | Boss of level 10: summons Fast monsters and resists slows | Boss level, last wave |
+| **The Overlord** | Boss of level 20: summons Tanks and resists slows even more | Boss level, last wave |
+
+If a boss gets through, its side loses every life at once.
+
+### Abilities and buffs
+
+| Ability | Effect | Cooldown |
+|---|---|---|
+| EMP | Towers in an area stop firing for 3 s | 20 s |
+| Smokescreen | Towers in an area lose 40% range for 6 s | 18 s |
+| Frenzy | All monsters +50% speed for 4 s | 25 s |
+| Mend | Heals every monster by 25% | 30 s |
+| Bulwark | Monsters take 50% less damage for 3 s | 30 s |
+
+Extra ranks of an ability cut its cooldown by 15%. The buff cards (up to 3 ranks each) are Thick
+Hide (+10% HP), Swiftness (+6% speed), Insulation (−20% burn damage) and Thaw (slows 15% weaker).
+The rare War Chest card (up to 5 ranks) adds 15% to the draft budget.
+
+### Tower cards
+
+Sharpened Guns / Cannons / Frost (+8% damage for that line, and finals count for both parent
+lines), Long Barrels (+5% range), Treasury (+50 starting gold), Fortify (+2 starting lives) and
+Salvage (+5% sell refund) go up to 3 ranks. The rare cards counter monster unlocks: Detector
+(target phased Phantoms), Piercing Rounds (halves armor) and Grounding (EMP and Smokescreen last
+half as long). A tower record keeps the cards it was won with.
 
 ## Fusion and evolution
 
@@ -91,74 +159,97 @@ what the fusion would produce.
 
 ## Controls
 
+| Input | Towers side | Monsters side |
+|---|---|---|
+| `1`–`9`, `0` | `1`–`3`: pick a tower to build | Draft phase: draft that monster (`Shift`: 5 of them). During a wave: use that ability |
+| Left click | Place the picked tower / select a tower | Draft from the panel, remove a queued monster, cast an aimed ability, see a tower's range |
+| Drag a tower | Move it to any free tile, even during a wave. Drop it on a matching tower to fuse them | — |
+| Right click / `Esc` | Cancel placement / deselect | Cancel aiming |
+| `Backspace` | — | Take the last monster off the queue |
+| `S` / `B` | Sell the selected tower / rebuild the previous level's towers | — |
+
+Both sides:
+
 | Input | Action |
 |---|---|
-| `1` / `2` / `3` | Pick a tower to build (Gun, Cannon, Frost) |
-| Left click | Place the picked tower / select an existing tower |
-| Drag a tower | Move it to any free tile, even during a wave. Drop it on a matching tower to fuse them |
-| Right click / `Esc` | Cancel placement / deselect |
-| `Esc` (nothing selected) | Ask to quit. Press `Esc` again to quit |
-| `S` | Sell the selected tower |
-| `B` | Rebuild the previous level's towers |
-| `C` | Continue from the last checkpoint (on the start screen or after a game over) |
+| `Space` | Send the next wave / continue to the next level / switch sides after level 20 (sending a wave is blocked for 1 s after a level change, so a double press can't start one by accident) |
+| `C` | Continue the saved run (on the start screen) |
 | `T` | Show the evolution tree |
-| `Space` | Start the next wave / continue to the next level (sending a wave is blocked for 1 s after a level change, so a double press can't start one on an empty map) |
 | `F` / `Shift+F` | Change game speed: 1×, 2×, 4×, 10× |
 | `P` | Pause |
 | `O` | Settings (display scale, from 75% to 200%) |
-| `R` | Restart after a game over or a win |
+| `R` | Start a new run after the run is over |
+| `Esc` (nothing to cancel) | Ask to quit. Press `Esc` again to quit |
 
-When a fusion has two possible results, press `1` / `2` or click a card to pick one.
+On a choice screen (fusion branch, unlock cards, side for a new run), press the number on a card or
+click it.
 
-## Modding towers
+## Saving
 
-Tower stats and evolution are data, not code. Both files are read at startup:
+There are two files, both git-ignored:
+
+- **`profile.json`** is kept forever: your unlocks, the records for every level and wave, your
+  milestones and your best run.
+- **`savegame.json`** is the run in progress, saved at the start of every level. On the start screen,
+  press **C** to continue it from the start of that level. Losing a level ends the run and deletes it.
+
+## Modding
+
+Stats and rules are data, not code. Every file is read and checked at startup, and if one is broken
+the game stops with a message that says what's wrong.
 
 - **`towers.json`**: each tower's stats (`range`, `damage`, `rate`, `proj_speed`, `cost` for tier 1
   towers) and its look (layered shapes and barrels). Optional mechanics are `splash`, `slow` +
   `slow_time`, `burn` + `burn_time`, `chain`, `multishot`, `instant` and `vs_slowed`.
 - **`evolution.json`**: the three tier 1 → 3 lines and the twelve tier 4 recipes.
+- **`monsters.json`**: every monster's stats, cost, look and mechanics (`armor`, `heal_aura`, `split`,
+  `phase`, `slow_floor`, `summon`), the abilities, and the Monsters-side budget rules (`share_start`,
+  `share_per_win`, `starter_picks`).
+- **`unlocks.json`**: both card pools, with each card's effect, numbers per rank, max rank, weight and
+  rarity.
 
-That means you can rebalance towers or add new ones without touching the Python code. If one of
-the files is broken, the game stops with an error message that says what's wrong.
-
-Levels, enemies and wave generation are in `levels.py`.
+Levels and wave generation are in `levels.py`.
 
 ## Balance logs
 
 Each level you play writes a JSON log to `logs/<session>/`, for example
-`run01_level03_tundra_cleared.json`. A log records:
+`run01_level03_tundra_cleared.json` (or `run01_monsters_level03_...` on the Monsters side). A log
+records:
 
 - damage, DPS, overkill and kills per tower and per tower kind
 - spawns, kills, leaks and damage taken per enemy kind
 - the economy and a wave-by-wave summary
-- the level's strongest composition: the most valuable set of towers you had on the map at once
-  (value = gold put into them), when you had it, and which towers were in it
-- every buy, fusion, branch choice, move and sell
+- the strongest composition you had on the map, for the whole level and for each wave (value =
+  gold put into the towers)
+- every buy, fusion, branch choice, move, sell, ability and unlock pick
 - a snapshot of the tower and enemy stats that were in effect
 
-These logs are meant for tuning `towers.json`. Pass `--no-log` to turn them off. See
+These logs are meant for tuning the data files. Pass `--no-log` to turn them off. See
 `balance_log.py` for the full format.
 
 ## Project layout
 
 | File | Contents |
 |---|---|
-| `main.py` | The `Game` state machine (waves, fusing, input, logging hooks) and `main()` |
+| `main.py` | The `Game` state machine (waves, fusing, runs and passes, rewards, input, logging hooks) and `main()` |
+| `attack.py` | The Monsters side: the defender from a record, drafting, abilities, winning and losing |
+| `progress.py` | The permanent profile (records, unlocks, milestones) and the card pools |
 | `towers.py` | Loads and validates `towers.json` and `evolution.json` |
-| `levels.py` | Level themes and paths, enemy types, wave generation |
-| `entities.py` | `Enemy`, `Projectile`, `Tower`: the combat rules |
+| `monsters.py` | Loads and validates `monsters.json` |
+| `levels.py` | Level themes and paths, wave generation and wave values |
+| `entities.py` | `Enemy`, `Projectile`, `Tower`: the combat rules, monster mechanics and abilities |
 | `graphics.py` | Everything drawn on screen, plus display scaling |
+| `attack_view.py` | Drawing for the Monsters side |
 | `balance_log.py` | Per-level balance logs |
 | `tests/` | The pytest suite |
 
-Your display scale is saved in `settings.json` and your progress in `savegame.json`. Both files
-and `logs/` are git-ignored.
+Your display scale is saved in `settings.json`. That file, `profile.json`, `savegame.json` and
+`logs/` are git-ignored.
 
 ## Testing
 
 ```bash
-uv run pytest                 # full suite (~40 s)
+uv run pytest                 # full suite (~55 s)
 uv run pytest -m "not slow"   # skip the long bot playthroughs
 ```
 
