@@ -77,7 +77,7 @@ from attack_view import AttackView
 from balance_log import LevelLog, LogSession
 from entities import Enemy, Tower, cast_ability, heal_auras
 from graphics import (BAD, GOLD, HEIGHT, MAP_H, MAP_W, PANEL_W, SCALES, TILE, Button, GameView, Popup, Ring,
-                      CastWarning, mouse_pos, render_map, set_scale, tile_center, to_logical, window_size)
+                      CastWarning, Shards, mouse_pos, render_map, set_scale, tile_center, to_logical, window_size)
 from levels import (BOSS_LEVELS, COLS, ENEMY_TYPES, LEVELS, ROWS, START_GOLD, START_LIVES, WAVES_PER_LEVEL,
                     build_path_cells, make_wave, wave_value)
 from monsters import ABILITIES, BUDGET, REWARDS, UPGRADES
@@ -717,15 +717,17 @@ class Game(AttackMixin, AttackView, GameView):
                 if wave_log:
                     wave_log["leaks"] += 1
                     wave_log["lives_lost"] += lost
-            elif self.side == "towers":
-                reward = e.spec["cost"]  # a monster is worth what it costs to draft
-                self.gold += reward
-                self.popups.append(Popup(e.pos, f"+{reward}", GOLD))
-                self.effects.append(Ring(e.pos, e.spec["size"] + 8, e.spec["color"], 0.3))
-                if wave_log:
-                    wave_log["kills"] += 1
-                    wave_log["kill_gold"] += reward
-                    self.log.earned["kills"] += reward
+            else:
+                self.effects.append(Shards(e.pos, e.spec["color"], e.spec["size"], e.spin))
+                if self.side == "towers":
+                    reward = e.spec["cost"]  # a monster is worth what it costs to draft
+                    self.gold += reward
+                    self.popups.append(Popup(e.pos, f"+{reward}", GOLD))
+                    self.effects.append(Ring(e.pos, e.spec["size"] + 8, e.spec["color"], 0.3))
+                    if wave_log:
+                        wave_log["kills"] += 1
+                        wave_log["kill_gold"] += reward
+                        self.log.earned["kills"] += reward
         self.enemies = [e for e in self.enemies if e.alive]
         for child, parent in splits:
             self.register_enemy(child, f"split:{parent}")

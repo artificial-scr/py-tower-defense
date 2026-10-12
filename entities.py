@@ -20,6 +20,7 @@ ENEMY_IDS = itertools.count(1)
 TOWER_IDS = itertools.count(1)
 ARMOR_MIN_SHARE = 0.2  # armor never blocks more than 80% of a hit
 SPLIT_SPREAD = 10  # pixels between the monsters a Splitter breaks into
+HIT_FLASH = 0.08  # seconds an enemy is drawn whitened after a hit (burns don't flash)
 
 
 NO_MODS = {"hp": 1.0, "speed": 1.0, "burn": 1.0, "thaw": 0.0, "armor": 1.0, "armor_flat": 0}
@@ -54,6 +55,7 @@ class Enemy:
         self.shield = 0.0  # share of damage blocked while shield_timer runs
         self.shield_timer = 0.0
         self.phase_t = 0.0
+        self.flash = 0.0  # drawing only: see HIT_FLASH
         self.summon_timer = self.spec["summon"][2] if "summon" in self.spec else 0.0
         self.alive = True
         self.escaped = False
@@ -107,6 +109,7 @@ class Enemy:
                 self.slow_factor = 1.0
         self.haste_timer -= dt
         self.shield_timer -= dt
+        self.flash -= dt
         self.phase_t += dt
         self.advance(self.speed * dt)
         self.spin += dt * 120
@@ -141,6 +144,8 @@ class Enemy:
             damage = max(damage - self.armor, damage * ARMOR_MIN_SHARE)
         if self.shield_timer > 0:
             damage *= 1 - self.shield
+        if how != "burn":
+            self.flash = HIT_FLASH
         effective = min(damage, self.hp)
         self.hp -= damage
         self.overkill += damage - effective

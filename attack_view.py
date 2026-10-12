@@ -15,19 +15,19 @@ class AttackView:
     def draw_attack_panel(self):
         x = MAP_W + 12
         self.draw_panel_header()
-        self.text(self.font, f"Wave  {self.wave_idx} / {WAVES_PER_LEVEL}", TEXT, (x, 78))
-        self.text(self.font, f"Towers' lives  {max(self.lives, 0)} / {DEFENDER_LIVES}", TEXT, (x, 102))
-        self.text(self.font_s, *self.pace_line(), (x, 124))
-        self.text(self.font, f"Budget  {self.budget}", GOLD, (x, 146))
+        self.text(self.font, f"Wave {self.wave_idx} / {WAVES_PER_LEVEL}", TEXT, (x, 84))
+        self.text(self.font, f"Their lives {max(self.lives, 0)}/{DEFENDER_LIVES}", TEXT, (x, 102))
+        self.text(self.font_s, *self.pace_line(), (x, 119))
+        self.text(self.font, f"Budget {self.budget}", GOLD, (x, 138))
         claim = (f"claims {self.share:.0%} of tower value" if not round(self.pace_bonus, 2) else
-                 f"claims {self.share:.0%}  ({self.pace_bonus:+.0%} for pace)")
-        self.text(self.font_s, claim, TEXT_DIM, (x, 168))
+                 f"claims {self.share:.0%} ({self.pace_bonus:+.0%} pace)")
+        self.text(self.font_s, claim, TEXT_DIM, (x, 155))
         rows = self.attack_rows()
         mouse = mouse_pos()
         if self.state in ("build", "wave"):
             self.draw_upgrades(mouse)
         if self.state == "build":
-            self.text(self.font_s, "DRAFT  (Shift: x5)", TEXT_DIM, (x, 188))
+            self.text(self.font_s, "DRAFT  (Shift: x5)", TEXT_DIM, (x, 186))
             for i, (kind, rect) in enumerate(rows):
                 spec = ENEMY_TYPES[kind]
                 ok = self.can_draft(kind)
@@ -39,10 +39,10 @@ class AttackView:
                 self.text(self.font_s, str(spec["cost"]), GOLD if ok else TEXT_DIM, (rect.right - 8, rect.centery),
                           "midright")
         elif self.state == "wave":
-            self.text(self.font_s, "ABILITIES", TEXT_DIM, (x, 188))
+            self.text(self.font_s, "ABILITIES", TEXT_DIM, (x, 186))
             if not rows:
-                self.text(self.font_s, "None yet: win levels to", TEXT_DIM, (x, 196))
-                self.text(self.font_s, "unlock some", TEXT_DIM, (x, 214))
+                self.text(self.font_s, "None yet: win levels to", TEXT_DIM, (x, 210))
+                self.text(self.font_s, "unlock some", TEXT_DIM, (x, 228))
             for i, (key, rect) in enumerate(rows):
                 spec = ABILITIES[key]
                 ready = self.cooldowns[key] <= 0
@@ -63,10 +63,10 @@ class AttackView:
     def pace_line(self):
         """(text, color): what this level still needs from the defender's lives."""
         if self.levels_left == 0:
-            return "Last level: take every life", BAD
+            return "Last level: take them all", BAD
         if self.lives_taken > 0:
-            return f"-{self.lives_taken} here: cleared  ({self.levels_left} to go)", GOOD
-        return f"Take 1 to clear  ({self.levels_left} to go)", TEXT_DIM
+            return f"-{self.lives_taken} here: clear ({self.levels_left} to go)", GOOD
+        return f"Take 1 to clear ({self.levels_left} to go)", TEXT_DIM
 
     def draw_upgrades(self, mouse):
         """Vitality / Stride / Plating: rank, key and the next rank's price. They can be bought (and a rank
@@ -76,15 +76,15 @@ class AttackView:
             rank = self.upgrades[key]
             ok = self.can_upgrade(key)
             self.draw_row(rect, ok, rect.collidepoint(mouse), rank > 0)
-            self.text(self.font_s, f"{spec['name']}", TEXT if ok else TEXT_DIM, (rect.centerx, rect.top + 3), "midtop")
+            self.text(self.font_s, f"{spec['name']}", TEXT if ok else TEXT_DIM, (rect.centerx, rect.top + 7), "midtop")
             for i in range(spec["max"]):  # rank pips
-                pip = pygame.Rect(rect.centerx - spec["max"] * 5 + i * 10 + 1, rect.top + 21, 8, 5)
+                pip = pygame.Rect(rect.centerx - spec["max"] * 5 + i * 10 + 1, rect.top + 20, 8, 5)
                 sdraw.rect(self.screen, GOLD if i < rank else PANEL_LINE, pip)
             if rank >= spec["max"]:
                 label, color = "MAX", GOLD
             else:
                 label, color = f"{self.upgrade_price(key)} [{hotkey}]", GOLD if ok else TEXT_DIM
-            self.text(self.font_s, label, color, (rect.centerx, rect.bottom - 3), "midbottom")
+            self.text(self.font_s, label, color, (rect.centerx, rect.bottom - 7), "midbottom")
 
     def draw_row(self, rect, enabled, hover, active):
         bg = (70, 70, 85) if enabled and hover else (48, 48, 58) if enabled else (36, 36, 44)

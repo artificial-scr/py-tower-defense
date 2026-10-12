@@ -16,8 +16,9 @@ import pygame
 import pytest
 
 import graphics
+import levels
 import main
-from graphics import SCALES, tile_center
+from graphics import HEIGHT, MAP_H, MAP_W, PANEL_W, SCALES, tile_center
 from helpers import free_tiles, put, scaled
 from towers import CROSS, EVOLVE, TOWERS
 
@@ -108,7 +109,46 @@ def test_level_maps_use_their_theme(screen):
         surf = graphics.render_map(theme, waypoints)
         x, y = waypoints[1]
         assert surf.get_at(graphics.tile_center(x, y))[:3] == theme.path
-        assert surf.get_at((2, 2))[:3] in (theme.ground, graphics.shade(theme.ground, 0.92))
+        # tiles are the ground color, a little lighter or darker (a faint checkerboard with some variation)
+        corner = surf.get_at((2, 2))[:3]
+        assert all(0.9 * g - 1 <= c <= 1.03 * g + 1 for c, g in zip(corner, theme.ground)), (theme.name, corner)
+
+
+def test_maps_look_the_same_every_time(screen):
+    theme, waypoints = main.LEVELS[0]
+    first = pygame.image.tobytes(graphics.render_map(theme, waypoints), "RGB")
+    assert pygame.image.tobytes(graphics.render_map(theme, waypoints), "RGB") == first
+
+
+def test_every_theme_has_decoration():
+    assert {theme.name for theme, _ in levels.ALL_LEVELS} <= set(graphics.DECOR)
+
+
+@pytest.mark.parametrize("scale", (0.75, 1.0))
+def test_text_stays_on_its_side(scale, mouse, monkeypatch):
+    """Orbitron is a wide font: no text may run off the map, or off the panel, on either side's screens."""
+    spills = []
+    text = graphics.GameView.text
+
+    def checked(self, font, s, color, pos, anchor="topleft"):
+        rect = text(self, font, s, color, pos, anchor)
+        area = (0, 0, MAP_W, MAP_H) if pos[0] < MAP_W else (MAP_W, 0, PANEL_W - 6, HEIGHT)
+        if not graphics.srect(area).contains(rect):
+            spills.append(s)
+        return rect
+
+    monkeypatch.setattr(graphics.GameView, "text", checked)
+    for _, g in scenes(scale, mouse, monkeypatch):
+        g.draw()
+    m = main.Game(g.screen, log_dir=None, side="monsters")
+    m.draft("basic", 5)
+    m.draw()
+    m.send_wave()
+    m.draw()
+    for state in ("level_complete", "game_over", "victory"):
+        m.state = state
+        m.draw()
+    assert not spills
 
 
 def frame_hashes(mouse, monkeypatch):

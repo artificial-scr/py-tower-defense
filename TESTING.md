@@ -35,7 +35,7 @@ uv run pytest --durations=10             # list the slowest tests
 | `test_attack.py` | The Monsters side: the defender from a record, budget and share, drafting, abilities, lives that last the pass (clearing, winning and losing), stat upgrades and escorts, the starter pack, drawing |
 | `test_unlocks.py` | `unlocks.json`, drawing and picking cards after wins (record tiers, sure rares), milestones, and what each tower card does |
 | `test_balance_log.py` | The per-level balance logs: file names, uniqueness, and cross-checks that their numbers add up |
-| `test_rendering.py` | Drawing: every screen at every display scale, plus pixel snapshots |
+| `test_rendering.py` | Drawing: every screen at every display scale, text staying inside the map and panel, map decoration, plus pixel snapshots |
 | `test_playthrough.py` | Long simulations with bot players, on both sides (marked `slow`) |
 
 Most tests drive the game the way a player would, by sending pygame events to `Game`, and the

@@ -253,13 +253,20 @@ These logs are meant for tuning the data files. Pass `--no-log` to turn them off
 | `monsters.py` | Loads and validates `monsters.json` |
 | `levels.py` | Level themes and paths, wave generation and wave values |
 | `entities.py` | `Enemy`, `Projectile`, `Tower`: the combat rules, monster mechanics and abilities |
-| `graphics.py` | Everything drawn on screen, plus display scaling |
+| `graphics.py` | Everything drawn on screen (map decoration, shadows, effects), plus display scaling |
 | `attack_view.py` | Drawing for the Monsters side |
 | `balance_log.py` | Per-level balance logs |
+| `assets/fonts/` | The game font, Orbitron (Medium and Bold), and its license |
 | `tests/` | The pytest suite |
 
 Your display scale is saved in `settings.json`. That file, `profile.json`, `savegame.json` and
 `logs/` are git-ignored.
+
+## Credits
+
+The font is [Orbitron](https://fonts.google.com/specimen/Orbitron) by Matt McInerney, under the SIL Open
+Font License 1.1 (`assets/fonts/OFL.txt`), using the Medium and Bold files from
+[theleagueof/orbitron](https://github.com/theleagueof/orbitron). Everything else is drawn in code.
 
 ## Testing
 

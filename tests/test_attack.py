@@ -267,11 +267,11 @@ def test_the_last_level_must_take_every_life(attack):
 
 def test_the_pace_line(attack):
     g = attack
-    assert g.pace_line()[0] == f"Take 1 to clear  ({len(LEVELS) - 1} to go)"
+    assert g.pace_line()[0] == f"Take 1 to clear ({len(LEVELS) - 1} to go)"
     leak(g, 2)
-    assert g.pace_line()[0].startswith("-2 here: cleared")
+    assert g.pace_line()[0].startswith("-2 here: clear (")
     g.load_level(len(LEVELS) - 1)
-    assert g.pace_line()[0] == "Last level: take every life"
+    assert g.pace_line()[0] == "Last level: take them all"
 
 
 def test_lives_reset_with_each_monsters_pass(screen):

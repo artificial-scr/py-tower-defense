@@ -68,7 +68,7 @@ Records are kept **per wave**: each level has five slots, one for each of its wa
 - The defender has **20 lives for the whole pass**; they don't come back between levels. (This
   matches the Towers side, whose lives also last the pass.)
 - **You clear a level** by taking at least 1 life within its 5 waves. The level always plays all 5
-  waves, since extra lives taken carry forward. The panel shows the pace, e.g. "-3 here: cleared
+  waves, since extra lives taken carry forward. The panel shows the pace, e.g. "-3 here: clear
   (6 to go)".
 - **You win the pass** the moment the last life goes, on any level. The pass ends there and you
   switch sides.
@@ -98,7 +98,7 @@ Records are kept **per wave**: each level has five slots, one for each of its wa
   run is behind** an even pace (2 lives per level: 0 expected at level 1, 10 by level 6), at most
   **+15%**. Being ahead doesn't lower it (`pace_min: 0`): when it did, a strong first level left
   too small a share to take a life on the next one, so a good start lost the run. The panel shows
-  it, e.g. "claims 55%  (+15% for pace)".
+  it, e.g. "claims 55% (+15% pace)".
 - Every monster type gets a `cost`. For the existing types, cost = the old kill reward
   (basic 5, fast 6, tank 12, elite 80, bosses 400 / 1000). So "the army your towers beat" and "the
   gold your towers earned from it" are the same number.

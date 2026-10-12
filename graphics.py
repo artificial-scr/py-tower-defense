@@ -10,6 +10,8 @@ script); GameView reads the game state through `self`.
 """
 
 import math
+import os
+import random
 
 import pygame
 
@@ -28,6 +30,11 @@ WIDTH, HEIGHT = MAP_W + PANEL_W, MAP_H
 
 # Display scales on offer. All of them keep TILE * scale a whole number of pixels.
 SCALES = (0.75, 1.0, 1.25, 1.5, 1.75, 2.0)
+
+# Orbitron (SIL Open Font License, see assets/fonts/OFL.txt): the Medium and Bold files from
+# github.com/theleagueof/orbitron (pygame can't pick a weight from the variable font).
+FONT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "fonts")
+FONT_FILES = {"medium": os.path.join(FONT_DIR, "Orbitron-Medium.ttf"), "bold": os.path.join(FONT_DIR, "Orbitron-Bold.ttf")}
 
 PANEL_BG = (28, 28, 34)
 PANEL_LINE = (60, 60, 72)
@@ -52,8 +59,44 @@ def wrap(text, width):
     return lines + [line] if line else lines
 
 
+_caps = {}  # font -> (top, bottom) of its capital letters within a rendered line, in pixels
+
+
+def load_font(size, weight="medium"):
+    """The game font at a logical size."""
+    font = pygame.font.Font(FONT_FILES[weight], round(size * SCALE))
+    ink = font.render("H", True, (255, 255, 255)).get_bounding_rect()
+    _caps[font] = ink.top, ink.bottom
+    return font
+
+
+def cap_height(font):
+    top, bottom = _caps[font]
+    return bottom - top
+
+
+def blit_text(surf, font, s, color, pos, anchor="topleft", alpha=None):
+    """Draw `s` with its anchor point at `pos` (logical). Vertically, text is placed by its capital
+    letters, not the font's line box: "top" is the top of the capitals, "bottom" the baseline,
+    and centered text has its capitals centered, so labels sit in the middle of their buttons.
+    Returns the capitals' box, in screen pixels."""
+    img = font.render(s, True, color)
+    if alpha is not None:
+        img.set_alpha(alpha)
+    top, bottom = _caps[font]
+    box = pygame.Rect(0, 0, img.get_width(), bottom - top)
+    setattr(box, anchor, (round(pos[0] * SCALE), round(pos[1] * SCALE)))
+    surf.blit(img, (box.x, box.y - top))
+    return box
+
+
 def shade(color, k):
     return tuple(min(255, int(c * k)) for c in color)
+
+
+def mix(a, b, k):
+    """Color `a` moved a share `k` of the way to color `b`."""
+    return tuple(round(x + (y - x) * k) for x, y in zip(a, b))
 
 
 # --------------------------------------------------------------------------
@@ -155,6 +198,29 @@ def draw_shape(surf, shape, center, r, color, rot=0.0, outline=2):
         sdraw.polygon(surf, (20, 20, 20), pts, outline)
 
 
+SHADOW_OFFSET = pygame.Vector2(3, 4)  # the light comes from the top left
+_shadows = {}
+
+
+def draw_shadow(surf, pos, w, h, lift=1.0):
+    """A soft dark blob under something w x h at `pos` (logical); `lift` pushes it further away, for
+    things off the ground. The blurred sprites are made once per size and display scale."""
+    key = (w, h, SCALE)
+    img = _shadows.get(key)
+    if img is None:
+        pad = round(4 * SCALE)
+        size = srect((0, 0, w, h)).size
+        img = pygame.Surface((size[0] + 2 * pad, size[1] + 2 * pad), pygame.SRCALPHA)
+        pygame.draw.rect(img, (0, 0, 0, 80), (pad, pad, *size), border_radius=min(size) // 2 if w == h else
+                         round(6 * SCALE))
+        img = _shadows[key] = pygame.transform.gaussian_blur(img, max(1, round(2 * SCALE)))
+    surf.blit(img, img.get_rect(center=sp(pygame.Vector2(pos) + SHADOW_OFFSET * lift)))
+
+
+def draw_tower_shadow(surf, pos, lift=1.0):
+    draw_shadow(surf, pos, TILE - 6, TILE - 7, lift)
+
+
 def draw_tower_shape(surf, spec, pos, aim=-90.0):
     """Draw a tower from its spec (an entry of towers.TOWERS)."""
     tier = spec["tier"]
@@ -200,10 +266,16 @@ def draw_tower_status(surf, fx, tower):
         sdraw.circle(fx, (150, 150, 150, 90), tower.pos, TILE * 0.7)
 
 
+def draw_enemy_shadow(surf, enemy):
+    if not enemy.phased:
+        d = enemy.spec["size"] * 2
+        draw_shadow(surf, enemy.pos, d, d, 1.3)
+
+
 def draw_enemy(surf, enemy):
     spec = enemy.spec
     size = spec["size"]
-    color = spec["color"]
+    color = mix(spec["color"], (255, 255, 255), 0.65) if enemy.flash > 0 else spec["color"]
     sides = spec["sides"]
     if enemy.phased:  # out of reach: just a faint outline
         if sides == 0:
@@ -249,20 +321,148 @@ def draw_projectile(surf, projectile):
     sdraw.circle(surf, (20, 20, 20), projectile.pos, r, 1)
 
 
+def path_tiles(waypoints):
+    tiles = set()
+    for (x0, y0), (x1, y1) in zip(waypoints, waypoints[1:]):
+        for x in range(min(x0, x1), max(x0, x1) + 1):
+            for y in range(min(y0, y1), max(y0, y1) + 1):
+                tiles.add((x, y))
+    return tiles
+
+
+# Ground decoration. A prop is drawn around (x, y), the logical center of a spot on a free tile.
+def _tuft(surf, rng, x, y, color):
+    for base, lean, height in ((-4, -2, 5), (0, 1, 8), (4, 2, 6)):
+        sdraw.line(surf, color, (x + base, y), (x + base + lean, y - height), 2)
+
+
+def _flower(surf, rng, x, y, color):
+    for dx, dy in ((-2, 0), (2, 0), (0, -2), (0, 2)):
+        sdraw.circle(surf, color, (x + dx, y + dy), 1.6)
+    sdraw.circle(surf, (250, 220, 90), (x, y), 1.2)
+
+
+def _pebble(surf, rng, x, y, color):
+    r = rng.uniform(2, 4)
+    sdraw.circle(surf, color, (x, y), r)
+    sdraw.circle(surf, shade(color, 1.3), (x - r / 3, y - r / 3), r / 3)
+
+
+def _crack(surf, rng, x, y, color):
+    pts = [(x - 7, y + rng.uniform(-3, 3))]
+    for i in range(1, 4):
+        pts.append((x - 7 + i * 5, y + rng.uniform(-4, 4)))
+    for a, b in zip(pts, pts[1:]):
+        sdraw.line(surf, color, a, b, 2)
+
+
+def _star(surf, rng, x, y, color):
+    if rng.random() < 0.5:
+        sdraw.fill(surf, color, (x - 1, y - 1, 2, 2))
+        return
+    sdraw.line(surf, color, (x - 3, y), (x + 3, y), 1)
+    sdraw.line(surf, color, (x, y - 3), (x, y + 3), 1)
+
+
+def _crystal(surf, rng, x, y, color):
+    r = rng.uniform(3, 5)
+    pts = [(x, y - r * 1.6), (x + r * 0.7, y), (x, y + r * 0.6), (x - r * 0.7, y)]
+    sdraw.polygon(surf, color, pts)
+    sdraw.line(surf, shade(color, 1.4), pts[0], pts[2], 1)
+
+
+def _drift(surf, rng, x, y, color):
+    sdraw.circle(surf, color, (x - 3, y), 3)
+    sdraw.circle(surf, color, (x + 2, y - 1), 4)
+    sdraw.fill(surf, color, (x - 3, y, 9, 3))
+
+
+def _leaf(surf, rng, x, y, color):
+    sdraw.polygon(surf, color, regular_polygon(pygame.Vector2(x, y), 3, 4, rng.uniform(0, 90)))
+
+
+def _bubble(surf, rng, x, y, color):
+    sdraw.circle(surf, color, (x, y), rng.uniform(2, 4), 1)
+
+
+def _cactus(surf, rng, x, y, color):
+    sdraw.rect(surf, color, (x - 1.5, y - 8, 3, 11), border_radius=1)
+    sdraw.rect(surf, color, (x - 5, y - 5, 2, 4))
+    sdraw.rect(surf, color, (x + 3, y - 6, 2, 3))
+    sdraw.line(surf, color, (x - 5, y - 2), (x, y - 2), 2)
+    sdraw.line(surf, color, (x, y - 4), (x + 5, y - 4), 2)
+
+
+def _stone(surf, rng, x, y, color):
+    sdraw.rect(surf, color, (x - 5, y - 3, 10, 6), border_radius=1)
+    sdraw.rect(surf, shade(color, 0.7), (x - 5, y - 3, 10, 6), 1, border_radius=1)
+
+
+PROPS = {"tuft": _tuft, "flower": _flower, "pebble": _pebble, "crack": _crack, "star": _star, "crystal": _crystal,
+         "drift": _drift, "leaf": _leaf, "bubble": _bubble, "cactus": _cactus, "stone": _stone}
+# theme name -> the props scattered on it, with their colors: "dark" / "light" are the ground shaded,
+# "accent" the theme's accent; or an RGB color
+DECOR = {
+    "Meadow": [("tuft", "dark"), ("tuft", "light"), ("flower", (245, 240, 225)), ("flower", (230, 120, 170)),
+               ("pebble", "dark")],
+    "Desert": [("cactus", (95, 140, 70)), ("pebble", "dark"), ("crack", "dark")],
+    "Tundra": [("drift", (250, 252, 255)), ("pebble", "dark"), ("crack", "dark")],
+    "Volcano": [("crack", "accent"), ("crack", "light"), ("pebble", "light")],
+    "Void": [("star", "light"), ("star", (230, 220, 255)), ("star", "accent")],
+    "Swamp": [("tuft", "dark"), ("bubble", "light"), ("pebble", "dark")],
+    "Coral Reef": [("bubble", "light"), ("flower", "accent"), ("pebble", (240, 205, 170))],
+    "Autumn": [("leaf", "accent"), ("leaf", (200, 60, 30)), ("leaf", (235, 200, 70)), ("tuft", "dark")],
+    "Crystal Caves": [("crystal", "accent"), ("crystal", "light"), ("pebble", "dark")],
+    "Crimson Keep": [("stone", (95, 45, 50)), ("stone", (75, 35, 40)), ("crack", (100, 50, 55))],
+    "Sakura": [("leaf", (255, 165, 195)), ("leaf", (255, 240, 245)), ("tuft", "dark")],
+    "Jungle": [("tuft", "light"), ("tuft", "dark"), ("leaf", "dark"), ("flower", "accent")],
+    "Salt Flats": [("crack", "dark"), ("pebble", "dark")],
+    "Toxic Wastes": [("bubble", "accent"), ("crack", "accent"), ("pebble", "light")],
+    "Midnight": [("star", "light"), ("star", (200, 215, 255)), ("tuft", "light")],
+    "Badlands": [("crack", "dark"), ("pebble", "dark"), ("cactus", (110, 120, 60))],
+    "Glacier": [("crack", "light"), ("crystal", "accent"), ("drift", (245, 250, 255))],
+    "Ashlands": [("crack", "accent"), ("pebble", "dark"), ("pebble", "light")],
+    "Neon Grid": [("star", "accent")],
+    "The Abyss": [("crack", "accent"), ("star", (90, 70, 110))],
+}
+DECOR_DENSITY = 0.4  # share of free tiles with a prop
+
+
 def render_map(theme, waypoints):
+    """The level's ground and path, drawn once: tiles in a faint checkerboard with a little
+    variation, the path sunk into the ground, and the theme's props on free tiles. The same
+    level always looks the same (the variation is seeded by the theme's name)."""
     surf = pygame.Surface(sp((MAP_W, MAP_H)))
+    rng = random.Random(theme.name)
     for ty in range(ROWS):
         for tx in range(COLS):
-            color = theme.ground if (tx + ty) % 2 == 0 else shade(theme.ground, 0.92)
-            sdraw.fill(surf, color, (tx * TILE, ty * TILE, TILE, TILE))
-    # Path: an edge-colored band with the path color inset, so corners join cleanly.
-    for inset, color in ((0, shade(theme.path, 0.7)), (5, theme.path)):
-        for (x0, y0), (x1, y1) in zip(waypoints, waypoints[1:]):
-            left, right = min(x0, x1), max(x0, x1)
-            top, bottom = min(y0, y1), max(y0, y1)
-            rect = pygame.Rect(left * TILE + inset, top * TILE + inset,
-                               (right - left + 1) * TILE - 2 * inset, (bottom - top + 1) * TILE - 2 * inset)
-            sdraw.fill(surf, color, rect)
+            k = (1.0 if (tx + ty) % 2 == 0 else 0.95) * rng.uniform(0.975, 1.025)
+            sdraw.fill(surf, shade(theme.ground, k), (tx * TILE, ty * TILE, TILE, TILE))
+    if theme.name == "Neon Grid":
+        for tx in range(COLS + 1):
+            sdraw.line(surf, shade(theme.accent, 0.3), (tx * TILE, 0), (tx * TILE, MAP_H), 1)
+        for ty in range(ROWS + 1):
+            sdraw.line(surf, shade(theme.accent, 0.3), (0, ty * TILE), (MAP_W, ty * TILE), 1)
+    colors = {"dark": shade(theme.ground, 0.78), "light": shade(theme.ground, 1.25), "accent": theme.accent}
+    props = DECOR.get(theme.name, [("tuft", "dark"), ("pebble", "dark")])
+    on_path = path_tiles(waypoints)
+    for ty in range(ROWS):
+        for tx in range(COLS):
+            if (tx, ty) in on_path or rng.random() >= DECOR_DENSITY:
+                continue
+            kind, color = rng.choice(props)
+            x, y = tx * TILE + rng.uniform(11, 29), ty * TILE + rng.uniform(13, 29)
+            PROPS[kind](surf, rng, x, y, colors.get(color, color))
+    # Path: an edge-colored band, then a shaded inset, then the path color offset down-right, so the
+    # path looks sunk into the ground (shadow along its top and left) and corners join cleanly.
+    segments = []
+    for (x0, y0), (x1, y1) in zip(waypoints, waypoints[1:]):
+        left, top = min(x0, x1), min(y0, y1)
+        segments.append((left * TILE, top * TILE, (max(x0, x1) - left + 1) * TILE, (max(y0, y1) - top + 1) * TILE))
+    for inset, shift, color in ((0, 0, shade(theme.path, 0.7)), (5, 0, shade(theme.path, 0.82)),
+                                (5, 3, theme.path)):
+        for x, y, w, h in segments:
+            sdraw.fill(surf, color, (x + inset + shift, y + inset + shift, w - 2 * inset - shift, h - 2 * inset - shift))
     return surf
 
 
@@ -329,6 +529,35 @@ class Beam:
         sdraw.line(surf, (*self.color, alpha), self.a, self.b, self.width)
 
 
+class Shards:
+    """A dead enemy's pieces flying apart and fading. The spread comes from the enemy's spin, not a
+    random roll, so drawing stays repeatable."""
+
+    duration = 0.45
+
+    def __init__(self, pos, color, size, angle):
+        self.pos = pygame.Vector2(pos)
+        self.color = color
+        self.size = size
+        self.t = 0.0
+        n = 5 + size // 6
+        self.pieces = [(pygame.Vector2(1, 0).rotate(angle + 360 * i / n + (i * 47) % 25), 0.7 + (i * 3) % 7 / 10)
+                       for i in range(n)]
+
+    def update(self, dt):
+        self.t += dt
+        return self.t < self.duration
+
+    def draw(self, surf):
+        k = self.t / self.duration
+        ease = 1 - (1 - k) ** 2
+        r = max(2.5, self.size * 0.55 * (1 - 0.4 * k))
+        color = (*self.color, int(255 * (1 - k * k)))
+        for direction, speed in self.pieces:
+            center = self.pos + direction * (self.size * 0.4 + 36 * speed * ease)
+            sdraw.polygon(surf, color, regular_polygon(center, r, 3, direction.as_polar()[1] + 500 * k * speed))
+
+
 class Popup:
     """Floating text such as '+5'."""
 
@@ -361,10 +590,11 @@ class GameView:
 
     def build_view(self):
         """Everything whose size depends on the display scale. Done once per scale change."""
-        self.font_s = pygame.font.Font(None, round(20 * SCALE))
-        self.font = pygame.font.Font(None, round(26 * SCALE))
-        self.font_l = pygame.font.Font(None, round(40 * SCALE))
-        self.font_xl = pygame.font.Font(None, round(72 * SCALE))
+        _caps.clear()
+        self.font_s = load_font(11)
+        self.font = load_font(14)
+        self.font_l = load_font(22, "bold")
+        self.font_xl = load_font(36, "bold")
         self.fx_layer = pygame.Surface(sp((MAP_W, MAP_H)), pygame.SRCALPHA)
         if hasattr(self, "theme"):
             self.map_surface = render_map(self.theme, self.waypoints)
@@ -388,11 +618,13 @@ class GameView:
         w, h = window_size(scale)
         return w <= desk_w and h <= desk_h - 80
 
+    @staticmethod
+    def fit_font(s, width, *fonts):
+        """The first of `fonts` that fits `s` in `width` (logical units), else the last one."""
+        return next((f for f in fonts if f.size(s)[0] <= width * SCALE), fonts[-1])
+
     def text(self, font, s, color, pos, anchor="topleft"):
-        img = font.render(s, True, color)
-        rect = img.get_rect(**{anchor: sp(pos)})
-        self.screen.blit(img, rect)
-        return rect  # in screen pixels
+        return blit_text(self.screen, font, s, color, pos, anchor)
 
     def draw(self):
         screen = self.screen
@@ -406,6 +638,11 @@ class GameView:
         self.draw_ghost(fx)
         self.draw_drag_preview(fx)
 
+        for t in self.towers.values():
+            if t is not self.dragging:
+                draw_tower_shadow(screen, t.pos)
+        for e in self.enemies:
+            draw_enemy_shadow(screen, e)
         for t in self.towers.values():
             if t is not self.dragging:
                 draw_tower_shape(screen, t.spec, t.pos, t.aim)
@@ -424,15 +661,16 @@ class GameView:
         mx, my = mouse_pos()
         hover = tile_center(mx // TILE, my // TILE)
         if self.build_kind and mx < MAP_W:
+            draw_tower_shadow(screen, hover, 2.5)
             draw_tower_shape(screen, TOWERS[self.build_kind], hover)
         if self.dragging:
             t = self.dragging
-            draw_tower_shape(screen, t.spec, hover if mx < MAP_W else t.pos, t.aim)
+            pos = hover if mx < MAP_W else t.pos
+            draw_tower_shadow(screen, pos, 2.5)
+            draw_tower_shape(screen, t.spec, pos, t.aim)
         self.draw_fusion_label()
         for p in self.popups:
-            img = self.font.render(p.text, True, p.color)
-            img.set_alpha(int(255 * (1 - p.t / 0.8)))
-            screen.blit(img, img.get_rect(center=sp(p.pos)))
+            blit_text(screen, self.font, p.text, p.color, p.pos, "center", int(255 * (1 - p.t / 0.8)))
 
         self.draw_boss_bar()
         if not (self.show_settings or self.confirm_quit or self.show_tree or self.choice or self.reward_cards
@@ -512,12 +750,12 @@ class GameView:
             label, color = "-> " + " / ".join(TOWERS[k]["name"] for k in options), GOLD
         else:
             label, color = "Can't fuse", BAD
-        img = self.font_s.render(label, True, color)
         mx, my = mouse_pos()
-        rect = img.get_rect(bottomleft=sp((mx + 14, my - 10))).inflate(10 * SCALE, 6 * SCALE)
-        rect.clamp_ip(srect((0, 0, MAP_W, MAP_H)))
-        pygame.draw.rect(self.screen, (20, 20, 26), rect, border_radius=round(4 * SCALE))
-        self.screen.blit(img, img.get_rect(center=rect.center))
+        rect = pygame.Rect(0, 0, self.font_s.size(label)[0] / SCALE + 14, cap_height(self.font_s) / SCALE + 12)
+        rect.bottomleft = (mx + 14, my - 10)
+        rect.clamp_ip((0, 0, MAP_W, MAP_H))
+        sdraw.rect(self.screen, (20, 20, 26), rect, border_radius=4)
+        self.text(self.font_s, label, color, rect.center, "center")
 
     def draw_boss_bar(self):
         """Health bar across the top of the map while a boss is on the field."""
@@ -533,8 +771,9 @@ class GameView:
         if self.boss_alert > 0:
             band = pygame.Surface(sp((MAP_W, 90)), pygame.SRCALPHA)
             band.fill((0, 0, 0, 150))
-            img = self.font_xl.render(f"{spec['boss'].upper()} APPROACHES", True, spec["color"])
-            band.blit(img, img.get_rect(center=sp((MAP_W / 2, 45))))
+            title = f"{spec['boss'].upper()} APPROACHES"
+            blit_text(band, self.fit_font(title, MAP_W - 32, self.font_xl, self.font_l), title, spec["color"],
+                      (MAP_W / 2, 45), "center")
             band.set_alpha(int(255 * min(1.0, self.boss_alert)))
             self.screen.blit(band, sp((0, MAP_H / 2 - 45)))
 
@@ -546,24 +785,25 @@ class GameView:
         band = pygame.Surface(sp((MAP_W, 110)), pygame.SRCALPHA)
         band.fill((0, 0, 0, int(alpha * 0.55)))
         pass_label = f"PASS {self.pass_no}  -  " if self.pass_no > 1 else ""
-        title = self.font_xl.render(f"{pass_label}LEVEL {self.level_idx + 1}: {self.theme.name.upper()}", True,
-                                    self.theme.accent)
+        title = f"{pass_label}LEVEL {self.level_idx + 1}: {self.theme.name.upper()}"
+        sub_color = TEXT
         if self.side == "monsters":
-            sub = self.font.render("MONSTERS: draft a wave in the panel, then press Space to send it", True, TEXT)
+            sub = "MONSTERS: draft a wave in the panel, then press Space to send it"
         elif self.finale_on and self.level_idx == self.last_level_idx:
             boss = ENEMY_TYPES[self.level_boss]["boss"]
-            sub = self.font.render(f"FINAL LEVEL - {boss} joins wave {self.level_waves}, where your monsters won",
-                                   True, self.theme.accent)
+            sub, sub_color = f"FINAL LEVEL - {boss} joins wave {self.level_waves}, where your monsters won", \
+                self.theme.accent
         elif self.is_boss_level:
             boss = ENEMY_TYPES[self.level_boss]["boss"]
-            sub = self.font.render(f"BOSS LEVEL - {boss} waits at the end of wave {WAVES_PER_LEVEL}",
-                                   True, self.theme.accent)
+            sub, sub_color = f"BOSS LEVEL - {boss} waits at the end of wave {WAVES_PER_LEVEL}", self.theme.accent
         elif self.rebuild_layout:
-            sub = self.font.render("Press B to rebuild your towers, then Space to send the first wave", True, TEXT)
+            sub = "Press B to rebuild your towers, then Space to send the first wave"
         else:
-            sub = self.font.render("Build towers, then press Space to send the first wave", True, TEXT)
-        band.blit(title, title.get_rect(center=sp((MAP_W / 2, 42))))
-        band.blit(sub, sub.get_rect(center=sp((MAP_W / 2, 88))))
+            sub = "Build towers, then press Space to send the first wave"
+        blit_text(band, self.fit_font(title, MAP_W - 32, self.font_xl, self.font_l), title, self.theme.accent,
+                  (MAP_W / 2, 38), "center")
+        blit_text(band, self.fit_font(sub, MAP_W - 32, self.font, self.font_s), sub, sub_color, (MAP_W / 2, 80),
+                  "center")
         band.set_alpha(alpha)
         self.screen.blit(band, sp((0, MAP_H / 2 - 55)))
 
@@ -610,10 +850,17 @@ class GameView:
         else:
             return
         self.shade_map()
-        y = MAP_H / 2 - 60
+        smaller = {self.font_xl: self.font_l, self.font_l: self.font, self.font: self.font_s}
+        fitted = []
         for s, color, font in lines:
+            while font in smaller and font.size(s)[0] > (MAP_W - 32) * SCALE:
+                font = smaller[font]
+            fitted.append((s, color, font))
+        gap = 14
+        y = (MAP_H - sum(cap_height(f) / SCALE for _, _, f in fitted) - gap * (len(fitted) - 1)) / 2
+        for s, color, font in fitted:
             r = self.text(font, s, color, (MAP_W / 2, y), "midtop")
-            y = r.bottom / SCALE + 14
+            y = r.bottom / SCALE + gap
 
     def side_pick_rects(self):
         return [(side, pygame.Rect(MAP_W / 2 - 330 + i * 340, MAP_H / 2 - 100, 320, 230))
@@ -747,9 +994,10 @@ class GameView:
             a, b = sorted(pair, key=list(TOWERS).index)
             spec = TOWERS[kind]
             draw_tower_shape(self.screen, spec, pygame.Vector2(x + 16, y))
-            self.text(self.font, spec["name"], spec["color"], (x + 42, y - 16))
-            self.text(self.font_s, f"{TOWERS[a]['name']} + {TOWERS[b]['name']}: {spec['desc']}", TEXT_DIM,
-                      (x + 42, y + 3))
+            r = self.text(self.font, spec["name"], spec["color"], (x + 42, y - 14))
+            self.text(self.font_s, f"{TOWERS[a]['name']} + {TOWERS[b]['name']}", TEXT,
+                      (r.right / SCALE + 10, r.bottom / SCALE), "bottomleft")
+            self.text(self.font_s, spec["desc"], TEXT_DIM, (x + 42, y + 3))
         self.text(self.font_s, "Press T or click to close", TEXT_DIM, (MAP_W - 10, MAP_H - 8), "bottomright")
 
     def tree_node(self, kind, x, y):
@@ -815,7 +1063,8 @@ class GameView:
         sdraw.rect(self.screen, bg, b.rect, border_radius=6)
         border = self.theme.accent if active else PANEL_LINE
         sdraw.rect(self.screen, border, b.rect, 3 if active else 1, border_radius=6)
-        self.text(font or self.font, label, TEXT if enabled else TEXT_DIM, b.rect.center, "center")
+        font = self.fit_font(label, b.rect.width - 8, font or self.font, self.font_s)
+        self.text(font, label, TEXT if enabled else TEXT_DIM, b.rect.center, "center")
 
     def evolve_hint(self, t):
         if t.tier == 4:
@@ -832,9 +1081,9 @@ class GameView:
         screen = self.screen
         x = MAP_W + 12
         self.draw_panel_header()
-        self.text(self.font, f"Wave  {self.wave_idx} / {self.level_waves}", TEXT, (x, 84))
-        self.text(self.font, f"Lives  {self.lives}", BAD if self.lives <= 5 else TEXT, (x, 110))
-        self.text(self.font, f"Gold  {self.gold}", GOLD, (x, 136))
+        self.text(self.font, f"Wave {self.wave_idx} / {self.level_waves}", TEXT, (x, 84))
+        self.text(self.font, f"Lives {self.lives}", BAD if self.lives <= 5 else TEXT, (x, 110))
+        self.text(self.font, f"Gold {self.gold}", GOLD, (x, 136))
         self.text(self.font_s, "TOWERS", TEXT_DIM, (x, 176))
 
         for i, (kind, b) in enumerate(self.tower_buttons.items()):
@@ -846,34 +1095,34 @@ class GameView:
             sdraw.rect(screen, self.theme.accent if active else PANEL_LINE, b.rect,
                        3 if active else 1, border_radius=6)
             draw_tower_shape(screen, spec, pygame.Vector2(b.rect.left + 28, b.rect.centery))
-            self.text(self.font, f"{spec['name']}  [{i + 1}]", TEXT if affordable else TEXT_DIM,
-                      (b.rect.left + 56, b.rect.top + 7))
+            self.text(self.font, f"{spec['name']} [{i + 1}]", TEXT if affordable else TEXT_DIM,
+                      (b.rect.left + 56, b.rect.centery - 8), "midleft")
             self.text(self.font_s, f"{spec['cost']}g - {spec['desc']}", GOLD if affordable else TEXT_DIM,
-                      (b.rect.left + 56, b.rect.top + 30))
+                      (b.rect.left + 56, b.rect.centery + 10), "midleft")
 
         if self.selected:
             t = self.selected
             spec = t.spec
-            self.text(self.font, spec["name"], spec["color"], (x, 378))
+            self.text(self.font, spec["name"], spec["color"], (x, 388), "bottomleft")
             self.text(self.font_s, f"Tier {t.tier}", TIER_RIM[t.tier] if t.tier > 1 else TEXT_DIM,
-                      (x + PANEL_W - 24, 382), "topright")
-            self.text(self.font_s, spec["desc"], TEXT, (x, 402))
-            self.text(self.font_s, f"Dmg {spec['damage']:.0f}  Rng {spec['range']:.0f}  Rate {spec['rate']:.1f}",
-                      TEXT_DIM, (x, 422))
-            self.text(self.font_s, self.evolve_hint(t), GOLD, (x, 444))
+                      (x + PANEL_W - 24, 388), "bottomright")
+            self.text(self.font_s, spec["desc"], TEXT, (x, 401))
+            self.text(self.font_s, f"Dmg {spec['damage']:.0f} Rng {spec['range']:.0f} Rate {spec['rate']:.1f}",
+                      TEXT_DIM, (x, 419))
+            self.text(self.font_s, self.evolve_hint(t), GOLD, (x, 441))
             self.draw_button(self.sell_button, f"Sell {t.sell_value}g  [S]", True)
         else:
             self.text(self.font_s, "Drag towers to move them", TEXT_DIM, (x, 380))
-            self.text(self.font_s, "Drop two matching towers", TEXT_DIM, (x, 400))
-            self.text(self.font_s, "together to evolve them", TEXT_DIM, (x, 418))
-            self.text(self.font_s, "T: see the evolution tree", GOLD, (x, 444))
+            self.text(self.font_s, "Drop two matching towers", TEXT_DIM, (x, 398))
+            self.text(self.font_s, "together to evolve them", TEXT_DIM, (x, 416))
+            self.text(self.font_s, "T: see the evolution tree", GOLD, (x, 441))
             if self.can_rebuild:
                 n = len(self.rebuild_layout)
                 affordable = self.gold >= min(e["spent"] for e in self.rebuild_layout)
                 self.draw_button(self.rebuild_button, f"Rebuild {n} tower{'s' * (n > 1)}  [B]", affordable,
                                  active=affordable and self.state == "build" and self.wave_idx == 0)
 
-        self.text(self.font_s, "Enemies", TEXT_DIM, (x, 520))
+        self.text(self.font_s, "Enemies", TEXT_DIM, (x, 526), "midleft")
         for i, spec in enumerate(s for s in ENEMY_TYPES.values() if s["draft"] == "starter"):
             c = pygame.Vector2(x + 74 + i * 30, 526)
             if spec["sides"] == 0:
@@ -894,22 +1143,22 @@ class GameView:
         self.text(name_font, self.theme.name, (20, 20, 25), (header.centerx, header.top + 20), "center")
         level_label = (f"Level {self.level_idx + 1} of {self.last_level_idx + 1}"
                        + ("  -  BOSS" if self.is_boss_level else ""))
-        self.text(self.font_s, level_label, (20, 20, 25), (header.centerx, header.bottom - 6), "midbottom")
+        self.text(self.font_s, level_label, (20, 20, 25), (header.centerx, header.bottom - 12), "midbottom")
 
     def draw_panel_footer(self):
         """The wave button and the speed / pause / tree row."""
         if self.state == "build":
-            label, enabled = f"Send wave {self.wave_idx + 1}  [Space]", self.wave_lock <= 0
+            label, enabled = f"Send wave {self.wave_idx + 1} [Space]", self.wave_lock <= 0
         elif self.state == "level_complete":
-            label, enabled = "Next level  [Space]", True
+            label, enabled = "Next level [Space]", True
         elif self.state == "victory":
-            label, enabled = "Switch sides  [Space]", True
+            label, enabled = "Switch sides [Space]", True
         elif self.state == "game_over":
-            label, enabled = "New run  [R]", True
+            label, enabled = "New run [R]", True
         else:
             left = len(self.enemies) + len(self.spawn_queue)
             label, enabled = f"{left} {'enemy' if left == 1 else 'enemies'} left", False
         self.draw_button(self.wave_button, label, enabled, active=enabled)
-        self.draw_button(self.speed_button, f"{self.speed}x [F]", True, active=self.speed > 1, font=self.font_s)
-        self.draw_button(self.pause_button, "Pause [P]", True, active=self.paused, font=self.font_s)
-        self.draw_button(self.tree_button, "Tree [T]", True, active=self.show_tree, font=self.font_s)
+        self.draw_button(self.speed_button, f"F:{self.speed}x", True, active=self.speed > 1, font=self.font_s)
+        self.draw_button(self.pause_button, "P:Pause", True, active=self.paused, font=self.font_s)
+        self.draw_button(self.tree_button, "T:Tree", True, active=self.show_tree, font=self.font_s)

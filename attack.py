@@ -352,7 +352,7 @@ class AttackMixin:
 
     def upgrade_buttons(self):
         """(upgrade, panel rect): a row of three under the draft list."""
-        return [(k, pygame.Rect(MAP_W + 12 + i * 67, 474, 62, 46)) for i, k in enumerate(UPGRADES)]
+        return [(k, pygame.Rect(MAP_W + 12 + i * 66, 474, 64, 46)) for i, k in enumerate(UPGRADES)]
 
     def queue_icons(self):
         """(queue index, center) for the drafted monsters shown along the bottom of the map."""
