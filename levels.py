@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from monsters import ENEMY_TYPES
 
 COLS, ROWS = 20, 16  # map size in tiles
+TILE = 40  # a tile's size in logical pixels (see graphics.py for the layout)
 WAVES_PER_LEVEL = 5
 START_GOLD = 150
 START_LIVES = 20

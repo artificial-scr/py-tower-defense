@@ -15,11 +15,16 @@ import os
 import pygame
 import pytest
 
+import ambience
 import graphics
 import levels
 import main
-from graphics import HEIGHT, MAP_H, MAP_W, PANEL_W, SCALES, tile_center
-from helpers import free_tiles, put, scaled
+import sprites
+import terrain
+from entities import Projectile
+from graphics import HEIGHT, MAP_H, MAP_W, PANEL_W, SCALES, TILE, tile_center
+from helpers import dummy_enemy, free_tiles, put, scaled
+from monsters import ENEMY_TYPES
 from towers import CROSS, EVOLVE, TOWERS
 
 SNAPSHOTS = os.path.join(os.path.dirname(__file__), "snapshots.json")
@@ -102,26 +107,182 @@ def test_every_screen_draws(scale, mouse, monkeypatch):
 def test_every_tower_draws(screen):
     for spec in TOWERS.values():
         graphics.draw_tower_shape(screen, spec, pygame.Vector2(100, 100), 30)
+        graphics.draw_tower_shape(screen, spec, pygame.Vector2(100, 100), 30, kick=1.0)
+
+
+@pytest.mark.parametrize("scale", (0.75, 1.5))
+def test_every_enemy_draws_in_every_look(scale):
+    """Every frame of every creature draws; a hit enemy is drawn wider and flatter, a phased one see-through."""
+    graphics.set_scale(scale)
+    for kind, spec in ENEMY_TYPES.items():
+        for frame in range(sprites.FRAMES):
+            normal = sprites.enemy_body(kind, 0, scale, frame=frame)
+            assert normal.get_width() >= 2 * spec["size"] * scale, kind
+        hit = sprites.enemy_body(kind, 0, scale, "hit")
+        phased = sprites.enemy_body(kind, 0, scale, "phased")
+        assert hit.get_width() > normal.get_width() > hit.get_height()
+        assert phased.get_at(phased.get_rect().center).a < normal.get_at(normal.get_rect().center).a
+        assert sprites.enemy_icon(kind, 8, scale).get_width() >= 16 * scale
+        design = sprites.CREATURES.get(kind, {})
+        if "face" in design:
+            assert sprites.enemy_face(kind, 0, scale, "hit").get_width() > 0
+        if "corona" in design:
+            assert sprites.enemy_corona(kind, 0, scale).get_width() > normal.get_width() / 2
+        r, style, eyes = sprites.eye_layout(kind, spec["size"], pygame.Vector2(1, 0))
+        for k in (-1, 1):
+            sprites.eye(r, 0, False, scale, style, k)
+            sprites.eye(r, 0, True, scale, style, k)
+
+
+def test_creatures_face_where_they_walk_and_step_as_they_go():
+    """Drawing only: an enemy turns round a corner gradually, and walkers' animation follows the distance walked."""
+    path = [pygame.Vector2(0, 0), pygame.Vector2(100, 0), pygame.Vector2(100, 300)]
+    e = main.Enemy("basic", path, 1)
+    frames = set()
+    for _ in range(40):
+        e.update(1 / 60)
+        frames.add(graphics.enemy_frame(e))
+    assert e.facing == 0 and len(frames) > 2
+    while e.idx < 2:
+        e.update(1 / 60)
+    e.update(1 / 60)
+    assert 0 < e.facing < 90, "turning"
+    for _ in range(30):
+        e.update(1 / 60)
+    assert e.facing == 90
+    still = graphics.enemy_frame(e)
+    e.slow_factor, e.slow_timer = 0.0, 5.0
+    e.update(1 / 60)
+    assert graphics.enemy_frame(e) == still, "a frozen walker stops stepping"
+
+
+def test_sprites_are_drawn_once_per_scale(screen):
+    spec = TOWERS["gun"]
+    assert sprites.tower_turret(spec, 5, 1.0) is sprites.tower_turret(spec, 5, 1.0)
+    assert sprites.tower_turret(spec, 5, 1.0) is not sprites.tower_turret(spec, 6, 1.0)
+    assert sprites.angle_step(-90) == sprites.angle_step(270) == 54
+    g = main.Game(screen, log_dir=None)
+    sprites.tower_turret(spec, 5, 1.0)
+    g.apply_scale(1.5)
+    assert ("turret", spec["name"], 5, 1.0) not in sprites._cache, "a scale change forgets the old pictures"
+
+
+def test_every_projectile_and_effect_draws(game):
+    """Each kind of shot (shell, fire, ice, bullet), and what it leaves behind when it lands."""
+    fx = game.fx_layer
+    for kind, spec in TOWERS.items():
+        if spec.get("instant"):
+            continue
+        tower = put(game, kind, (5, 5))
+        enemies = [dummy_enemy((tower.pos.x + 70, tower.pos.y))]
+        p = Projectile(tower, enemies[0])
+        p.update(0.02, enemies, game.effects)
+        graphics.draw_projectile(game.screen, fx, p)
+        while not p.done:
+            p.update(1 / 60, enemies, game.effects)
+        del game.towers[tower.tile]
+    tesla = put(game, "tesla", (5, 5))
+    tesla.update(0.01, [dummy_enemy((tesla.pos.x + 60 + i * 30, tesla.pos.y)) for i in range(3)], [], game.effects)
+    kinds = {type(e).__name__ for e in game.effects}
+    assert {"Explosion", "Sparks", "Ring", "Beam"} <= kinds
+    for e in game.effects:
+        for _ in range(3):
+            e.draw(fx)
+            e.update(0.07)
+    graphics.draw_tower(game.screen, fx, tesla, 1.0)
+
+
+def average(surf, rect):
+    """The average color of a logical rect of a 1x surface."""
+    return pygame.transform.average_color(surf, pygame.Rect(rect))[:3]
 
 
 def test_level_maps_use_their_theme(screen):
-    for theme, waypoints in main.LEVELS:
+    """The ground stays close to the theme's ground color, and the path's floor to its path color (both are
+    textured, so it's the averages that are compared; crust paths are mostly dark plates)."""
+    for theme, waypoints in levels.ALL_LEVELS:
         surf = graphics.render_map(theme, waypoints)
         x, y = waypoints[1]
-        assert surf.get_at(graphics.tile_center(x, y))[:3] == theme.path
-        # tiles are the ground color, a little lighter or darker (a faint checkerboard with some variation)
-        corner = surf.get_at((2, 2))[:3]
-        assert all(0.9 * g - 1 <= c <= 1.03 * g + 1 for c, g in zip(corner, theme.ground)), (theme.name, corner)
+        floor = average(surf, (x * TILE + 10, y * TILE + 10, TILE - 20, TILE - 20))
+        ground = average(surf, (0, 0, MAP_W, MAP_H))
+        style = terrain.PATH_STYLES[theme.name]
+        expected = {"neon": terrain.mix(theme.ground, theme.path, 0.12), "crust": terrain.shade(theme.path, 0.4)}.get(
+            style, theme.path)
+        assert all(abs(c - e) <= 60 for c, e in zip(floor, expected)), (theme.name, floor)
+        assert all(abs(c - g) <= 30 for c, g in zip(ground, theme.ground)), (theme.name, ground)
+
+
+def test_every_theme_has_its_ground_path_and_props():
+    names = {theme.name for theme, _ in levels.ALL_LEVELS}
+    assert names <= set(terrain.PATCHES) and names <= set(terrain.PATH_STYLES) and names <= set(terrain.DECOR)
+    assert set(terrain.PATH_STYLES.values()) <= set(terrain.DETAIL)
+    for kind in terrain.PROPS:
+        for variant in range(terrain.PROP_VARIANTS):
+            assert terrain.prop(kind, (120, 120, 120), variant, 1.0).get_bounding_rect().width > 0, kind
+
+
+def test_every_theme_has_its_ambience():
+    """Particles for every theme: inside the map, fading in and out, the same at the same moment."""
+    assert set(ambience.AMBIENT) == {t.name for t in levels.THEMES}
+    assert ambience.GLOWING <= set(ambience.AMBIENT)
+    for theme in levels.THEMES:
+        for t in (0.0, 3.7, 125.2):
+            now = ambience.particles(theme, t)
+            assert now and now == ambience.particles(theme, t)
+            for look, color, size, turn, center, alpha in now:
+                assert 0 <= center.x < MAP_W and 0 <= center.y < MAP_H
+                assert 0 <= alpha <= 1
+                img = ambience.particle(look, color, size, turn, 1.0)
+                assert img.get_bounding_rect().width > 0
+        assert ambience.particles(theme, 1.0) != ambience.particles(theme, 1.5), "they move"
+
+
+def test_portal_and_gate_sit_on_the_ends_of_the_path():
+    for theme, waypoints in levels.ALL_LEVELS:
+        on_path = terrain.path_tiles(waypoints)
+        for center, heading in ambience.ends(waypoints):
+            tile = (int(center.x // TILE), int(center.y // TILE))
+            assert tile in on_path and 0 <= tile[0] < levels.COLS and 0 <= tile[1] < levels.ROWS
+            assert heading.length() == pytest.approx(1)
+
+
+def test_ambient_effects_move_and_can_be_turned_off(screen):
+    """The pulse, the particles and the portal's swirl follow the game clock; with Ambient effects off,
+    the map stands still (the portal and gate stay)."""
+    g = main.Game(screen, log_dir=None)
+    g.load_level(3)  # Volcano: embers, glowing cracks
+    g.banner_timer = 0
+    frames = {}
+    for ambient in (True, False):
+        g.ambient = ambient
+        for t in (1.0, 2.3):
+            g.clock = t
+            g.draw()
+            frames[ambient, t] = pygame.image.tobytes(screen.subsurface(graphics.srect((0, 0, MAP_W, MAP_H))), "RGB")
+    assert frames[True, 1.0] != frames[True, 2.3]
+    assert frames[False, 1.0] == frames[False, 2.3]
+    portal, _ = ambience.ends(g.waypoints)[0]
+    plain = terrain.render_map(g.theme, g.waypoints, 1.0)
+    assert screen.get_at((int(portal.x), int(portal.y))) != plain.get_at((int(portal.x), int(portal.y)))
+
+
+def test_the_grid_shows_clearly_while_placing_a_tower(game, mouse):
+    """A faint grid is always there; placing a tower lays a clearer one over the map."""
+    tile = next(t for t in free_tiles(game) if t[0] > 0)
+    corner = (tile[0] * TILE, tile[1] * TILE + 15)  # on a grid line, between two tiles
+    game.banner_timer = 0
+    game.draw()
+    before = game.screen.get_at(corner)
+    game.build_kind = "gun"
+    mouse[:] = 700, 600
+    game.draw()
+    assert sum(game.screen.get_at(corner)[:3]) > sum(before[:3])
 
 
 def test_maps_look_the_same_every_time(screen):
     theme, waypoints = main.LEVELS[0]
     first = pygame.image.tobytes(graphics.render_map(theme, waypoints), "RGB")
     assert pygame.image.tobytes(graphics.render_map(theme, waypoints), "RGB") == first
-
-
-def test_every_theme_has_decoration():
-    assert {theme.name for theme, _ in levels.ALL_LEVELS} <= set(graphics.DECOR)
 
 
 @pytest.mark.parametrize("scale", (0.75, 1.0))

@@ -17,7 +17,8 @@ uv sync              # create .venv and install pygame-ce (plus pytest for devel
 uv run main.py       # play
 ```
 
-The game opens on the settings screen, where you can choose a display scale. Press Enter to start.
+The game opens on the settings screen, where you can choose a display scale and turn the ambient effects
+(drifting particles, glowing maps) on or off. Press Enter to start.
 
 | Option | Effect |
 |---|---|
@@ -189,7 +190,7 @@ Both sides:
 | `T` | Show the evolution tree |
 | `F` / `Shift+F` | Change game speed: 1×, 2×, 4×, 10× |
 | `P` | Pause |
-| `O` | Settings (display scale, from 75% to 200%) |
+| `O` | Settings (display scale, from 75% to 200%; ambient effects on or off with `A`) |
 | `R` | Start a new run after the run is over |
 | `Esc` (nothing to cancel) | Ask to quit. Press `Esc` again to quit |
 
@@ -253,14 +254,17 @@ These logs are meant for tuning the data files. Pass `--no-log` to turn them off
 | `monsters.py` | Loads and validates `monsters.json` |
 | `levels.py` | Level themes and paths, wave generation and wave values |
 | `entities.py` | `Enemy`, `Projectile`, `Tower`: the combat rules, monster mechanics and abilities |
-| `graphics.py` | Everything drawn on screen (map decoration, shadows, effects), plus display scaling |
+| `graphics.py` | Everything drawn on screen (shadows, animation, effects, panels and overlays), plus display scaling |
+| `sprites.py` | The tower and enemy pictures, drawn in code once per display scale (shaded, anti-aliased, one per direction); each enemy type's creature design and animation |
+| `terrain.py` | The level maps, drawn once per level: textured ground, a path styled for each theme, shaded props |
+| `ambience.py` | What moves on the map without affecting the game: particles for each theme, glowing cracks and crystals that pulse, the spawn portal and exit gate |
 | `attack_view.py` | Drawing for the Monsters side |
 | `balance_log.py` | Per-level balance logs |
 | `assets/fonts/` | The game font, Orbitron (Medium and Bold), and its license |
 | `tests/` | The pytest suite |
 
-Your display scale is saved in `settings.json`. That file, `profile.json`, `savegame.json` and
-`logs/` are git-ignored.
+Your display scale and the ambient effects setting are saved in `settings.json`. That file,
+`profile.json`, `savegame.json` and `logs/` are git-ignored.
 
 ## Credits
 

@@ -27,7 +27,7 @@ uv run pytest --durations=10             # list the slowest tests
 |---|---|
 | `test_data.py` | Loading `towers.json` and `evolution.json`, the error messages for broken files, the level paths and wave generation |
 | `test_fusion.py`, `test_combat.py` | Game rules: buying, fusing, moving and selling towers; tower mechanics; enemies and bosses |
-| `test_controls.py`, `test_launch.py` | Input and the game loop: keys, clicks at every display scale, the settings screen, saved settings, quitting |
+| `test_controls.py`, `test_launch.py` | Input and the game loop: keys, clicks at every display scale, the settings screen (scale, ambient effects), saved settings, quitting |
 | `test_progress.py` | Moving between levels: the wave lock after a level change, Rebuild, the saved checkpoint and Continue |
 | `test_runs.py` | Runs: passes that switch sides after the last level, finales (a Towers pass ending on the wave the Monsters pass was won, with the Warden), the run ending on a loss, picking a side, saving and continuing a run |
 | `test_records.py` | Comps per wave, tower records (only stronger slots replace), the profile file, and the Towers side playing monster records (replayed abilities included) |
@@ -35,7 +35,7 @@ uv run pytest --durations=10             # list the slowest tests
 | `test_attack.py` | The Monsters side: the defender from a record, budget and share, drafting, abilities, lives that last the pass (clearing, winning and losing), stat upgrades and escorts, the starter pack, drawing |
 | `test_unlocks.py` | `unlocks.json`, drawing and picking cards after wins (record tiers, sure rares), milestones, and what each tower card does |
 | `test_balance_log.py` | The per-level balance logs: file names, uniqueness, and cross-checks that their numbers add up |
-| `test_rendering.py` | Drawing: every screen at every display scale, text staying inside the map and panel, map decoration, plus pixel snapshots |
+| `test_rendering.py` | Drawing: every screen at every display scale, text staying inside the map and panel, map decoration, tower sprites, every creature's animation frames, shots and hit effects, ambient particles, the portal and gate, plus pixel snapshots |
 | `test_playthrough.py` | Long simulations with bot players, on both sides (marked `slow`) |
 
 Most tests drive the game the way a player would, by sending pygame events to `Game`, and the

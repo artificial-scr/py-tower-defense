@@ -108,6 +108,20 @@ def test_settings_click(game, monkeypatch):
     assert not game.show_settings
 
 
+def test_ambient_effects_toggle_is_saved(game, screen):
+    game.show_settings = True
+    assert game.ambient, "on by default"
+    game.handle_event(key(pygame.K_a))
+    assert not game.ambient
+    with open(main.SETTINGS_FILE, encoding="utf-8") as f:
+        assert json.load(f) == {"ambient": False}
+    assert not main.Game(screen, log_dir=None).ambient, "remembered next launch"
+    game.handle_event(mouse_down(game.ambient_button().center))
+    assert game.ambient and main.Game(screen, log_dir=None).ambient
+    game.handle_event(key(pygame.K_RETURN))
+    assert not game.show_settings
+
+
 def test_o_opens_settings(game):
     game.handle_event(key(pygame.K_o))
     assert game.show_settings and game.frozen

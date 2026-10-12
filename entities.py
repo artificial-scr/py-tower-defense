@@ -6,13 +6,14 @@ per-tower / per-enemy numbers the balance log reports. Drawing is in graphics.py
 """
 
 import itertools
+import math
 import random
 from collections import defaultdict
 
 import pygame
 
 from balance_log import new_kind_stats
-from graphics import Beam, Ring, tile_center
+from graphics import Beam, Explosion, Ring, Sparks, tile_center
 from monsters import ENEMY_TYPES
 from towers import NO_TOWER_MODS, TOWER_LINES, TOWERS, fusion_options
 
@@ -21,6 +22,14 @@ TOWER_IDS = itertools.count(1)
 ARMOR_MIN_SHARE = 0.2  # armor never blocks more than 80% of a hit
 SPLIT_SPREAD = 10  # pixels between the monsters a Splitter breaks into
 HIT_FLASH = 0.08  # seconds an enemy is drawn whitened after a hit (burns don't flash)
+TURN_SPEED = 600  # degrees a second a turret is drawn turning toward its target, or an enemy round a corner
+RECOIL = 0.12  # seconds a turret is drawn kicked back after a shot
+
+
+def turn_toward(angle, target, step):
+    """`angle` turned at most `step` degrees toward `target`, the short way round."""
+    diff = (target - angle + 180) % 360 - 180
+    return target if abs(diff) <= step else angle + math.copysign(step, diff)
 
 
 NO_MODS = {"hp": 1.0, "speed": 1.0, "burn": 1.0, "thaw": 0.0, "armor": 1.0, "armor_flat": 0}
@@ -44,6 +53,7 @@ class Enemy:
         self.pos = path_pts[0].copy()
         self.idx = 1
         self.heading = pygame.Vector2(1, 0)
+        self.facing = 0.0  # drawing only: the way it's drawn facing, turning toward its heading
         self.travelled = 0.0
         self.spin = random.uniform(0, 360)
         self.slow_factor = 1.0
@@ -77,6 +87,7 @@ class Enemy:
         self.idx = leader.idx
         self.travelled = leader.travelled
         self.heading = leader.heading.copy()
+        self.facing = leader.facing
 
     @property
     def slowed(self):
@@ -112,6 +123,7 @@ class Enemy:
         self.flash -= dt
         self.phase_t += dt
         self.advance(self.speed * dt)
+        self.facing = turn_toward(self.facing, self.heading.as_polar()[1], TURN_SPEED * dt)
         self.spin += dt * 120
 
     def advance(self, step):
@@ -270,11 +282,14 @@ class Projectile:
         splash = spec.get("splash")
         if splash:
             victims = [e for e in enemies if e.alive and e.pos.distance_to(self.pos) <= splash]
-            effects.append(Ring(self.pos, splash, self.color, 0.3))
+            effects.append(Explosion(self.pos, splash, self.color))
         elif self.target.alive:
             victims = [self.target]
             if "slow" in spec:
                 effects.append(Ring(self.pos, 16, (160, 230, 255), 0.25))
+                effects.append(Sparks(self.pos, (200, 240, 255), 5, 14, chips=True))
+            else:
+                effects.append(Sparks(self.pos, self.color))
         else:
             return
         for e in victims:
@@ -290,7 +305,7 @@ class Projectile:
                 break
             nxt = min(candidates, key=lambda e: e.pos.distance_to(last))
             damage *= 0.85
-            effects.append(Beam(last, nxt.pos, (240, 240, 120), 0.2, 2))
+            effects.append(Beam(last, nxt.pos, (240, 240, 120), 0.2, 2, bolt=True))
             self.strike(nxt, damage, "chain")
             hit.add(id(nxt))
             last = nxt.pos.copy()
@@ -304,6 +319,8 @@ class Tower:
         self.pos = tile_center(*tile)
         self.cooldown = 0.0
         self.aim = -90.0
+        self.facing = -90.0  # drawing only: where the turret is drawn pointing, turning toward aim
+        self.recoil = 0.0  # drawing only: see RECOIL
         self.spent = TOWERS[kind]["cost"] if spent is None else spent
         self.uid = next(TOWER_IDS)
         self.stats = defaultdict(new_kind_stats)  # tower kind -> stats while it was that kind
@@ -360,7 +377,18 @@ class Tower:
         self.tile = tile
         self.pos = tile_center(*tile)
 
+    @property
+    def kick(self):
+        """1 just after a shot, falling to 0 over RECOIL seconds (for drawing)."""
+        return max(0.0, self.recoil / RECOIL)
+
+    def turn(self, dt):
+        """Turn the drawn turret toward the aim, and let it settle back from a shot."""
+        self.facing = turn_toward(self.facing, self.aim, TURN_SPEED * dt)
+        self.recoil -= dt
+
     def update(self, dt, enemies, projectiles, effects):
+        self.turn(dt)
         self.cooldown -= dt
         self.smoke_timer -= dt
         if self.disabled_timer > 0:
@@ -375,11 +403,12 @@ class Tower:
         if self.cooldown > 0:
             return
         self.cooldown = 1 / self.spec["rate"]
+        self.recoil = RECOIL
         for target in in_range[: self.spec.get("multishot", 1)]:
             self.stats[self.kind]["shots"] += 1
             p = Projectile(self, target)
             if self.spec.get("instant"):
-                effects.append(Beam(self.pos, target.pos, self.spec["color"], 0.15, 3))
+                effects.append(Beam(self.pos, target.pos, self.spec["color"], 0.15, 3, bolt="chain" in self.spec))
                 p.pos = target.pos.copy()
                 p.update(0, enemies, effects)
             else:

@@ -32,7 +32,7 @@ class AttackView:
                 spec = ENEMY_TYPES[kind]
                 ok = self.can_draft(kind)
                 self.draw_row(rect, ok, rect.collidepoint(mouse), "boss" in spec)
-                draw_enemy_icon(self.screen, spec, pygame.Vector2(rect.left + 14, rect.centery), 8)
+                draw_enemy_icon(self.screen, kind, pygame.Vector2(rect.left + 14, rect.centery), 8)
                 key = "" if i >= 10 else f"  [{(i + 1) % 10}]"
                 self.text(self.font_s, spec["name"] + key, TEXT if ok else TEXT_DIM, (rect.left + 30, rect.centery),
                           "midleft")
@@ -104,7 +104,7 @@ class AttackView:
         top = self.queue_strip_top()
         sdraw.fill(fx, (0, 0, 0, 120), (0, top, MAP_W, MAP_H - top))
         for i, center in self.queue_icons():
-            draw_enemy_icon(fx, ENEMY_TYPES[self.queue[i]], center, 7)
+            draw_enemy_icon(fx, self.queue[i], center, 7)
 
     def queue_strip_top(self):
         return min([c.y for _, c in self.queue_icons()], default=MAP_H - 8) - 30

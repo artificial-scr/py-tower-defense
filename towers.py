@@ -10,7 +10,7 @@ import os
 TOWERS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "towers.json")
 EVOLUTION_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "evolution.json")
 
-# Shapes a tower layer can use (graphics.draw_shape draws them).
+# Shapes a tower layer can use (sprites.layer draws them).
 SHAPES = ("circle", "square", "diamond", "triangle", "hexagon", "octagon", "star")
 # Optional mechanics a tower can have:
 #   splash      radius damaged around the impact point

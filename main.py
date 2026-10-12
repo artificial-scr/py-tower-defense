@@ -37,7 +37,7 @@ T              show the evolution tree
 Space          start the next wave, continue to the next level, or switch sides after level 10
 F              cycle game speed: 1x, 2x, 4x, 10x (Shift+F goes back)
 P              pause
-O              settings (display scale); also shown at launch
+O              settings (display scale, ambient effects); also shown at launch
 R              a new run, once the run is over
 
 Moving to the next level refunds every tower; Rebuild then buys them back as they were
@@ -77,7 +77,7 @@ from attack_view import AttackView
 from balance_log import LevelLog, LogSession
 from entities import Enemy, Tower, cast_ability, heal_auras
 from graphics import (BAD, GOLD, HEIGHT, MAP_H, MAP_W, PANEL_W, SCALES, TILE, Button, GameView, Popup, Ring,
-                      CastWarning, Shards, mouse_pos, render_map, set_scale, tile_center, to_logical, window_size)
+                      CastWarning, Shards, mouse_pos, set_scale, tile_center, to_logical, window_size)
 from levels import (BOSS_LEVELS, COLS, ENEMY_TYPES, LEVELS, ROWS, START_GOLD, START_LIVES, WAVES_PER_LEVEL,
                     build_path_cells, make_wave, wave_value)
 from monsters import ABILITIES, BUDGET, REWARDS, UPGRADES
@@ -194,6 +194,7 @@ class Game(AttackMixin, AttackView, GameView):
         self.log = None
         self.show_settings = False
         self.confirm_quit = False
+        self.ambient = load_settings().get("ambient", True) is not False  # the Ambient effects setting
         self.save = load_save()
         self.profile = Profile.load(PROFILE_FILE)
         self.picking_side = False  # the new-run screen: choose Towers or Monsters
@@ -312,7 +313,7 @@ class Game(AttackMixin, AttackView, GameView):
         self.theme, self.waypoints = LEVELS[idx]
         self.path_pts = [tile_center(x, y) for x, y in self.waypoints]
         self.path_cells = build_path_cells(self.waypoints)
-        self.map_surface = render_map(self.theme, self.waypoints)
+        self.build_map()
         self.towers = {}
         self.enemies = []
         self.projectiles = []
@@ -869,15 +870,24 @@ class Game(AttackMixin, AttackView, GameView):
             elif event.key == pygame.K_c and self.can_continue:
                 self.continue_game()  # first, so closing the settings doesn't ask for a side
                 self.close_settings()
+            elif event.key == pygame.K_a:
+                self.toggle_ambient()
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             for scale, rect in self.scale_buttons():
                 if rect.collidepoint(event.pos) and self.scale_fits(scale):
                     self.apply_scale(scale)
+            if self.ambient_button().collidepoint(event.pos):
+                self.toggle_ambient()
             if self.settings_close_button().collidepoint(event.pos):
                 self.close_settings()
             elif self.can_continue and self.settings_continue_button().collidepoint(event.pos):
                 self.continue_game()
                 self.close_settings()
+
+    def toggle_ambient(self):
+        """The Ambient effects setting: drifting particles and the glow's pulse. Saved straight away."""
+        self.ambient = not self.ambient
+        save_settings({**load_settings(), "ambient": self.ambient})
 
     def close_settings(self):
         self.show_settings = False

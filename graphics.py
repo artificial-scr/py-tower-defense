@@ -11,19 +11,22 @@ script); GameView reads the game state through `self`.
 
 import math
 import os
-import random
 
 import pygame
 
-from levels import COLS, ENEMY_TYPES, LEVELS, ROWS, WAVES_PER_LEVEL
+from levels import COLS, ENEMY_TYPES, LEVELS, ROWS, TILE, WAVES_PER_LEVEL
 from monsters import ABILITIES, REWARDS
 from progress import UNLOCKS
+import ambience
+import sprites
+import terrain
+from sprites import mix, regular_polygon, shade, shape_points  # noqa: F401 (others import them from here)
+from terrain import DECOR, path_tiles  # noqa: F401 (others read them from here)
 from towers import CROSS, EVOLVE, LINES, TOWERS
 
 # --------------------------------------------------------------------------
 # Layout and colors
 # --------------------------------------------------------------------------
-TILE = 40
 MAP_W, MAP_H = COLS * TILE, ROWS * TILE
 PANEL_W = 220
 WIDTH, HEIGHT = MAP_W + PANEL_W, MAP_H
@@ -43,7 +46,7 @@ TEXT_DIM = (150, 150, 160)
 GOOD = (90, 220, 110)
 BAD = (235, 80, 80)
 GOLD = (255, 210, 70)
-TIER_RIM = {1: (15, 15, 20), 2: (176, 116, 64), 3: (205, 205, 220), 4: GOLD}
+TIER_RIM = {1: (78, 80, 94), 2: (176, 116, 64), 3: (205, 205, 220), 4: GOLD}
 TIER_COLORS = {"weak": TEXT_DIM, "normal": TEXT, "strong": GOLD}  # record tiers on the reward screen
 
 
@@ -88,15 +91,6 @@ def blit_text(surf, font, s, color, pos, anchor="topleft", alpha=None):
     setattr(box, anchor, (round(pos[0] * SCALE), round(pos[1] * SCALE)))
     surf.blit(img, (box.x, box.y - top))
     return box
-
-
-def shade(color, k):
-    return tuple(min(255, int(c * k)) for c in color)
-
-
-def mix(a, b, k):
-    """Color `a` moved a share `k` of the way to color `b`."""
-    return tuple(round(x + (y - x) * k) for x, y in zip(a, b))
 
 
 # --------------------------------------------------------------------------
@@ -168,36 +162,6 @@ def tile_center(tx, ty):
     return pygame.Vector2(tx * TILE + TILE / 2, ty * TILE + TILE / 2)
 
 
-def regular_polygon(center, radius, sides, rotation=0.0):
-    return [center + pygame.Vector2(radius, 0).rotate(rotation + 360 * i / sides) for i in range(sides)]
-
-
-def shape_points(shape, center, r, rot):
-    if shape == "square":
-        return regular_polygon(center, r, 4, rot + 45)
-    if shape == "diamond":
-        return regular_polygon(center, r, 4, rot)
-    if shape == "triangle":
-        return regular_polygon(center, r, 3, rot)
-    if shape == "hexagon":
-        return regular_polygon(center, r, 6, rot)
-    if shape == "octagon":
-        return regular_polygon(center, r, 8, rot + 22.5)
-    if shape == "star":
-        return [center + pygame.Vector2(r if i % 2 == 0 else r * 0.5, 0).rotate(rot + 36 * i) for i in range(10)]
-    raise ValueError(shape)
-
-
-def draw_shape(surf, shape, center, r, color, rot=0.0, outline=2):
-    if shape == "circle":
-        sdraw.circle(surf, color, center, r)
-        sdraw.circle(surf, (20, 20, 20), center, r, outline)
-    else:
-        pts = shape_points(shape, center, r, rot)
-        sdraw.polygon(surf, color, pts)
-        sdraw.polygon(surf, (20, 20, 20), pts, outline)
-
-
 SHADOW_OFFSET = pygame.Vector2(3, 4)  # the light comes from the top left
 _shadows = {}
 
@@ -221,37 +185,76 @@ def draw_tower_shadow(surf, pos, lift=1.0):
     draw_shadow(surf, pos, TILE - 6, TILE - 7, lift)
 
 
-def draw_tower_shape(surf, spec, pos, aim=-90.0):
-    """Draw a tower from its spec (an entry of towers.TOWERS)."""
+def blit_center(surf, img, pos):
+    surf.blit(img, img.get_rect(center=sp(pos)))
+
+
+KICK_BACK = 2.5  # how far a turret jumps back when it fires
+MUZZLE_KICK = 0.6  # the muzzle flash shows while a shot's kick is above this
+
+
+def draw_tower_shape(surf, spec, pos, aim=-90.0, kick=0.0):
+    """Draw a tower from its spec (an entry of towers.TOWERS): plate, turret aimed at `aim`, tier pips.
+    `kick` (1 just after a shot, down to 0) pushes the turret back."""
     tier = spec["tier"]
-    base = pygame.Rect(0, 0, TILE - 6, TILE - 6)
-    base.center = pos
-    sdraw.rect(surf, (45, 45, 55), base, border_radius=6)
-    sdraw.rect(surf, TIER_RIM[tier], base, 3 if tier == 4 else 2, border_radius=6)
-    direction = pygame.Vector2(1, 0).rotate(aim)
-    side = direction.rotate(90)
+    pos = pygame.Vector2(pos)
+    blit_center(surf, sprites.tower_plate(tier, TIER_RIM[tier], SCALE, TILE), pos)
+    turret = sprites.tower_turret(spec, sprites.angle_step(aim), SCALE)
+    blit_center(surf, turret, pos - pygame.Vector2(KICK_BACK * kick, 0).rotate(aim))
+    blit_center(surf, sprites.tower_pips(tier, SCALE, TILE), pos)
+
+
+def draw_tower(surf, fx, tower, clock):
+    """A tower on the map: turning, kicking back and flashing when it fires; Tesla towers crackle and
+    frost towers glint now and then (`clock` is the game time, so pauses freeze them)."""
+    spec = tower.spec
+    draw_tower_shape(surf, spec, tower.pos, tower.facing, tower.kick)
     count, length, width = spec["look"]["barrels"]
-    for i in range(count):
-        offset = side * (i - (count - 1) / 2) * (width + 2)
-        start = pygame.Vector2(pos) + offset
-        sdraw.line(surf, (75, 75, 88), start, start + direction * length, width)
-    for shape, r, color in spec["look"]["layers"]:
-        draw_shape(surf, shape, pos, r, color, aim, outline=1 if r < 8 else 2)
-    for i in range(tier):
-        sdraw.circle(surf, GOLD, (base.left + 6 + i * 7, base.bottom - 5), 2)
+    if tower.kick > MUZZLE_KICK:
+        if count:
+            d = pygame.Vector2(1, 0).rotate(tower.facing)
+            tip = tower.pos + d * (length + 2 - KICK_BACK * tower.kick)
+            blit_center(surf, sprites.muzzle_flash(sprites.angle_step(tower.facing), 3 + width / 2, SCALE), tip)
+        else:  # no barrels: the core flares
+            img = sprites.glow(mix(spec["look"]["layers"][0][2], (255, 255, 255), 0.6), 15, SCALE)
+            img.set_alpha(round(255 * (tower.kick - MUZZLE_KICK) / (1 - MUZZLE_KICK)))
+            blit_center(surf, img, tower.pos)
+    seed = tower.tile[0] * 7 + tower.tile[1] * 13  # where it stands, so the same map always looks the same
+    if "chain" in spec:
+        tick = int(clock * 12)
+        for i in range(2):
+            a = (tick * 137 + seed * 53 + i * 160) % 360
+            start = tower.pos + pygame.Vector2(6, 0).rotate(a)
+            points = jagged(start, start + pygame.Vector2(10, 0).rotate(a + 30), tick + i, 2.5)
+            for p, q in zip(points, points[1:]):
+                sdraw.line(fx, (240, 240, 140, 220), p, q, 1)
+    elif "slow" in spec and "burn" not in spec:
+        s = (clock * 0.6 + seed * 0.37) % 1.0
+        if s < 0.2:
+            sparkle(fx, tower.pos + pygame.Vector2(8, 0).rotate(seed * 77 + 200), 5 * math.sin(math.pi * s / 0.2))
 
 
-def draw_enemy_icon(surf, spec, pos, size):
+def sparkle(surf, pos, r):
+    """A four-pointed glint."""
+    for d in ((1, 0), (0, 1)):
+        d = pygame.Vector2(d) * r
+        sdraw.line(surf, (255, 255, 255, 230), pos - d, pos + d, 1)
+    sdraw.circle(surf, (255, 255, 255, 255), pos, max(1.0, r * 0.25))
+
+
+def jagged(a, b, seed, wobble=4.0):
+    """Points of a lightning bolt from a to b; the same seed gives the same bolt."""
+    a, b = pygame.Vector2(a), pygame.Vector2(b)
+    n = max(2, int(a.distance_to(b) / 12))
+    across = (b - a).rotate(90)
+    across = across.normalize() if across.length_squared() else across
+    middle = [a + (b - a) * i / n + across * wobble * (((seed + i) * 37) % 9 - 4) / 4 for i in range(1, n)]
+    return [a, *middle, b]
+
+
+def draw_enemy_icon(surf, kind, pos, size):
     """A small still picture of an enemy type, for lists and the draft queue."""
-    if "shape" in spec:
-        draw_shape(surf, spec["shape"], pos, size, spec["color"], -90, outline=1)
-    elif spec["sides"] == 0:
-        sdraw.circle(surf, spec["color"], pos, size)
-    else:
-        sdraw.polygon(surf, spec["color"], regular_polygon(pos, size + 1, spec["sides"], -90))
-    if "inner" in spec:
-        shape, r, color = spec["inner"]
-        draw_shape(surf, shape, pos, max(2, r * size / spec["size"]), color, outline=1)
+    blit_center(surf, sprites.enemy_icon(kind, size, SCALE), pos)
 
 
 def draw_tower_status(surf, fx, tower):
@@ -272,40 +275,70 @@ def draw_enemy_shadow(surf, enemy):
         draw_shadow(surf, enemy.pos, d, d, 1.3)
 
 
+BLINK_EVERY, BLINK_TIME = 3.2, 0.14  # seconds
+
+
+def enemy_lift(enemy):
+    """How far above its shadow an enemy is drawn: hoppers bounce as they walk (bosses hardly at all),
+    hoverers bob in the air."""
+    design = sprites.CREATURES.get(enemy.kind, {})
+    size = enemy.spec["size"]
+    if enemy.phased or not design.get("move"):
+        return 0.0
+    if design["move"] == "hover":
+        return 3 + 1.5 * math.sin(enemy.phase_t * 3 + enemy.spawn_t)
+    height = 1.0 if "boss" in enemy.spec else min(2.5, size * 0.2)
+    return abs(math.sin(enemy.travelled / (size * 0.9))) * height
+
+
+def enemy_frame(enemy):
+    """Which frame of its animation an enemy is at: walkers step with the distance they cover (so a
+    slowed one slows down), the others play in time."""
+    design = sprites.CREATURES.get(enemy.kind, {})
+    clock = design.get("clock")
+    if clock == "walk":
+        cycles = enemy.travelled / (design["stride"] * enemy.spec["size"])
+    elif clock == "time":
+        cycles = enemy.phase_t * design["rate"] + enemy.spawn_t * 0.37
+    else:
+        return 0
+    return int(cycles * sprites.FRAMES) % sprites.FRAMES
+
+
 def draw_enemy(surf, enemy):
     spec = enemy.spec
     size = spec["size"]
-    color = mix(spec["color"], (255, 255, 255), 0.65) if enemy.flash > 0 else spec["color"]
-    sides = spec["sides"]
-    if enemy.phased:  # out of reach: just a faint outline
-        if sides == 0:
-            sdraw.circle(surf, color, enemy.pos, size, 2)
-        else:
-            sdraw.polygon(surf, color, regular_polygon(enemy.pos, size, sides, enemy.heading.as_polar()[1]), 2)
-        return
-    if "shape" in spec:
-        draw_shape(surf, spec["shape"], enemy.pos, size, color, enemy.spin, outline=3)
-    elif sides == 0:
-        sdraw.circle(surf, color, enemy.pos, size)
-        sdraw.circle(surf, (20, 20, 20), enemy.pos, size, 2)
+    design = sprites.CREATURES.get(enemy.kind)
+    if design is None:  # a plain shape: triangles point where they're going, others slowly spin
+        angle = enemy.heading.as_polar()[1] if spec["sides"] == 3 and "shape" not in spec else enemy.spin
     else:
-        # Triangles point where they're going; other shapes slowly spin.
-        rot = enemy.heading.as_polar()[1] if sides == 3 else enemy.spin
-        pts = regular_polygon(enemy.pos, size, sides, rot)
-        sdraw.polygon(surf, color, pts)
-        sdraw.polygon(surf, (20, 20, 20), pts, 2)
-    if "inner" in spec:
-        shape, r, inner_color = spec["inner"]
-        draw_shape(surf, shape, enemy.pos, r, inner_color, -enemy.spin)
+        angle = enemy.spin if design.get("spins") else enemy.facing
+    look = "phased" if enemy.phased else "hit" if enemy.flash > 0 else "normal"
+    pos = enemy.pos - pygame.Vector2(0, enemy_lift(enemy))
+    if design and design.get("halo"):
+        halo = sprites.glow(mix(spec["color"], (255, 255, 255), 0.3), size + 12, SCALE)
+        halo.set_alpha(round(150 + 70 * math.sin(enemy.phase_t * 4)))
+        blit_center(surf, halo, pos)
+    if design and "corona" in design:
+        blit_center(surf, sprites.enemy_corona(enemy.kind, sprites.angle_step(-enemy.spin * 0.5), SCALE), pos)
+    img = sprites.enemy_body(enemy.kind, sprites.angle_step(angle), SCALE, look, enemy_frame(enemy))
+    blit_center(surf, img, pos)
+    if design and "face" in design:
+        blit_center(surf, sprites.enemy_face(enemy.kind, sprites.angle_step(enemy.facing), SCALE, look), pos)
+    for i, (color, r) in enumerate(design.get("orbs", ()) if design else ()):
+        orbit = pygame.Vector2(size * design["orbit"], 0).rotate(enemy.phase_t * 70 + i * 360 / len(design["orbs"]))
+        blit_center(surf, sprites.orb(color, r, SCALE), pos + orbit)
+    if not enemy.phased:
+        draw_eyes(surf, enemy, pos)
     if enemy.burn_timer > 0:
-        sdraw.circle(surf, (255, 120, 20), enemy.pos, max(3, size // 3))
+        sdraw.circle(surf, (255, 120, 20), pos, max(3, size // 3))
     if enemy.slowed:
-        sdraw.circle(surf, (150, 230, 255), enemy.pos, size + 4, 2)
+        sdraw.circle(surf, (150, 230, 255), pos, size + 4, 2)
     if enemy.shield_timer > 0:
-        sdraw.circle(surf, (240, 220, 120), enemy.pos, size + 7, 2)
+        sdraw.circle(surf, (240, 220, 120), pos, size + 7, 2)
     if enemy.haste_timer > 0:
-        tail = enemy.pos - enemy.heading * (size + 8)
-        sdraw.line(surf, (255, 120, 60), enemy.pos - enemy.heading * size, tail, 3)
+        tail = pos - enemy.heading * (size + 8)
+        sdraw.line(surf, (255, 120, 60), pos - enemy.heading * size, tail, 3)
     if enemy.hp < enemy.max_hp:
         w = size * 2 + 4
         bar = pygame.Rect(0, 0, w, 4)
@@ -315,155 +348,42 @@ def draw_enemy(surf, enemy):
         sdraw.rect(surf, GOOD, bar)
 
 
-def draw_projectile(surf, projectile):
-    r = 5 if projectile.spec.get("splash", 0) >= 50 else 3
-    sdraw.circle(surf, projectile.color, projectile.pos, r)
-    sdraw.circle(surf, (20, 20, 20), projectile.pos, r, 1)
+def draw_eyes(surf, enemy, pos):
+    """Two eyes looking where the enemy is going, blinking now and then."""
+    ahead = pygame.Vector2(1, 0).rotate(enemy.facing)
+    r, style, eyes = sprites.eye_layout(enemy.kind, enemy.spec["size"], ahead)
+    look = round(enemy.facing * sprites.EYE_LOOKS / 360) % sprites.EYE_LOOKS
+    # the spawn time staggers the blinks, so a wave doesn't blink all at once
+    closed = (enemy.phase_t + enemy.spawn_t * 1.7) % BLINK_EVERY > BLINK_EVERY - BLINK_TIME
+    for offset, k in eyes:
+        blit_center(surf, sprites.eye(r, look, closed, SCALE, style, k), pos + offset)
 
 
-def path_tiles(waypoints):
-    tiles = set()
-    for (x0, y0), (x1, y1) in zip(waypoints, waypoints[1:]):
-        for x in range(min(x0, x1), max(x0, x1) + 1):
-            for y in range(min(y0, y1), max(y0, y1) + 1):
-                tiles.add((x, y))
-    return tiles
-
-
-# Ground decoration. A prop is drawn around (x, y), the logical center of a spot on a free tile.
-def _tuft(surf, rng, x, y, color):
-    for base, lean, height in ((-4, -2, 5), (0, 1, 8), (4, 2, 6)):
-        sdraw.line(surf, color, (x + base, y), (x + base + lean, y - height), 2)
-
-
-def _flower(surf, rng, x, y, color):
-    for dx, dy in ((-2, 0), (2, 0), (0, -2), (0, 2)):
-        sdraw.circle(surf, color, (x + dx, y + dy), 1.6)
-    sdraw.circle(surf, (250, 220, 90), (x, y), 1.2)
-
-
-def _pebble(surf, rng, x, y, color):
-    r = rng.uniform(2, 4)
-    sdraw.circle(surf, color, (x, y), r)
-    sdraw.circle(surf, shade(color, 1.3), (x - r / 3, y - r / 3), r / 3)
-
-
-def _crack(surf, rng, x, y, color):
-    pts = [(x - 7, y + rng.uniform(-3, 3))]
-    for i in range(1, 4):
-        pts.append((x - 7 + i * 5, y + rng.uniform(-4, 4)))
-    for a, b in zip(pts, pts[1:]):
-        sdraw.line(surf, color, a, b, 2)
-
-
-def _star(surf, rng, x, y, color):
-    if rng.random() < 0.5:
-        sdraw.fill(surf, color, (x - 1, y - 1, 2, 2))
-        return
-    sdraw.line(surf, color, (x - 3, y), (x + 3, y), 1)
-    sdraw.line(surf, color, (x, y - 3), (x, y + 3), 1)
-
-
-def _crystal(surf, rng, x, y, color):
-    r = rng.uniform(3, 5)
-    pts = [(x, y - r * 1.6), (x + r * 0.7, y), (x, y + r * 0.6), (x - r * 0.7, y)]
-    sdraw.polygon(surf, color, pts)
-    sdraw.line(surf, shade(color, 1.4), pts[0], pts[2], 1)
-
-
-def _drift(surf, rng, x, y, color):
-    sdraw.circle(surf, color, (x - 3, y), 3)
-    sdraw.circle(surf, color, (x + 2, y - 1), 4)
-    sdraw.fill(surf, color, (x - 3, y, 9, 3))
-
-
-def _leaf(surf, rng, x, y, color):
-    sdraw.polygon(surf, color, regular_polygon(pygame.Vector2(x, y), 3, 4, rng.uniform(0, 90)))
-
-
-def _bubble(surf, rng, x, y, color):
-    sdraw.circle(surf, color, (x, y), rng.uniform(2, 4), 1)
-
-
-def _cactus(surf, rng, x, y, color):
-    sdraw.rect(surf, color, (x - 1.5, y - 8, 3, 11), border_radius=1)
-    sdraw.rect(surf, color, (x - 5, y - 5, 2, 4))
-    sdraw.rect(surf, color, (x + 3, y - 6, 2, 3))
-    sdraw.line(surf, color, (x - 5, y - 2), (x, y - 2), 2)
-    sdraw.line(surf, color, (x, y - 4), (x + 5, y - 4), 2)
-
-
-def _stone(surf, rng, x, y, color):
-    sdraw.rect(surf, color, (x - 5, y - 3, 10, 6), border_radius=1)
-    sdraw.rect(surf, shade(color, 0.7), (x - 5, y - 3, 10, 6), 1, border_radius=1)
-
-
-PROPS = {"tuft": _tuft, "flower": _flower, "pebble": _pebble, "crack": _crack, "star": _star, "crystal": _crystal,
-         "drift": _drift, "leaf": _leaf, "bubble": _bubble, "cactus": _cactus, "stone": _stone}
-# theme name -> the props scattered on it, with their colors: "dark" / "light" are the ground shaded,
-# "accent" the theme's accent; or an RGB color
-DECOR = {
-    "Meadow": [("tuft", "dark"), ("tuft", "light"), ("flower", (245, 240, 225)), ("flower", (230, 120, 170)),
-               ("pebble", "dark")],
-    "Desert": [("cactus", (95, 140, 70)), ("pebble", "dark"), ("crack", "dark")],
-    "Tundra": [("drift", (250, 252, 255)), ("pebble", "dark"), ("crack", "dark")],
-    "Volcano": [("crack", "accent"), ("crack", "light"), ("pebble", "light")],
-    "Void": [("star", "light"), ("star", (230, 220, 255)), ("star", "accent")],
-    "Swamp": [("tuft", "dark"), ("bubble", "light"), ("pebble", "dark")],
-    "Coral Reef": [("bubble", "light"), ("flower", "accent"), ("pebble", (240, 205, 170))],
-    "Autumn": [("leaf", "accent"), ("leaf", (200, 60, 30)), ("leaf", (235, 200, 70)), ("tuft", "dark")],
-    "Crystal Caves": [("crystal", "accent"), ("crystal", "light"), ("pebble", "dark")],
-    "Crimson Keep": [("stone", (95, 45, 50)), ("stone", (75, 35, 40)), ("crack", (100, 50, 55))],
-    "Sakura": [("leaf", (255, 165, 195)), ("leaf", (255, 240, 245)), ("tuft", "dark")],
-    "Jungle": [("tuft", "light"), ("tuft", "dark"), ("leaf", "dark"), ("flower", "accent")],
-    "Salt Flats": [("crack", "dark"), ("pebble", "dark")],
-    "Toxic Wastes": [("bubble", "accent"), ("crack", "accent"), ("pebble", "light")],
-    "Midnight": [("star", "light"), ("star", (200, 215, 255)), ("tuft", "light")],
-    "Badlands": [("crack", "dark"), ("pebble", "dark"), ("cactus", (110, 120, 60))],
-    "Glacier": [("crack", "light"), ("crystal", "accent"), ("drift", (245, 250, 255))],
-    "Ashlands": [("crack", "accent"), ("pebble", "dark"), ("pebble", "light")],
-    "Neon Grid": [("star", "accent")],
-    "The Abyss": [("crack", "accent"), ("star", (90, 70, 110))],
-}
-DECOR_DENSITY = 0.4  # share of free tiles with a prop
+def draw_projectile(surf, fx, projectile):
+    """Shells trail smoke, fire glows, frost flies as a shard of ice, bullets leave a tracer."""
+    spec, color, pos = projectile.spec, projectile.color, projectile.pos
+    to = projectile.dest - pos
+    d = to.normalize() if to.length_squared() > 1e-6 else pygame.Vector2(1, 0)
+    if spec.get("splash", 0) >= 50:
+        for i in (3, 2, 1):
+            sdraw.circle(fx, (170, 170, 170, 130 - 35 * i), pos - d * 5 * i, 4 - 0.6 * i)
+        blit_center(surf, sprites.shell(color, 5, SCALE), pos)
+    elif "burn" in spec:
+        for i in (3, 2, 1):
+            sdraw.circle(fx, (*color, 150 - 40 * i), pos - d * 4 * i, 3.2 - 0.6 * i)
+        blit_center(surf, sprites.glow(color, 8, SCALE), pos)
+        sdraw.circle(surf, mix(color, (255, 255, 255), 0.6), pos, 2.5)
+    elif "slow" in spec:
+        blit_center(surf, sprites.ice_shard(sprites.angle_step(d.as_polar()[1]), mix(color, (255, 255, 255), 0.3),
+                                            SCALE), pos)
+    else:
+        sdraw.line(fx, (*color, 110), pos - d * 11, pos, 3)
+        sdraw.line(fx, (*mix(color, (255, 255, 255), 0.6), 240), pos - d * 6, pos, 1.5)
 
 
 def render_map(theme, waypoints):
-    """The level's ground and path, drawn once: tiles in a faint checkerboard with a little
-    variation, the path sunk into the ground, and the theme's props on free tiles. The same
-    level always looks the same (the variation is seeded by the theme's name)."""
-    surf = pygame.Surface(sp((MAP_W, MAP_H)))
-    rng = random.Random(theme.name)
-    for ty in range(ROWS):
-        for tx in range(COLS):
-            k = (1.0 if (tx + ty) % 2 == 0 else 0.95) * rng.uniform(0.975, 1.025)
-            sdraw.fill(surf, shade(theme.ground, k), (tx * TILE, ty * TILE, TILE, TILE))
-    if theme.name == "Neon Grid":
-        for tx in range(COLS + 1):
-            sdraw.line(surf, shade(theme.accent, 0.3), (tx * TILE, 0), (tx * TILE, MAP_H), 1)
-        for ty in range(ROWS + 1):
-            sdraw.line(surf, shade(theme.accent, 0.3), (0, ty * TILE), (MAP_W, ty * TILE), 1)
-    colors = {"dark": shade(theme.ground, 0.78), "light": shade(theme.ground, 1.25), "accent": theme.accent}
-    props = DECOR.get(theme.name, [("tuft", "dark"), ("pebble", "dark")])
-    on_path = path_tiles(waypoints)
-    for ty in range(ROWS):
-        for tx in range(COLS):
-            if (tx, ty) in on_path or rng.random() >= DECOR_DENSITY:
-                continue
-            kind, color = rng.choice(props)
-            x, y = tx * TILE + rng.uniform(11, 29), ty * TILE + rng.uniform(13, 29)
-            PROPS[kind](surf, rng, x, y, colors.get(color, color))
-    # Path: an edge-colored band, then a shaded inset, then the path color offset down-right, so the
-    # path looks sunk into the ground (shadow along its top and left) and corners join cleanly.
-    segments = []
-    for (x0, y0), (x1, y1) in zip(waypoints, waypoints[1:]):
-        left, top = min(x0, x1), min(y0, y1)
-        segments.append((left * TILE, top * TILE, (max(x0, x1) - left + 1) * TILE, (max(y0, y1) - top + 1) * TILE))
-    for inset, shift, color in ((0, 0, shade(theme.path, 0.7)), (5, 0, shade(theme.path, 0.82)),
-                                (5, 3, theme.path)):
-        for x, y, w, h in segments:
-            sdraw.fill(surf, color, (x + inset + shift, y + inset + shift, w - 2 * inset - shift, h - 2 * inset - shift))
-    return surf
+    """The level's map at the display scale (see terrain.py)."""
+    return terrain.render_map(theme, waypoints, SCALE)
 
 
 # --------------------------------------------------------------------------
@@ -510,14 +430,15 @@ class Ring:
 
 
 class Beam:
-    """A fading line, for instant hits and chain lightning."""
+    """A fading line with a glow, for instant hits; `bolt` makes it a jagged lightning bolt."""
 
-    def __init__(self, a, b, color, duration, width):
+    def __init__(self, a, b, color, duration, width, bolt=False):
         self.a = pygame.Vector2(a)
         self.b = pygame.Vector2(b)
         self.color = color
         self.duration = duration
         self.width = width
+        self.points = jagged(self.a, self.b, int(self.a.x + self.b.y)) if bolt else [self.a, self.b]
         self.t = 0.0
 
     def update(self, dt):
@@ -525,13 +446,79 @@ class Beam:
         return self.t < self.duration
 
     def draw(self, surf):
-        alpha = int(255 * (1 - self.t / self.duration))
-        sdraw.line(surf, (*self.color, alpha), self.a, self.b, self.width)
+        alpha = 1 - self.t / self.duration
+        core = mix(self.color, (255, 255, 255), 0.6)
+        for color, width, k in ((self.color, self.width + 3, 0.35), (core, max(1, self.width - 1), 1.0)):
+            for p, q in zip(self.points, self.points[1:]):
+                sdraw.line(surf, (*color, int(255 * alpha * k)), p, q, width)
+
+
+class Explosion:
+    """A shell's blast: a white-hot flash, a ring going out to the splash radius, and flying debris.
+    The debris directions come from where it landed, not a random roll, so drawing stays repeatable."""
+
+    duration = 0.4
+
+    def __init__(self, pos, radius, color):
+        self.pos = pygame.Vector2(pos)
+        self.radius = radius
+        self.color = color
+        self.t = 0.0
+        self.spin = (self.pos.x * 7.3 + self.pos.y * 3.1) % 360
+
+    def update(self, dt):
+        self.t += dt
+        return self.t < self.duration
+
+    def draw(self, surf):
+        k = self.t / self.duration
+        ease = 1 - (1 - k) ** 2
+        if k < 0.35:
+            f = k / 0.35
+            sdraw.circle(surf, (*mix((255, 250, 220), self.color, f), int(210 * (1 - f))), self.pos,
+                         self.radius * (0.25 + 0.3 * f))
+        sdraw.circle(surf, (*self.color, int(220 * (1 - k))), self.pos, max(2, self.radius * (0.3 + 0.7 * ease)), 3)
+        debris = (*shade(self.color, 0.7), int(255 * (1 - k)))
+        for i in range(7):
+            d = pygame.Vector2(1, 0).rotate(self.spin + i * 360 / 7 + (i * 29) % 20)
+            reach = self.radius * (0.4 + 0.25 * (i % 3)) * ease
+            sdraw.circle(surf, debris, self.pos + d * reach, 2.5 * (1 - k) + 0.5)
+
+
+class Sparks:
+    """A few streaks (or, with `chips`, little ice diamonds) flying out of a hit point."""
+
+    duration = 0.25
+
+    def __init__(self, pos, color, count=3, reach=12, chips=False):
+        self.pos = pygame.Vector2(pos)
+        self.color = color
+        self.count = count
+        self.reach = reach
+        self.chips = chips
+        self.spin = (self.pos.x * 7.3 + self.pos.y * 3.1) % 360
+        self.t = 0.0
+
+    def update(self, dt):
+        self.t += dt
+        return self.t < self.duration
+
+    def draw(self, surf):
+        k = self.t / self.duration
+        ease = 1 - (1 - k) ** 2
+        color = (*self.color, int(255 * (1 - k)))
+        for i in range(self.count):
+            d = pygame.Vector2(1, 0).rotate(self.spin + i * 360 / self.count + (i * 47) % 30)
+            tip = self.pos + d * self.reach * ease
+            if self.chips:
+                sdraw.polygon(surf, color, regular_polygon(tip, 2.2 * (1 - k) + 0.8, 4, d.as_polar()[1]))
+            else:
+                sdraw.line(surf, color, self.pos + d * self.reach * ease * 0.45, tip, 1.5)
 
 
 class Shards:
-    """A dead enemy's pieces flying apart and fading. The spread comes from the enemy's spin, not a
-    random roll, so drawing stays repeatable."""
+    """A dead enemy popping: a white flash, then its pieces, in its lit and shaded tones, flying apart and
+    fading. The spread comes from the enemy's spin, not a random roll, so drawing stays repeatable."""
 
     duration = 0.45
 
@@ -551,11 +538,14 @@ class Shards:
     def draw(self, surf):
         k = self.t / self.duration
         ease = 1 - (1 - k) ** 2
+        if k < 0.25:  # the pop
+            sdraw.circle(surf, (255, 255, 255, int(200 * (1 - k / 0.25))), self.pos, self.size * (1 + k))
         r = max(2.5, self.size * 0.55 * (1 - 0.4 * k))
-        color = (*self.color, int(255 * (1 - k * k)))
-        for direction, speed in self.pieces:
+        alpha = int(255 * (1 - k * k))
+        tones = ((*mix(self.color, (255, 255, 255), 0.3), alpha), (*shade(self.color, 0.6), alpha))
+        for i, (direction, speed) in enumerate(self.pieces):
             center = self.pos + direction * (self.size * 0.4 + 36 * speed * ease)
-            sdraw.polygon(surf, color, regular_polygon(center, r, 3, direction.as_polar()[1] + 500 * k * speed))
+            sdraw.polygon(surf, tones[i % 2], regular_polygon(center, r, 3, direction.as_polar()[1] + 500 * k * speed))
 
 
 class Popup:
@@ -591,13 +581,19 @@ class GameView:
     def build_view(self):
         """Everything whose size depends on the display scale. Done once per scale change."""
         _caps.clear()
+        sprites.clear()
         self.font_s = load_font(11)
         self.font = load_font(14)
         self.font_l = load_font(22, "bold")
         self.font_xl = load_font(36, "bold")
         self.fx_layer = pygame.Surface(sp((MAP_W, MAP_H)), pygame.SRCALPHA)
         if hasattr(self, "theme"):
-            self.map_surface = render_map(self.theme, self.waypoints)
+            self.build_map()
+
+    def build_map(self):
+        """The level's map picture and its ambience (portal, gate, particles, glow)."""
+        self.map_surface, accents = terrain.map_layers(self.theme, self.waypoints, SCALE)
+        self.scenery = ambience.Scenery(self.theme, terrain.PATH_STYLES[self.theme.name], self.waypoints, accents)
 
     def apply_scale(self, scale):
         if scale == SCALE:
@@ -630,11 +626,14 @@ class GameView:
         screen = self.screen
         screen.blit(self.map_surface, (0, 0))
         screen.set_clip(srect((0, 0, MAP_W, MAP_H)))
+        self.scenery.draw_under(screen, self.clock, SCALE, self.ambient)
 
         fx = self.fx_layer
         fx.fill((0, 0, 0, 0))
         if self.selected and not self.dragging:
             self.draw_range(fx, self.selected.pos, self.selected.range, (255, 255, 255))
+        if self.build_kind or self.dragging:
+            fx.blit(terrain.grid_lines(SCALE, (255, 255, 255), 50), (0, 0))
         self.draw_ghost(fx)
         self.draw_drag_preview(fx)
 
@@ -645,12 +644,14 @@ class GameView:
             draw_enemy_shadow(screen, e)
         for t in self.towers.values():
             if t is not self.dragging:
-                draw_tower_shape(screen, t.spec, t.pos, t.aim)
+                draw_tower(screen, fx, t, self.clock)
                 draw_tower_status(screen, fx, t)
         for e in self.enemies:
             draw_enemy(screen, e)
         for p in self.projectiles:
-            draw_projectile(screen, p)
+            draw_projectile(screen, fx, p)
+        if self.ambient:
+            self.scenery.draw_over(screen, self.clock, SCALE)
         for ef in self.effects:
             ef.draw(fx)
         if self.side == "monsters":
@@ -667,7 +668,7 @@ class GameView:
             t = self.dragging
             pos = hover if mx < MAP_W else t.pos
             draw_tower_shadow(screen, pos, 2.5)
-            draw_tower_shape(screen, t.spec, pos, t.aim)
+            draw_tower_shape(screen, t.spec, pos, t.facing)
         self.draw_fusion_label()
         for p in self.popups:
             blit_text(screen, self.font, p.text, p.color, p.pos, "center", int(255 * (1 - p.t / 0.8)))
@@ -885,7 +886,7 @@ class GameView:
             if side == "towers":
                 draw_tower_shape(self.screen, TOWERS["railgun"], icon)
             else:
-                draw_enemy_icon(self.screen, ENEMY_TYPES["juggernaut"], icon, 16)
+                draw_enemy_icon(self.screen, "juggernaut", icon, 16)
             self.text(self.font_l, title, TEXT, (rect.centerx, rect.top + 80), "midtop")
             for j, line in enumerate(desc):
                 self.text(self.font_s, line, TEXT_DIM, (rect.centerx, rect.top + 124 + j * 20), "midtop")
@@ -942,7 +943,7 @@ class GameView:
                        border_radius=10)
             icon = pygame.Vector2(rect.centerx, rect.top + 44)
             if card["effect"] == "type":
-                draw_enemy_icon(self.screen, ENEMY_TYPES[card["type"]], icon, 16)
+                draw_enemy_icon(self.screen, card["type"], icon, 16)
             elif card["effect"] == "ability":
                 sdraw.circle(self.screen, ABILITIES[card["ability"]]["color"], icon, 16)
             else:
@@ -1011,12 +1012,16 @@ class GameView:
         return [(k, pygame.Rect(x0 + i * (w + 10), 250, w, 50)) for i, k in enumerate(SCALES)]
 
     @staticmethod
+    def ambient_button():
+        return pygame.Rect(MAP_W / 2 - 150, 402, 300, 40)
+
+    @staticmethod
     def settings_close_button():
-        return pygame.Rect(MAP_W / 2 - 110, 420, 220, 50)
+        return pygame.Rect(MAP_W / 2 - 110, 470, 220, 50)
 
     @staticmethod
     def settings_continue_button():
-        return pygame.Rect(MAP_W / 2 - 150, 482, 300, 50)
+        return pygame.Rect(MAP_W / 2 - 150, 532, 300, 50)
 
     def draw_settings(self):
         self.shade_map(225)
@@ -1037,11 +1042,16 @@ class GameView:
                   TEXT_DIM, (MAP_W / 2, 350), "midtop")
         self.text(self.font_s, "The game is drawn natively at the chosen size; changing it costs one re-render.",
                   TEXT_DIM, (MAP_W / 2, 370), "midtop")
+        a = self.ambient_button()
+        sdraw.rect(self.screen, (90, 90, 108) if a.collidepoint(mouse) else (55, 55, 68), a, border_radius=8)
+        sdraw.rect(self.screen, GOLD if self.ambient else PANEL_LINE, a, 2 if self.ambient else 1, border_radius=8)
+        self.text(self.font, f"Ambient effects: {'On' if self.ambient else 'Off'}  [A]",
+                  TEXT if self.ambient else TEXT_DIM, a.center, "center")
         b = self.settings_close_button()
         sdraw.rect(self.screen, (90, 90, 108) if b.collidepoint(mouse) else (70, 70, 85), b, border_radius=8)
         sdraw.rect(self.screen, self.theme.accent, b, 3, border_radius=8)
         label = "Play  [Enter]" if self.untouched else "Resume  [Enter]"
-        hint_y = 500
+        hint_y = 550
         if self.can_continue:
             label = "New game  [Enter]"
             c = self.settings_continue_button()
@@ -1050,7 +1060,7 @@ class GameView:
             sdraw.rect(self.screen, theme.accent, c, 3, border_radius=8)
             self.text(self.font, f"Continue: level {self.save['level'] + 1}, {theme.name}  [C]", TEXT, c.center,
                       "center")
-            hint_y = 560
+            hint_y = 610
         self.text(self.font, label, TEXT, b.center, "center")
         self.text(self.font_s, "Press O in game to come back here. The choice is saved for next time.",
                   TEXT_DIM, (MAP_W / 2, hint_y), "midtop")
@@ -1123,12 +1133,8 @@ class GameView:
                                  active=affordable and self.state == "build" and self.wave_idx == 0)
 
         self.text(self.font_s, "Enemies", TEXT_DIM, (x, 526), "midleft")
-        for i, spec in enumerate(s for s in ENEMY_TYPES.values() if s["draft"] == "starter"):
-            c = pygame.Vector2(x + 74 + i * 30, 526)
-            if spec["sides"] == 0:
-                sdraw.circle(screen, spec["color"], c, 8)
-            else:
-                sdraw.polygon(screen, spec["color"], regular_polygon(c, 9, spec["sides"], -90))
+        for i, kind in enumerate(k for k, s in ENEMY_TYPES.items() if s["draft"] == "starter"):
+            draw_enemy_icon(screen, kind, pygame.Vector2(x + 74 + i * 30, 526), 8)
 
         self.draw_panel_footer()
 

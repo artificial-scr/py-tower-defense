@@ -85,3 +85,20 @@ def test_boss(game):
     assert boss.slow_factor == 0.6, "bosses resist slows"
     run_wave(game)
     assert game.state == "game_over" and game.lives == 0, "an escaped boss ends the game"
+
+
+def test_turrets_turn_toward_their_target_and_kick_back_when_firing(game):
+    """Drawing only: the turret is drawn turning at TURN_SPEED, not snapping, and kicked back after a shot."""
+    gun = put(game, "gun", (5, 5))
+    e = dummy_enemy((gun.pos.x, gun.pos.y + 60))  # straight below: aim 90, the turret starts at -90
+    gun.update(0.1, [e], [], [])
+    assert gun.aim == pytest.approx(90)
+    assert abs(gun.facing - gun.aim) > 90, "still turning"
+    assert gun.kick == 1.0
+    for _ in range(30):
+        gun.update(1 / 60, [e], [], [])
+    assert gun.facing == pytest.approx(90)
+    gun.cooldown = 99
+    for _ in range(10):
+        gun.update(1 / 60, [e], [], [])
+    assert gun.kick == 0.0
