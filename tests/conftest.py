@@ -23,6 +23,7 @@ def isolated(tmp_path, monkeypatch):
     pygame.init()
     pygame.event.clear()
     graphics.set_scale(1.0)
+    graphics.set_offset((0, 0))
     random.seed(0)
     monkeypatch.setattr(main, "SETTINGS_FILE", str(tmp_path / "settings.json"))
     monkeypatch.setattr(main, "LOG_DIR", str(tmp_path / "logs"))
@@ -32,6 +33,7 @@ def isolated(tmp_path, monkeypatch):
     (tmp_path / "profile.json").write_text(json.dumps({"version": 1, "milestones": {"starter_pack": True}}))
     yield
     graphics.set_scale(1.0)
+    graphics.set_offset((0, 0))
 
 
 @pytest.fixture

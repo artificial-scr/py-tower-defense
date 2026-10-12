@@ -31,10 +31,26 @@ def test_speed_button(game):
 
 def test_banners_run_in_real_time(game):
     game.speed = 10
+    game.start_wave()
     game.banner_timer = 1.0
-    for _ in range(10):
-        game.update(1 / 60)  # one frame at 10x
+    game.tick(1 / 60)  # one frame at 10x: ten updates
     assert game.banner_timer == pytest.approx(1.0 - 1 / 60)
+
+
+def test_speed_only_applies_during_waves(game):
+    """Building runs in real time whatever the speed; a wave runs `speed` updates a frame."""
+    game.speed = 4
+    game.tick(1 / 60)
+    assert game.clock == pytest.approx(1 / 60) and game.pace == 1
+    game.start_wave()
+    assert game.pace == 4
+    before = game.clock
+    game.tick(1 / 60)
+    assert game.clock - before == pytest.approx(4 / 60)
+    game.spawn_queue, game.enemies = [], []
+    before = game.clock
+    game.tick(1 / 60)  # the wave ends on the first update: the rest of the frame isn't sped up
+    assert game.state == "build" and game.clock - before == pytest.approx(1 / 60)
 
 
 # ---- Esc and quitting ---------------------------------------------------------------
@@ -120,6 +136,50 @@ def test_ambient_effects_toggle_is_saved(game, screen):
     assert game.ambient and main.Game(screen, log_dir=None).ambient
     game.handle_event(key(pygame.K_RETURN))
     assert not game.show_settings
+
+
+def test_fullscreen_centers_the_game_and_clicks_still_land(game):
+    """F11: the whole screen, the game drawn as large as it allows, in the middle; clicks are measured
+    from the game's corner. F11 again: back to the window."""
+    game.handle_event(key(pygame.K_F11))
+    display = pygame.display.get_surface()
+    assert game.fullscreen and game.screen.get_parent() is display
+    (w, h), (display_w, display_h) = game.screen.get_size(), display.get_size()
+    assert w <= display_w and h <= display_h and (display_w - w <= 2 or display_h - h <= 2), "fills one way"
+    assert not any(game.fits(k) for k in SCALES), "no window sizes to pick"
+    area = game.screen.get_abs_offset()
+    assert area == graphics.OFFSET
+    assert abs(area[0] * 2 + w - display_w) <= 1 and abs(area[1] * 2 + h - display_h) <= 1  # centered
+    game.draw()  # draws onto its part of the screen
+    target = pygame.Vector2(game.speed_button.rect.center) * graphics.SCALE + pygame.Vector2(area)
+    game.handle_event(mouse_down(target))
+    game.handle_event(mouse_up(target))
+    assert game.speed == 2
+    with open(main.SETTINGS_FILE, encoding="utf-8") as f:
+        assert json.load(f) == {"fullscreen": True}
+    game.handle_event(key(pygame.K_F11))
+    assert not game.fullscreen and graphics.OFFSET == (0, 0)
+    assert pygame.display.get_surface().get_size() == graphics.window_size() == game.screen.get_size()
+
+
+def test_fullscreen_button_and_scale_choice(game, monkeypatch):
+    """The settings button toggles it too; leaving fullscreen goes back to the window's scale, and
+    fullscreen's scale (which can't be changed there) isn't saved as the window's."""
+    monkeypatch.setattr(main.Game, "scale_fits", staticmethod(lambda k: True))
+    game.show_settings = True
+    game.apply_scale(0.75)
+    game.handle_event(mouse_down(scaled(game.fullscreen_button().center, 0.75)))
+    assert game.fullscreen and graphics.SCALE >= 1.0
+    full = graphics.SCALE
+    game.handle_event(key(pygame.K_LEFT))
+    assert graphics.SCALE == full
+    game.handle_event(key(pygame.K_RETURN))
+    with open(main.SETTINGS_FILE, encoding="utf-8") as f:
+        assert "scale" not in json.load(f)
+    game.show_settings = True
+    at = pygame.Vector2(game.fullscreen_button().center) * graphics.SCALE + pygame.Vector2(graphics.OFFSET)
+    game.handle_event(mouse_down(at))
+    assert not game.fullscreen and graphics.SCALE == 0.75
 
 
 def test_o_opens_settings(game):

@@ -17,8 +17,8 @@ uv sync              # create .venv and install pygame-ce (plus pytest for devel
 uv run main.py       # play
 ```
 
-The game opens on the settings screen, where you can choose a display scale and turn the ambient effects
-(drifting particles, glowing maps) on or off. Press Enter to start.
+The game opens on the settings screen, where you can choose a display scale or fullscreen, and turn the
+ambient effects (drifting particles, glowing maps) on or off. Press Enter to start.
 
 | Option | Effect |
 |---|---|
@@ -188,9 +188,10 @@ Both sides:
 | `Space` | Send the next wave / continue to the next level / switch sides when a pass is won (sending a wave is blocked for 1 s after a level change, so a double press can't start one by accident) |
 | `C` | Continue the saved run (on the start screen) |
 | `T` | Show the evolution tree |
-| `F` / `Shift+F` | Change game speed: 1×, 2×, 4×, 10× |
+| `F` / `Shift+F` | Change game speed during waves: 1×, 2×, 4×, 10× (building always runs at 1×) |
 | `P` | Pause |
 | `O` | Settings (display scale, from 75% to 200%; ambient effects on or off with `A`) |
+| `F11` | Fullscreen on or off (the game is scaled up to fill the screen) |
 | `R` | Start a new run after the run is over |
 | `Esc` (nothing to cancel) | Ask to quit. Press `Esc` again to quit |
 
@@ -263,7 +264,7 @@ These logs are meant for tuning the data files. Pass `--no-log` to turn them off
 | `assets/fonts/` | The game font, Orbitron (Medium and Bold), and its license |
 | `tests/` | The pytest suite |
 
-Your display scale and the ambient effects setting are saved in `settings.json`. That file,
+Your display scale, fullscreen and the ambient effects setting are saved in `settings.json`. That file,
 `profile.json`, `savegame.json` and `logs/` are git-ignored.
 
 ## Credits

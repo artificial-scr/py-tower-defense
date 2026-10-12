@@ -97,6 +97,7 @@ def blit_text(surf, font, s, color, pos, anchor="topleft", alpha=None):
 # Display scale
 # --------------------------------------------------------------------------
 SCALE = 1.0  # read it as graphics.SCALE from other modules: set_scale rebinds it
+OFFSET = (0, 0)  # where the game's picture starts on the display: centered in fullscreen, else the corner
 
 
 def set_scale(scale):
@@ -121,8 +122,14 @@ def srect(rect):
     return pygame.Rect(left, top, round((x + w) * SCALE) - left, round((y + h) * SCALE) - top)
 
 
+def set_offset(offset):
+    global OFFSET
+    OFFSET = tuple(offset)
+
+
 def to_logical(pos):
-    return int(pos[0] / SCALE), int(pos[1] / SCALE)
+    """Display point (mouse) -> logical point."""
+    return int((pos[0] - OFFSET[0]) / SCALE), int((pos[1] - OFFSET[1]) / SCALE)
 
 
 def mouse_pos():
@@ -596,11 +603,33 @@ class GameView:
         self.scenery = ambience.Scenery(self.theme, terrain.PATH_STYLES[self.theme.name], self.waypoints, accents)
 
     def apply_scale(self, scale):
-        if scale == SCALE:
-            return
-        set_scale(scale)
-        self.screen = pygame.display.set_mode(window_size())
+        if scale != SCALE:
+            self.set_display(scale, self.fullscreen)
+
+    def set_display(self, scale, fullscreen):
+        """Draw at `scale`, in a window that size, or fullscreen (scale ignored): at the desktop's own
+        resolution, the game drawn natively as large as the screen allows, centered (bars only where the
+        screen's shape differs from the game's)."""
+        self.fullscreen = fullscreen
+        if fullscreen:
+            display = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+            display_w, display_h = display.get_size()
+            set_scale(math.floor(min(display_w / WIDTH, display_h / HEIGHT) * 1000) / 1000)
+            area = pygame.Rect((0, 0), window_size())
+            area.center = display.get_rect().center
+            area = area.clip(display.get_rect())
+            display.fill((0, 0, 0))
+            self.screen = display.subsurface(area)  # the game draws straight onto its part of the display
+            set_offset(area.topleft)
+        else:
+            set_scale(scale)
+            self.screen = pygame.display.set_mode(window_size())
+            set_offset((0, 0))
         self.build_view()
+
+    def fits(self, scale):
+        """Whether a window at this scale can be picked (none in fullscreen: it fills the screen)."""
+        return not self.fullscreen and self.scale_fits(scale)
 
     @staticmethod
     def scale_fits(scale):
@@ -1013,7 +1042,11 @@ class GameView:
 
     @staticmethod
     def ambient_button():
-        return pygame.Rect(MAP_W / 2 - 150, 402, 300, 40)
+        return pygame.Rect(MAP_W / 2 - 265, 402, 260, 40)
+
+    @staticmethod
+    def fullscreen_button():
+        return pygame.Rect(MAP_W / 2 + 5, 402, 260, 40)
 
     @staticmethod
     def settings_close_button():
@@ -1029,7 +1062,7 @@ class GameView:
         self.text(self.font_l, "Display scale", TEXT, (MAP_W / 2, 200), "midtop")
         mouse = mouse_pos()
         for scale, rect in self.scale_buttons():
-            fits = self.scale_fits(scale)
+            fits = self.fits(scale)
             current = scale == SCALE
             bg = (90, 90, 108) if fits and rect.collidepoint(mouse) else (55, 55, 68) if fits else (32, 32, 40)
             sdraw.rect(self.screen, bg, rect, border_radius=8)
@@ -1037,16 +1070,20 @@ class GameView:
             self.text(self.font, f"{scale * 100:.0f}%", (TEXT if fits else TEXT_DIM) if not current else GOLD,
                       rect.center, "center")
         w, h = window_size()
-        self.text(self.font, f"Window {w} x {h}", TEXT, (MAP_W / 2, 320), "midtop")
-        self.text(self.font_s, "Left / Right or click to change. Greyed-out sizes don't fit your screen.",
-                  TEXT_DIM, (MAP_W / 2, 350), "midtop")
+        size = f"Window {w} x {h}"
+        if self.fullscreen:
+            size = "Fullscreen {} x {}, game {} x {}".format(*pygame.display.get_surface().get_size(), w, h)
+        self.text(self.font, size, TEXT, (MAP_W / 2, 320), "midtop")
+        hint = ("Fullscreen fits the game to your screen; leave it (F11) to pick a window size." if self.fullscreen
+                else "Left / Right or click to change. Greyed-out sizes don't fit your screen.")
+        self.text(self.font_s, hint, TEXT_DIM, (MAP_W / 2, 350), "midtop")
         self.text(self.font_s, "The game is drawn natively at the chosen size; changing it costs one re-render.",
                   TEXT_DIM, (MAP_W / 2, 370), "midtop")
-        a = self.ambient_button()
-        sdraw.rect(self.screen, (90, 90, 108) if a.collidepoint(mouse) else (55, 55, 68), a, border_radius=8)
-        sdraw.rect(self.screen, GOLD if self.ambient else PANEL_LINE, a, 2 if self.ambient else 1, border_radius=8)
-        self.text(self.font, f"Ambient effects: {'On' if self.ambient else 'Off'}  [A]",
-                  TEXT if self.ambient else TEXT_DIM, a.center, "center")
+        for rect, on, label in ((self.ambient_button(), self.ambient, "Ambient effects: {}  [A]"),
+                                (self.fullscreen_button(), self.fullscreen, "Fullscreen: {}  [F11]")):
+            sdraw.rect(self.screen, (90, 90, 108) if rect.collidepoint(mouse) else (55, 55, 68), rect, border_radius=8)
+            sdraw.rect(self.screen, GOLD if on else PANEL_LINE, rect, 2 if on else 1, border_radius=8)
+            self.text(self.font, label.format("On" if on else "Off"), TEXT if on else TEXT_DIM, rect.center, "center")
         b = self.settings_close_button()
         sdraw.rect(self.screen, (90, 90, 108) if b.collidepoint(mouse) else (70, 70, 85), b, border_radius=8)
         sdraw.rect(self.screen, self.theme.accent, b, 3, border_radius=8)

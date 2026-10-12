@@ -35,9 +35,10 @@ B              rebuild the previous level's towers (see below)
 C              continue the saved run (on the start screen)
 T              show the evolution tree
 Space          start the next wave, continue to the next level, or switch sides after level 10
-F              cycle game speed: 1x, 2x, 4x, 10x (Shift+F goes back)
+F              cycle game speed during waves: 1x, 2x, 4x, 10x (Shift+F goes back)
 P              pause
-O              settings (display scale, ambient effects); also shown at launch
+O              settings (display scale, ambient effects, fullscreen); also shown at launch
+F11            fullscreen on / off
 R              a new run, once the run is over
 
 Moving to the next level refunds every tower; Rebuild then buys them back as they were
@@ -195,6 +196,8 @@ class Game(AttackMixin, AttackView, GameView):
         self.show_settings = False
         self.confirm_quit = False
         self.ambient = load_settings().get("ambient", True) is not False  # the Ambient effects setting
+        self.fullscreen = False  # main() turns it on at launch if it was saved on
+        self.windowed_scale = graphics.SCALE  # the window's scale, to go back to after fullscreen
         self.save = load_save()
         self.profile = Profile.load(PROFILE_FILE)
         self.picking_side = False  # the new-run screen: choose Towers or Monsters
@@ -663,11 +666,23 @@ class Game(AttackMixin, AttackView, GameView):
             self.dragging = None
 
     # ---- update -----------------------------------------------------------
+    @property
+    def pace(self):
+        """Updates per frame: the speed setting only speeds up waves; building runs in real time."""
+        return self.speed if self.state == "wave" else 1
+
+    def tick(self, dt):
+        """One frame of the game, `pace` updates long (fewer if the wave ends during it)."""
+        for _ in range(self.pace):
+            self.update(dt)
+            if self.state != "wave":
+                break
+
     def update(self, dt):
         # banners are read in real time, so they don't flash past at high speed
-        self.banner_timer -= dt / self.speed
-        self.boss_alert -= dt / self.speed
-        self.wave_lock -= dt / self.speed
+        self.banner_timer -= dt / self.pace
+        self.boss_alert -= dt / self.pace
+        self.wave_lock -= dt / self.pace
         self.effects = [e for e in self.effects if e.update(dt)]
         self.popups = [p for p in self.popups if p.update(dt)]
         if self.state not in ("build", "wave"):
@@ -796,6 +811,8 @@ class Game(AttackMixin, AttackView, GameView):
     def handle_event(self, event):
         if event.type in (pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP):
             event = pygame.event.Event(event.type, {**event.dict, "pos": to_logical(event.pos)})
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_F11:
+            return self.toggle_fullscreen()  # anywhere, whatever is on screen
         if self.confirm_quit:
             self.handle_quit_event(event)
         elif self.show_settings:
@@ -860,9 +877,12 @@ class Game(AttackMixin, AttackView, GameView):
 
     def handle_settings_event(self, event):
         if event.type == pygame.KEYDOWN:
-            if event.key in (pygame.K_LEFT, pygame.K_RIGHT, pygame.K_MINUS, pygame.K_EQUALS, pygame.K_PLUS):
+            if self.fullscreen and event.key in (pygame.K_LEFT, pygame.K_RIGHT, pygame.K_MINUS, pygame.K_EQUALS,
+                                                 pygame.K_PLUS):
+                pass  # fullscreen sets its own scale
+            elif event.key in (pygame.K_LEFT, pygame.K_RIGHT, pygame.K_MINUS, pygame.K_EQUALS, pygame.K_PLUS):
                 step = -1 if event.key in (pygame.K_LEFT, pygame.K_MINUS) else 1
-                fitting = [k for k in SCALES if self.scale_fits(k)]
+                fitting = [k for k in SCALES if self.fits(k)]
                 i = fitting.index(graphics.SCALE) if graphics.SCALE in fitting else 0
                 self.apply_scale(fitting[max(0, min(len(fitting) - 1, i + step))])
             elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE, pygame.K_ESCAPE, pygame.K_o):
@@ -874,10 +894,12 @@ class Game(AttackMixin, AttackView, GameView):
                 self.toggle_ambient()
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             for scale, rect in self.scale_buttons():
-                if rect.collidepoint(event.pos) and self.scale_fits(scale):
+                if rect.collidepoint(event.pos) and self.fits(scale):
                     self.apply_scale(scale)
             if self.ambient_button().collidepoint(event.pos):
                 self.toggle_ambient()
+            elif self.fullscreen_button().collidepoint(event.pos):
+                self.toggle_fullscreen()
             if self.settings_close_button().collidepoint(event.pos):
                 self.close_settings()
             elif self.can_continue and self.settings_continue_button().collidepoint(event.pos):
@@ -889,12 +911,23 @@ class Game(AttackMixin, AttackView, GameView):
         self.ambient = not self.ambient
         save_settings({**load_settings(), "ambient": self.ambient})
 
+    def toggle_fullscreen(self):
+        """F11 or the settings button: fullscreen, the game as large as the screen allows, or back to the
+        window at its scale. Saved straight away."""
+        if self.fullscreen:
+            fitting = [k for k in SCALES if k <= self.windowed_scale and self.scale_fits(k)]
+            self.set_display(max(fitting or [1.0]), False)
+        else:
+            self.windowed_scale = graphics.SCALE
+            self.set_display(None, True)
+        save_settings({**load_settings(), "fullscreen": self.fullscreen})
+
     def close_settings(self):
         self.show_settings = False
         if self.untouched and not self.side_chosen and self.profile.milestones["monsters_side"]:
             self.picking_side = True  # a new run, and the Monsters side is open: pick one
         settings = load_settings()
-        if settings.get("scale") != graphics.SCALE:
+        if not self.fullscreen and settings.get("scale") != graphics.SCALE:  # fullscreen picks its own
             save_settings({**settings, "scale": graphics.SCALE})
 
     def handle_key(self, key):
@@ -1008,6 +1041,8 @@ def main():
     clock = pygame.time.Clock()
     side = "monsters" if "--monsters" in sys.argv else "towers"  # a debug shortcut until run flow lands
     game = Game(screen, log_dir=None if "--no-log" in sys.argv else LOG_DIR, side=side)
+    if load_settings().get("fullscreen") is True:
+        game.toggle_fullscreen()
     game.show_settings = True  # start on the settings screen; Enter to play
     while True:
         dt = min(clock.tick(FPS) / 1000, 0.05)
@@ -1018,8 +1053,7 @@ def main():
                 sys.exit()
             game.handle_event(event)
         if not game.frozen:
-            for _ in range(game.speed):
-                game.update(dt)
+            game.tick(dt)
         game.draw()
         pygame.display.flip()
 

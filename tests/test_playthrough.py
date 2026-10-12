@@ -44,8 +44,7 @@ def test_stress_at_10x(game):
     for _ in range(20000):
         if game.state != "wave":
             break
-        for _ in range(game.speed):
-            game.update(1 / 60)
+        game.tick(1 / 60)
         game.draw()
     assert game.state in ("victory", "game_over")
 

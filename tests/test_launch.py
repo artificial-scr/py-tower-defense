@@ -90,3 +90,16 @@ def test_no_log_flag(monkeypatch):
     events = [key(pygame.K_RETURN), key(pygame.K_SPACE)] + [pygame.event.Event(pygame.USEREVENT)] * 30
     run_main(monkeypatch, events)
     assert not os.path.exists(main.LOG_DIR)
+
+
+def test_launches_fullscreen_if_saved(monkeypatch):
+    with open(main.SETTINGS_FILE, "w", encoding="utf-8") as f:
+        f.write('{"scale": 1.0, "fullscreen": true}')
+    seen = []
+    monkeypatch.setattr(main.Game, "draw", lambda self: seen.append(self.fullscreen) or pygame.event.post(
+        pygame.event.Event(pygame.QUIT)))
+    monkeypatch.setattr("sys.argv", ["main.py", "--no-log"])
+    with pytest.raises(SystemExit):
+        main.main()
+    pygame.init()
+    assert seen == [True]
