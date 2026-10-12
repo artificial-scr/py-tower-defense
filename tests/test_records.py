@@ -6,7 +6,7 @@ import os
 import pytest
 
 import main
-from graphics import CastWarning
+from effects import CastWarning
 from helpers import build, put, run_wave
 from progress import Profile
 from towers import NO_TOWER_MODS

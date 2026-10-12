@@ -16,20 +16,14 @@ the next one shorter but harder.
 Stat upgrades (monsters.json) are bought with the budget and last for the rest of the pass. Each
 purchase also sends Basics worth its price as an escort, at most escort_per_wave with each wave.
 
-Controls on this side:
-  1-9, 0       draft phase: draft that monster (Shift: 5); during a wave: use that ability
-  Q / W / E    draft phase: buy a rank of Vitality / Stride / Plating
-  Backspace    take the last monster off the queue (or click its icon on the map)
-  Left click   on a panel row: draft / use it; on an upgrade: buy a rank; on the map: cast an aimed
-               ability, or see a tower's range
-  Right click  on an upgrade: sell back a rank bought in this draft phase; elsewhere: cancel aiming
-               (Esc too)
+The controls on this side are listed in README.md (Controls).
 """
 
 import pygame
 
+from effects import Popup
 from entities import Tower, cast_ability
-from graphics import MAP_W, TILE, Popup, tile_center
+from graphics import MAP_W, TILE
 from levels import BOSS_LEVELS, LEVELS, WAVES_PER_LEVEL, wave_hp_mult, wave_value
 from monsters import ABILITIES, BUDGET, ENEMY_TYPES, REWARDS, UPGRADES
 from towers import NO_TOWER_MODS
@@ -117,10 +111,8 @@ class AttackMixin:
         for entry in comp["towers"] if comp else []:
             t = Tower(entry["kind"], tuple(entry["tile"]), entry["gold_spent"])
             t.mods = self.defender_mods
-            t.history.append({"t": round(self.clock, 2), "event": "defending", "wave": wave})
+            self.note(t, "defending", wave=wave)
             self.towers[t.tile] = t
-            if self.log:
-                self.log.add_tower(t)
 
     # ---- draft ---------------------------------------------------------------
     def draftable(self):
@@ -343,21 +335,3 @@ class AttackMixin:
                     self.cast(key)
                 return True
         return False
-
-    # ---- queries for the view ---------------------------------------------------------
-    def attack_rows(self):
-        """(monster kind or ability, panel rect): the draft list in the build phase, abilities during a wave."""
-        keys = self.draftable() if self.state == "build" else list(self.cooldowns) if self.state == "wave" else []
-        return [(k, pygame.Rect(MAP_W + 12, 206 + i * 24, 196, 22)) for i, k in enumerate(keys)]
-
-    def upgrade_buttons(self):
-        """(upgrade, panel rect): a row of three under the draft list."""
-        return [(k, pygame.Rect(MAP_W + 12 + i * 66, 474, 64, 46)) for i, k in enumerate(UPGRADES)]
-
-    def queue_icons(self):
-        """(queue index, center) for the drafted monsters shown along the bottom of the map."""
-        if self.state != "build":
-            return []
-        per_row = (MAP_W - 20) // 18
-        return [(i, pygame.Vector2(20 + (i % per_row) * 18, tile_center(0, 15).y + 4 - (i // per_row) * 20))
-                for i in range(len(self.queue))]

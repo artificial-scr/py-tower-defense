@@ -14,15 +14,14 @@ import os
 
 import pygame
 
-from levels import COLS, ENEMY_TYPES, LEVELS, ROWS, TILE, WAVES_PER_LEVEL
+from levels import COLS, ENEMY_TYPES, LEVELS, ROWS, TILE, WAVES_PER_LEVEL, tile_center
 from monsters import ABILITIES, REWARDS
 from progress import UNLOCKS
 import ambience
 import sprites
 import terrain
-from sprites import mix, regular_polygon, shade, shape_points  # noqa: F401 (others import them from here)
-from terrain import DECOR, path_tiles  # noqa: F401 (others read them from here)
-from towers import CROSS, EVOLVE, LINES, TOWERS
+from sprites import mix, regular_polygon, shade
+from towers import CROSS, EVOLVE, LINES, TOWER_ORDER, TOWERS
 
 # --------------------------------------------------------------------------
 # Layout and colors
@@ -46,6 +45,12 @@ TEXT_DIM = (150, 150, 160)
 GOOD = (90, 220, 110)
 BAD = (235, 80, 80)
 GOLD = (255, 210, 70)
+BUTTON = (70, 70, 85)
+BUTTON_HOVER = (90, 90, 108)
+BUTTON_QUIET = (48, 48, 58)  # a button that's on offer but not the main action
+BUTTON_OFF = (40, 40, 48)  # a button that can't be used right now
+CARD = (38, 38, 48)  # cards and option tiles on the overlay screens
+CARD_HOVER = (55, 55, 68)
 TIER_RIM = {1: (78, 80, 94), 2: (176, 116, 64), 3: (205, 205, 220), 4: GOLD}
 TIER_COLORS = {"weak": TEXT_DIM, "normal": TEXT, "strong": GOLD}  # record tiers on the reward screen
 
@@ -165,10 +170,6 @@ sdraw = ScaledDraw()
 # --------------------------------------------------------------------------
 # Shapes, towers, enemies, the map
 # --------------------------------------------------------------------------
-def tile_center(tx, ty):
-    return pygame.Vector2(tx * TILE + TILE / 2, ty * TILE + TILE / 2)
-
-
 SHADOW_OFFSET = pygame.Vector2(3, 4)  # the light comes from the top left
 _shadows = {}
 
@@ -394,182 +395,8 @@ def render_map(theme, waypoints):
 
 
 # --------------------------------------------------------------------------
-# Visual effects (they only age; they don't affect the game)
+# Panel buttons
 # --------------------------------------------------------------------------
-class CastWarning:
-    """A pulsing circle marking where a monster ability is about to land."""
-
-    def __init__(self, pos, radius, color, duration):
-        self.pos = pygame.Vector2(pos)
-        self.radius = radius
-        self.color = color
-        self.duration = duration
-        self.t = 0.0
-
-    def update(self, dt):
-        self.t += dt
-        return self.t < self.duration
-
-    def draw(self, surf):
-        pulse = 0.5 + 0.5 * math.sin(self.t * 14)
-        sdraw.circle(surf, (*self.color, int(30 + 40 * pulse)), self.pos, self.radius)
-        sdraw.circle(surf, (*self.color, 220), self.pos, self.radius * (1 - 0.6 * self.t / self.duration), 2)
-
-
-class Ring:
-    """An expanding, fading ring."""
-
-    def __init__(self, pos, radius, color, duration):
-        self.pos = pygame.Vector2(pos)
-        self.radius = radius
-        self.color = color
-        self.duration = duration
-        self.t = 0.0
-
-    def update(self, dt):
-        self.t += dt
-        return self.t < self.duration
-
-    def draw(self, surf):
-        k = self.t / self.duration
-        r = max(2, int(self.radius * (0.3 + 0.7 * k)))
-        sdraw.circle(surf, (*self.color, int(220 * (1 - k))), self.pos, r, 3)
-
-
-class Beam:
-    """A fading line with a glow, for instant hits; `bolt` makes it a jagged lightning bolt."""
-
-    def __init__(self, a, b, color, duration, width, bolt=False):
-        self.a = pygame.Vector2(a)
-        self.b = pygame.Vector2(b)
-        self.color = color
-        self.duration = duration
-        self.width = width
-        self.points = jagged(self.a, self.b, int(self.a.x + self.b.y)) if bolt else [self.a, self.b]
-        self.t = 0.0
-
-    def update(self, dt):
-        self.t += dt
-        return self.t < self.duration
-
-    def draw(self, surf):
-        alpha = 1 - self.t / self.duration
-        core = mix(self.color, (255, 255, 255), 0.6)
-        for color, width, k in ((self.color, self.width + 3, 0.35), (core, max(1, self.width - 1), 1.0)):
-            for p, q in zip(self.points, self.points[1:]):
-                sdraw.line(surf, (*color, int(255 * alpha * k)), p, q, width)
-
-
-class Explosion:
-    """A shell's blast: a white-hot flash, a ring going out to the splash radius, and flying debris.
-    The debris directions come from where it landed, not a random roll, so drawing stays repeatable."""
-
-    duration = 0.4
-
-    def __init__(self, pos, radius, color):
-        self.pos = pygame.Vector2(pos)
-        self.radius = radius
-        self.color = color
-        self.t = 0.0
-        self.spin = (self.pos.x * 7.3 + self.pos.y * 3.1) % 360
-
-    def update(self, dt):
-        self.t += dt
-        return self.t < self.duration
-
-    def draw(self, surf):
-        k = self.t / self.duration
-        ease = 1 - (1 - k) ** 2
-        if k < 0.35:
-            f = k / 0.35
-            sdraw.circle(surf, (*mix((255, 250, 220), self.color, f), int(210 * (1 - f))), self.pos,
-                         self.radius * (0.25 + 0.3 * f))
-        sdraw.circle(surf, (*self.color, int(220 * (1 - k))), self.pos, max(2, self.radius * (0.3 + 0.7 * ease)), 3)
-        debris = (*shade(self.color, 0.7), int(255 * (1 - k)))
-        for i in range(7):
-            d = pygame.Vector2(1, 0).rotate(self.spin + i * 360 / 7 + (i * 29) % 20)
-            reach = self.radius * (0.4 + 0.25 * (i % 3)) * ease
-            sdraw.circle(surf, debris, self.pos + d * reach, 2.5 * (1 - k) + 0.5)
-
-
-class Sparks:
-    """A few streaks (or, with `chips`, little ice diamonds) flying out of a hit point."""
-
-    duration = 0.25
-
-    def __init__(self, pos, color, count=3, reach=12, chips=False):
-        self.pos = pygame.Vector2(pos)
-        self.color = color
-        self.count = count
-        self.reach = reach
-        self.chips = chips
-        self.spin = (self.pos.x * 7.3 + self.pos.y * 3.1) % 360
-        self.t = 0.0
-
-    def update(self, dt):
-        self.t += dt
-        return self.t < self.duration
-
-    def draw(self, surf):
-        k = self.t / self.duration
-        ease = 1 - (1 - k) ** 2
-        color = (*self.color, int(255 * (1 - k)))
-        for i in range(self.count):
-            d = pygame.Vector2(1, 0).rotate(self.spin + i * 360 / self.count + (i * 47) % 30)
-            tip = self.pos + d * self.reach * ease
-            if self.chips:
-                sdraw.polygon(surf, color, regular_polygon(tip, 2.2 * (1 - k) + 0.8, 4, d.as_polar()[1]))
-            else:
-                sdraw.line(surf, color, self.pos + d * self.reach * ease * 0.45, tip, 1.5)
-
-
-class Shards:
-    """A dead enemy popping: a white flash, then its pieces, in its lit and shaded tones, flying apart and
-    fading. The spread comes from the enemy's spin, not a random roll, so drawing stays repeatable."""
-
-    duration = 0.45
-
-    def __init__(self, pos, color, size, angle):
-        self.pos = pygame.Vector2(pos)
-        self.color = color
-        self.size = size
-        self.t = 0.0
-        n = 5 + size // 6
-        self.pieces = [(pygame.Vector2(1, 0).rotate(angle + 360 * i / n + (i * 47) % 25), 0.7 + (i * 3) % 7 / 10)
-                       for i in range(n)]
-
-    def update(self, dt):
-        self.t += dt
-        return self.t < self.duration
-
-    def draw(self, surf):
-        k = self.t / self.duration
-        ease = 1 - (1 - k) ** 2
-        if k < 0.25:  # the pop
-            sdraw.circle(surf, (255, 255, 255, int(200 * (1 - k / 0.25))), self.pos, self.size * (1 + k))
-        r = max(2.5, self.size * 0.55 * (1 - 0.4 * k))
-        alpha = int(255 * (1 - k * k))
-        tones = ((*mix(self.color, (255, 255, 255), 0.3), alpha), (*shade(self.color, 0.6), alpha))
-        for i, (direction, speed) in enumerate(self.pieces):
-            center = self.pos + direction * (self.size * 0.4 + 36 * speed * ease)
-            sdraw.polygon(surf, tones[i % 2], regular_polygon(center, r, 3, direction.as_polar()[1] + 500 * k * speed))
-
-
-class Popup:
-    """Floating text such as '+5'."""
-
-    def __init__(self, pos, text, color):
-        self.pos = pygame.Vector2(pos)
-        self.text = text
-        self.color = color
-        self.t = 0.0
-
-    def update(self, dt):
-        self.t += dt
-        self.pos.y -= 30 * dt
-        return self.t < 0.8
-
-
 class Button:
     def __init__(self, rect, label):
         self.rect = pygame.Rect(rect)
@@ -596,6 +423,19 @@ class GameView:
         self.fx_layer = pygame.Surface(sp((MAP_W, MAP_H)), pygame.SRCALPHA)
         if hasattr(self, "theme"):
             self.build_map()
+
+    def build_panel_buttons(self):
+        """The Towers side panel's buttons, in logical units (so once, whatever the scale)."""
+        x = MAP_W + 12
+        w = PANEL_W - 24
+        third = (w - 8) // 3
+        self.tower_buttons = {k: Button((x, 196 + i * 58, w, 52), k) for i, k in enumerate(TOWER_ORDER)}
+        self.sell_button = Button((x, 470, w, 36), "Sell")
+        self.rebuild_button = Button((x, 470, w, 36), "Rebuild")  # shown in the Sell spot when nothing is selected
+        self.wave_button = Button((x, HEIGHT - 98, w, 40), "Next wave")
+        self.speed_button = Button((x, HEIGHT - 50, third, 38), "Speed")
+        self.pause_button = Button((x + third + 4, HEIGHT - 50, third, 38), "Pause")
+        self.tree_button = Button((x + 2 * (third + 4), HEIGHT - 50, third, 38), "Tree")
 
     def build_map(self):
         """The level's map picture and its ambience (portal, gate, particles, glow)."""
@@ -703,23 +543,14 @@ class GameView:
             blit_text(screen, self.font, p.text, p.color, p.pos, "center", int(255 * (1 - p.t / 0.8)))
 
         self.draw_boss_bar()
-        if not (self.show_settings or self.confirm_quit or self.show_tree or self.choice or self.reward_cards
-                or self.picking_side):
+        overlay = self.overlay
+        if overlay is None:
             self.draw_banner()
-        if not (self.confirm_quit or self.reward_cards or self.picking_side):
-            self.draw_overlay()
-        if self.show_settings:
-            self.draw_settings()
-        elif self.confirm_quit:
-            self.draw_quit_prompt()
-        elif self.picking_side:
-            self.draw_side_pick()
-        elif self.reward_cards:
-            self.draw_rewards()
-        elif self.choice:
-            self.draw_choice()
-        elif self.show_tree:
-            self.draw_tree()
+        if overlay not in ("quit", "rewards", "side_pick"):
+            self.draw_state_message()  # level complete, game over...: stays under the screens above
+        if overlay:
+            {"settings": self.draw_settings, "quit": self.draw_quit_prompt, "side_pick": self.draw_side_pick,
+             "rewards": self.draw_rewards, "choice": self.draw_choice, "tree": self.draw_tree}[overlay]()
         screen.set_clip(None)
         self.draw_panel()
 
@@ -842,7 +673,8 @@ class GameView:
         shade.fill((0, 0, 0, alpha))
         self.screen.blit(shade, (0, 0))
 
-    def draw_overlay(self):
+    def draw_state_message(self):
+        """The message for the level's state: level complete, run over, pass won."""
         run_over = [(f"Levels won this run: {self.levels_won}   (best: {self.profile.best_run})", TEXT, self.font_l),
                     ("Records and unlocks are kept. Press R or click for a new run.", TEXT, self.font)]
         if self.state == "level_complete" and self.side == "monsters":
@@ -909,7 +741,7 @@ class GameView:
         mouse = mouse_pos()
         for i, (side, rect) in enumerate(self.side_pick_rects()):
             title, desc = about[side]
-            sdraw.rect(self.screen, (55, 55, 68) if rect.collidepoint(mouse) else (38, 38, 48), rect, border_radius=12)
+            sdraw.rect(self.screen, CARD_HOVER if rect.collidepoint(mouse) else CARD, rect, border_radius=12)
             sdraw.rect(self.screen, self.theme.accent, rect, 3, border_radius=12)
             icon = pygame.Vector2(rect.centerx, rect.top + 46)
             if side == "towers":
@@ -939,7 +771,7 @@ class GameView:
         for i, (rect, kind) in enumerate(zip(self.choice_cards(), options)):
             spec = TOWERS[kind]
             hover = rect.collidepoint(mouse)
-            sdraw.rect(self.screen, (55, 55, 68) if hover else (38, 38, 48), rect, border_radius=10)
+            sdraw.rect(self.screen, CARD_HOVER if hover else CARD, rect, border_radius=10)
             sdraw.rect(self.screen, spec["color"], rect, 3, border_radius=10)
             draw_tower_shape(self.screen, spec, pygame.Vector2(rect.centerx, rect.top + 38))
             self.text(self.font_l, spec["name"], spec["color"], (rect.centerx, rect.top + 66), "midtop")
@@ -967,7 +799,7 @@ class GameView:
             card = UNLOCKS[self.reward_pool][key]
             rank = self.profile.rank(self.reward_pool, key)
             hover = rect.collidepoint(mouse)
-            sdraw.rect(self.screen, (55, 55, 68) if hover else (38, 38, 48), rect, border_radius=10)
+            sdraw.rect(self.screen, CARD_HOVER if hover else CARD, rect, border_radius=10)
             sdraw.rect(self.screen, GOLD if card["rare"] else PANEL_LINE, rect, 4 if card["rare"] else 2,
                        border_radius=10)
             icon = pygame.Vector2(rect.centerx, rect.top + 44)
@@ -1064,7 +896,7 @@ class GameView:
         for scale, rect in self.scale_buttons():
             fits = self.fits(scale)
             current = scale == SCALE
-            bg = (90, 90, 108) if fits and rect.collidepoint(mouse) else (55, 55, 68) if fits else (32, 32, 40)
+            bg = BUTTON_HOVER if fits and rect.collidepoint(mouse) else CARD_HOVER if fits else (32, 32, 40)
             sdraw.rect(self.screen, bg, rect, border_radius=8)
             sdraw.rect(self.screen, GOLD if current else PANEL_LINE, rect, 3 if current else 1, border_radius=8)
             self.text(self.font, f"{scale * 100:.0f}%", (TEXT if fits else TEXT_DIM) if not current else GOLD,
@@ -1081,11 +913,11 @@ class GameView:
                   TEXT_DIM, (MAP_W / 2, 370), "midtop")
         for rect, on, label in ((self.ambient_button(), self.ambient, "Ambient effects: {}  [A]"),
                                 (self.fullscreen_button(), self.fullscreen, "Fullscreen: {}  [F11]")):
-            sdraw.rect(self.screen, (90, 90, 108) if rect.collidepoint(mouse) else (55, 55, 68), rect, border_radius=8)
+            sdraw.rect(self.screen, BUTTON_HOVER if rect.collidepoint(mouse) else CARD_HOVER, rect, border_radius=8)
             sdraw.rect(self.screen, GOLD if on else PANEL_LINE, rect, 2 if on else 1, border_radius=8)
             self.text(self.font, label.format("On" if on else "Off"), TEXT if on else TEXT_DIM, rect.center, "center")
         b = self.settings_close_button()
-        sdraw.rect(self.screen, (90, 90, 108) if b.collidepoint(mouse) else (70, 70, 85), b, border_radius=8)
+        sdraw.rect(self.screen, BUTTON_HOVER if b.collidepoint(mouse) else BUTTON, b, border_radius=8)
         sdraw.rect(self.screen, self.theme.accent, b, 3, border_radius=8)
         label = "Play  [Enter]" if self.untouched else "Resume  [Enter]"
         hint_y = 550
@@ -1093,7 +925,7 @@ class GameView:
             label = "New game  [Enter]"
             c = self.settings_continue_button()
             theme = LEVELS[self.save["level"]][0]
-            sdraw.rect(self.screen, (90, 90, 108) if c.collidepoint(mouse) else (70, 70, 85), c, border_radius=8)
+            sdraw.rect(self.screen, BUTTON_HOVER if c.collidepoint(mouse) else BUTTON, c, border_radius=8)
             sdraw.rect(self.screen, theme.accent, c, 3, border_radius=8)
             self.text(self.font, f"Continue: level {self.save['level'] + 1}, {theme.name}  [C]", TEXT, c.center,
                       "center")
@@ -1104,9 +936,9 @@ class GameView:
 
     def draw_button(self, b, label, enabled=True, active=False, font=None):
         hover = b.rect.collidepoint(mouse_pos())
-        bg = (70, 70, 85) if enabled else (40, 40, 48)
+        bg = BUTTON if enabled else BUTTON_OFF
         if enabled and hover:
-            bg = (90, 90, 108)
+            bg = BUTTON_HOVER
         sdraw.rect(self.screen, bg, b.rect, border_radius=6)
         border = self.theme.accent if active else PANEL_LINE
         sdraw.rect(self.screen, border, b.rect, 3 if active else 1, border_radius=6)
@@ -1137,7 +969,7 @@ class GameView:
             spec = TOWERS[kind]
             affordable = self.gold >= spec["cost"]
             active = self.build_kind == kind
-            bg = (70, 70, 85) if b.rect.collidepoint(mouse_pos()) else (48, 48, 58)
+            bg = BUTTON if b.rect.collidepoint(mouse_pos()) else BUTTON_QUIET
             sdraw.rect(screen, bg, b.rect, border_radius=6)
             sdraw.rect(screen, self.theme.accent if active else PANEL_LINE, b.rect,
                        3 if active else 1, border_radius=6)

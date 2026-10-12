@@ -5,13 +5,32 @@ queue along the bottom of the map, and the aiming circle. Mixed into graphics.Ga
 import pygame
 
 from attack import DEFENDER_LIVES, ESCORT_KIND
-from graphics import (BAD, GOLD, GOOD, MAP_H, MAP_W, PANEL_LINE, TEXT, TEXT_DIM, draw_enemy_icon, mouse_pos,
-                      sdraw)
-from levels import WAVES_PER_LEVEL
+from graphics import (BAD, BUTTON, BUTTON_QUIET, GOLD, GOOD, MAP_H, MAP_W, PANEL_LINE, TEXT, TEXT_DIM, draw_enemy_icon,
+                      mouse_pos, sdraw)
+from levels import WAVES_PER_LEVEL, tile_center
 from monsters import ABILITIES, ENEMY_TYPES, UPGRADES
 
 
 class AttackView:
+    # ---- layout (attack.py's input handling uses it too) -----------------------
+    def attack_rows(self):
+        """(monster kind or ability, panel rect): the draft list in the build phase, abilities during a wave."""
+        keys = self.draftable() if self.state == "build" else list(self.cooldowns) if self.state == "wave" else []
+        return [(k, pygame.Rect(MAP_W + 12, 206 + i * 24, 196, 22)) for i, k in enumerate(keys)]
+
+    def upgrade_buttons(self):
+        """(upgrade, panel rect): a row of three under the draft list."""
+        return [(k, pygame.Rect(MAP_W + 12 + i * 66, 474, 64, 46)) for i, k in enumerate(UPGRADES)]
+
+    def queue_icons(self):
+        """(queue index, center) for the drafted monsters shown along the bottom of the map."""
+        if self.state != "build":
+            return []
+        per_row = (MAP_W - 20) // 18
+        return [(i, pygame.Vector2(20 + (i % per_row) * 18, tile_center(0, 15).y + 4 - (i // per_row) * 20))
+                for i in range(len(self.queue))]
+
+    # ---- drawing -------------------------------------------------------------
     def draw_attack_panel(self):
         x = MAP_W + 12
         self.draw_panel_header()
@@ -87,7 +106,7 @@ class AttackView:
             self.text(self.font_s, label, color, (rect.centerx, rect.bottom - 7), "midbottom")
 
     def draw_row(self, rect, enabled, hover, active):
-        bg = (70, 70, 85) if enabled and hover else (48, 48, 58) if enabled else (36, 36, 44)
+        bg = BUTTON if enabled and hover else BUTTON_QUIET if enabled else (36, 36, 44)
         sdraw.rect(self.screen, bg, rect, border_radius=5)
         sdraw.rect(self.screen, GOLD if active else PANEL_LINE, rect, 2 if active else 1, border_radius=5)
 

@@ -7,8 +7,9 @@ a message naming the file and the problem.
 import json
 import os
 
-TOWERS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "towers.json")
-EVOLUTION_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "evolution.json")
+HERE = os.path.dirname(os.path.abspath(__file__))
+TOWERS_FILE = os.path.join(HERE, "towers.json")
+EVOLUTION_FILE = os.path.join(HERE, "evolution.json")
 
 # Shapes a tower layer can use (sprites.layer draws them).
 SHAPES = ("circle", "square", "diamond", "triangle", "hexagon", "octagon", "star")

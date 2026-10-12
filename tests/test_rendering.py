@@ -22,8 +22,9 @@ import main
 import sprites
 import terrain
 from entities import Projectile
-from graphics import HEIGHT, MAP_H, MAP_W, PANEL_W, SCALES, TILE, tile_center
+from graphics import HEIGHT, MAP_H, MAP_W, PANEL_W, SCALES, TILE
 from helpers import dummy_enemy, free_tiles, put, scaled
+from levels import tile_center
 from monsters import ENEMY_TYPES
 from towers import CROSS, EVOLVE, TOWERS
 

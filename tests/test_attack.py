@@ -445,7 +445,7 @@ def test_budget_claims_a_share_of_the_defenders_comp(screen):
     g = main.Game(screen, log_dir=None, side="monsters")
     g.profile.tower_records["1"] = {"1": comp(("railgun", (6, 4), 1000))}
     g.load_level(0)
-    assert g.share == pytest.approx(main.BUDGET["share_start"])
+    assert g.share == pytest.approx(BUDGET["share_start"])
     assert g.budget == round(1000 * g.share), "the share beats the generated wave's 40"
 
 
@@ -473,7 +473,7 @@ def test_starter_pack_the_first_time_only(screen):
         assert g.reward_pool == "monster" and g.frozen
         g.handle_event(key(pygame.K_1))
         picks += 1
-    assert picks == main.BUDGET["starter_picks"] and sum(g.profile.unlocks["monster"].values()) == picks
+    assert picks == BUDGET["starter_picks"] and sum(g.profile.unlocks["monster"].values()) == picks
     assert g.profile.milestones["starter_pack"]
     g.load_level(1)
     assert g.reward_cards == []

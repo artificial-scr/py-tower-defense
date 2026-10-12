@@ -13,7 +13,8 @@ from collections import defaultdict
 import pygame
 
 from balance_log import new_kind_stats
-from graphics import Beam, Explosion, Ring, Sparks, tile_center
+from effects import Beam, Explosion, Ring, Sparks
+from levels import tile_center
 from monsters import ENEMY_TYPES
 from towers import NO_TOWER_MODS, TOWER_LINES, TOWERS, fusion_options
 

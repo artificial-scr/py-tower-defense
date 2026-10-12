@@ -5,8 +5,7 @@ import random
 import pygame
 
 from entities import Enemy, Tower
-from graphics import tile_center
-from levels import COLS, ROWS
+from levels import COLS, ROWS, tile_center
 from towers import TOWER_ORDER, TOWERS
 
 E = pygame.event.Event

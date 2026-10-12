@@ -7,8 +7,9 @@ import pytest
 
 import graphics
 import main
-from graphics import SCALES, tile_center
+from graphics import SCALES
 from helpers import key, mouse_down, mouse_up, put, scaled
+from levels import tile_center
 
 
 # ---- speed ----------------------------------------------------------------------

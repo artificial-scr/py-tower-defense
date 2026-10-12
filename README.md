@@ -255,7 +255,8 @@ These logs are meant for tuning the data files. Pass `--no-log` to turn them off
 | `monsters.py` | Loads and validates `monsters.json` |
 | `levels.py` | Level themes and paths, wave generation and wave values |
 | `entities.py` | `Enemy`, `Projectile`, `Tower`: the combat rules, monster mechanics and abilities |
-| `graphics.py` | Everything drawn on screen (shadows, animation, effects, panels and overlays), plus display scaling |
+| `graphics.py` | Everything drawn on screen (shadows, animation, panels and overlays), plus display scaling |
+| `effects.py` | Short-lived visual effects: rings, beams, explosions, sparks, shards, cast warnings, floating text |
 | `sprites.py` | The tower and enemy pictures, drawn in code once per display scale (shaded, anti-aliased, one per direction); each enemy type's creature design and animation |
 | `terrain.py` | The level maps, drawn once per level: textured ground, a path styled for each theme, shaded props |
 | `ambience.py` | What moves on the map without affecting the game: particles for each theme, glowing cracks and crystals that pulse, the spawn portal and exit gate |

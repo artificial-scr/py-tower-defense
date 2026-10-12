@@ -5,6 +5,8 @@ built. Enemy types are in monsters.json (see monsters.py).
 import random
 from dataclasses import dataclass
 
+import pygame
+
 from monsters import ENEMY_TYPES
 
 COLS, ROWS = 20, 16  # map size in tiles
@@ -81,6 +83,11 @@ BOSS_LEVELS = {n: boss for n, boss in ALL_BOSS_LEVELS.items() if n <= LEVEL_COUN
 # --------------------------------------------------------------------------
 # Paths and waves
 # --------------------------------------------------------------------------
+def tile_center(tx, ty):
+    """The middle of a tile, in logical pixels."""
+    return pygame.Vector2(tx * TILE + TILE / 2, ty * TILE + TILE / 2)
+
+
 def build_path_cells(waypoints):
     cells = set()
     for (x0, y0), (x1, y1) in zip(waypoints, waypoints[1:]):
