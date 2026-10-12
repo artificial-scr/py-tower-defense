@@ -12,6 +12,7 @@ import progress
 from entities import Enemy, Tower
 from graphics import SCALES
 from helpers import key, mouse_down, put, run_wave, scaled
+from monsters import REWARDS
 from progress import UNLOCKS, Profile, load_unlocks
 from towers import NO_TOWER_MODS
 
@@ -99,13 +100,15 @@ def test_towers_wins_give_no_cards_until_monsters_level_20_is_beaten(game):
 def test_towers_wins_give_tower_cards_after_that(game):
     game.profile.reach("tower_cards")
     win_towers_level(game)
+    assert game.record_tier == "normal", "generated waves are par"
     assert len(game.reward_cards) == 3 and game.reward_pool == "tower" and game.frozen
 
 
 def test_monsters_wins_give_monster_cards_and_a_key_picks_one(screen):
     g = main.Game(screen, log_dir=None, side="monsters")
     win_monsters_level(g)
-    assert g.reward_pool == "monster" and len(g.reward_cards) == 3
+    assert g.record_tier == "weak", "no tower record at all"
+    assert g.reward_pool == "monster" and len(g.reward_cards) == REWARDS["weak"]["cards"] == 2
     second = g.reward_cards[1]
     g.handle_event(key(pygame.K_2))
     assert g.reward_cards == [] and g.profile.rank("monster", second) == 1
@@ -128,12 +131,12 @@ def test_space_doesnt_skip_the_card_screen(screen):
 
 
 # ---- milestones -------------------------------------------------------------------------------
-def test_level_20_victories_reach_the_milestones(game, screen):
-    game.load_level(19)
+def test_last_level_victories_reach_the_milestones(game, screen):
+    game.load_level(len(main.LEVELS) - 1)
     win_towers_level(game)
     assert game.state == "victory" and game.profile.milestones["monsters_side"]
     g = main.Game(screen, log_dir=None, side="monsters")
-    g.load_level(19)
+    g.load_level(len(main.LEVELS) - 1)
     win_monsters_level(g)
     assert g.state == "victory" and g.profile.milestones["tower_cards"]
 
@@ -239,3 +242,23 @@ def test_card_screen_draws(screen, scale, mouse):
     for pool, cards in (("monster", ["juggernaut", "thick_hide", "emp"]), ("tower", ["detector", "salvage"])):
         g.reward_pool, g.reward_cards = pool, cards
         g.draw()
+
+
+def test_a_sure_rare_comes_first_while_any_are_left(game):
+    rares = [k for k, c in UNLOCKS["monster"].items() if c["rare"]]
+    for seed in range(5):
+        cards = game.profile.draw_cards("monster", random.Random(seed), 3, rare=True)
+        assert cards[0] in rares and len(set(cards)) == 3
+    for k in rares:
+        for _ in range(UNLOCKS["monster"][k]["max"]):
+            game.profile.unlock("monster", k)
+    assert len(game.profile.draw_cards("monster", random.Random(0), 3, rare=True)) == 3, "none left: just 3 cards"
+
+
+def test_towers_side_record_tiers(game):
+    """Generated waves are par (normal); a big monster record is strong."""
+    assert game.record_ratio == pytest.approx(1.0) and game.record_tier == "normal"
+    game.profile.monster_records["1"] = {"5": {"value": 900, "queue": ["tank"] * 75, "hp_mult": 1.0, "mods": {},
+                                               "casts": []}}
+    game.load_level(0)
+    assert game.record_tier == "strong"

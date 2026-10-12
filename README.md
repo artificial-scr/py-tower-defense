@@ -1,12 +1,12 @@
 # py-tower-defense
 
 A roguelike tower defense game built with [pygame-ce](https://pyga.me/). You never upgrade a tower
-directly. Instead, towers evolve by **fusing** two of them into a stronger one. There are 20 levels,
-each with its own color theme and path, and boss fights on levels 10 and 20.
+directly. Instead, towers evolve by **fusing** two of them into a stronger one. There are 10 levels,
+each with its own color theme and path, and a boss fight on level 10.
 
-Beat all 20 levels and the game flips: you play the **monsters** against your own best tower
+Beat all 10 levels and the game flips: you play the **monsters** against your own best tower
 defenses, level by level. Beat those, and you defend against your own monster waves. A run goes on,
-switching sides every 20 levels, until you lose a level.
+switching sides every 10 levels, until you lose a level.
 
 ## Quick start
 
@@ -27,7 +27,7 @@ The game opens on the settings screen, where you can choose a display scale. Pre
 ## The run
 
 ```
-Pass 1: Towers  L1 ... L20  ──beat L20──▶  Pass 2: Monsters  L1 ... L20  ──beat L20──▶  Pass 3: Towers ...
+Pass 1: Towers  L1 ... L10  ──beat L10──▶  Pass 2: Monsters  L1 ... L10  ──beat L10──▶  Pass 3: Towers ...
          │                                          │
          └──── lose any level ──▶  RUN OVER  ◀──────┘
 ```
@@ -37,9 +37,10 @@ Pass 1: Towers  L1 ... L20  ──beat L20──▶  Pass 2: Monsters  L1 ... L2
   a Towers level records the strongest set of towers you had during each of its 5 waves. Winning a
   Monsters level records the waves you sent, including where and when you used abilities. A record
   only ever gets replaced by a stronger one, so the challenge never gets easier.
-- **Unlocks:** after a win, pick one of three cards. They're permanent and survive the end of a run.
-  Monsters wins give monster cards. Towers wins give tower cards once you've beaten Monsters level 20.
-- **New run:** once you've beaten Towers level 20, every new run lets you pick which side to start on.
+- **Unlocks:** after a win, pick one of three cards (two after beating a weak record; a strong one
+  guarantees a rare). They're permanent and survive the end of a run.
+  Monsters wins give monster cards. Towers wins give tower cards once you've beaten Monsters level 10.
+- **New run:** once you've beaten Towers level 10, every new run lets you pick which side to start on.
 
 The full design, and the reasoning behind each rule, is in [DESIGN.md](DESIGN.md).
 
@@ -73,13 +74,24 @@ The towers on the map are your **tower record** for the level, and you have to g
   to the queue, and hold Shift to add 5. The queue shows along the bottom of the map, and clicking an
   icon removes it. Then press Space to send the wave.
 - **Budget:** each wave adds the larger of what the generated wave was worth and a **share of the
-  defender's comp value** (40% to start, +2% for every Monsters level you win in the run). Unspent
-  budget carries over to the next wave, so you can save up for one big push, or pace your waves.
-  Different levels reward different plans.
+  defender's comp value**. The share starts at 40% and grows with every Monsters level you win in
+  the run: +1%, +2% or +3% depending on how strong the defense was (weak, normal or strong compared
+  with the level's generated waves). If the run is behind a pace of 2 lives per level, each level's
+  share gets +3% per life behind (up to +15%). Unspent budget carries over to the next wave, so you
+  can save up for one big push, or pace your waves. Different levels reward different plans.
+- **Stat upgrades:** Vitality (+15% HP), Stride (+10% speed, up to +50%) and Plating (+2 armor), up
+  to 5 ranks each, bought during the draft with `Q` `W` `E` or the buttons under the draft list.
+  They last for the rest of the pass. They're expensive (a quarter of the level's budget times the
+  rank), but each one also sends Basics worth its price as an escort (at most 60 per wave). Right
+  click an upgrade to undo a rank bought in this draft.
 - **Abilities:** during a wave, press their number (or click them) once they're ready. Area
   abilities then need a click on the map.
-- **You win** by draining the defender's 20 lives within the 5 waves. If the towers still stand
-  after wave 5, the run is over.
+- **Lives last the whole pass:** the defender has 20 lives for all 10 levels. Take at least one in
+  a level to clear it. Take the last one, on any level, and you win the pass. If a level takes no
+  lives, or the last level ends with lives left, the run is over.
+- **The finale:** the Towers pass after a Monsters win ends on the wave where the last life went,
+  and the Warden joins that wave. Winning early means a shorter Towers pass that ends on that wave,
+  with the Warden joining it.
 - **Starter pack:** the first time you play the Monsters side, you pick 3 cards to begin with.
 
 ## Monsters
@@ -96,8 +108,7 @@ The towers on the map are your **tower record** for the level, and you have to g
 | Splitter | Breaks into 3 Swarmlings when killed | Card |
 | Phantom | Every 4 s it can't be targeted for 1.5 s (splash still hits it) | Card |
 | Juggernaut | Huge and immune to slows | Rare card |
-| **The Warden** | Boss of level 10: summons Fast monsters and resists slows | Boss level, last wave |
-| **The Overlord** | Boss of level 20: summons Tanks and resists slows even more | Boss level, last wave |
+| **The Warden** | Boss of level 10: summons Fast monsters and resists slows | Boss level, last wave; a Towers pass's finale wave |
 
 If a boss gets through, its side loses every life at once.
 
@@ -166,13 +177,14 @@ what the fusion would produce.
 | Drag a tower | Move it to any free tile, even during a wave. Drop it on a matching tower to fuse them | — |
 | Right click / `Esc` | Cancel placement / deselect | Cancel aiming |
 | `Backspace` | — | Take the last monster off the queue |
+| `Q` / `W` / `E` | — | Draft phase: buy a rank of Vitality / Stride / Plating (right click its button to undo) |
 | `S` / `B` | Sell the selected tower / rebuild the previous level's towers | — |
 
 Both sides:
 
 | Input | Action |
 |---|---|
-| `Space` | Send the next wave / continue to the next level / switch sides after level 20 (sending a wave is blocked for 1 s after a level change, so a double press can't start one by accident) |
+| `Space` | Send the next wave / continue to the next level / switch sides when a pass is won (sending a wave is blocked for 1 s after a level change, so a double press can't start one by accident) |
 | `C` | Continue the saved run (on the start screen) |
 | `T` | Show the evolution tree |
 | `F` / `Shift+F` | Change game speed: 1×, 2×, 4×, 10× |
@@ -190,7 +202,8 @@ There are two files, both git-ignored:
 
 - **`profile.json`** is kept forever: your unlocks, the records for every level and wave, your
   milestones and your best run.
-- **`savegame.json`** is the run in progress, saved at the start of every level. On the start screen,
+- **`savegame.json`** is the run in progress, saved at the start of every level (on the Monsters side
+  with the defender's lives, your upgrades and any escort still to send). On the start screen,
   press **C** to continue it from the start of that level. Losing a level ends the run and deletes it.
 
 ## Modding
@@ -203,12 +216,14 @@ the game stops with a message that says what's wrong.
   `slow_time`, `burn` + `burn_time`, `chain`, `multishot`, `instant` and `vs_slowed`.
 - **`evolution.json`**: the three tier 1 → 3 lines and the twelve tier 4 recipes.
 - **`monsters.json`**: every monster's stats, cost, look and mechanics (`armor`, `heal_aura`, `split`,
-  `phase`, `slow_floor`, `summon`), the abilities, and the Monsters-side budget rules (`share_start`,
-  `share_per_win`, `starter_picks`).
+  `phase`, `slow_floor`, `summon`), the abilities, the stat upgrades, and the Monsters-side rules
+  (`share_start`, `starter_picks`, `upgrade_price`, `escort_per_wave`, `max_lives_per_level`,
+  `pace_per_life`, `pace_max`, `pace_min`) and the reward tiers (`rewards`).
 - **`unlocks.json`**: both card pools, with each card's effect, numbers per rank, max rank, weight and
   rarity.
 
-Levels and wave generation are in `levels.py`.
+Levels and wave generation are in `levels.py`. It holds 20 levels, but only the first `LEVEL_COUNT`
+(10) are played; levels 11–20 and their boss, the Overlord, are kept as a backup.
 
 ## Balance logs
 

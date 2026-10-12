@@ -1,4 +1,4 @@
-"""Runs: passes that switch sides after level 20, the run ending on a loss, picking a side for a new
+"""Runs: passes that switch sides after the last level, the run ending on a loss, picking a side for a new
 run, and saving / continuing a run in progress."""
 
 import pygame
@@ -9,6 +9,8 @@ import main
 from graphics import SCALES
 from helpers import key, mouse_down, put, run_wave, scaled
 from progress import Profile
+
+LAST = len(main.LEVELS) - 1  # index of the last level of a pass
 
 
 def win_towers_level(g):
@@ -38,8 +40,8 @@ def lose_monsters_level(g):
 
 
 # ---- passes ---------------------------------------------------------------------------
-def test_beating_towers_level_20_switches_to_the_monsters_side(game):
-    game.load_level(19)
+def test_beating_the_last_towers_level_switches_to_the_monsters_side(game):
+    game.load_level(LAST)
     win_towers_level(game)
     assert game.state == "victory" and game.levels_won == 1
     game.handle_event(key(pygame.K_SPACE))
@@ -48,11 +50,11 @@ def test_beating_towers_level_20_switches_to_the_monsters_side(game):
     assert main.load_save()["side"] == "monsters" and main.load_save()["pass"] == 2
 
 
-def test_beating_monsters_level_20_switches_back_with_a_fresh_purse(screen):
+def test_beating_the_last_monsters_level_switches_back_with_a_fresh_purse(screen):
     g = main.Game(screen, log_dir=None, side="monsters")
     g.profile.reach("tower_cards")
     g.profile.unlock("tower", "treasury")
-    g.load_level(19)
+    g.load_level(LAST)
     win_monsters_level(g)
     assert g.state == "victory"
     g.advance()
@@ -63,7 +65,7 @@ def test_beating_monsters_level_20_switches_back_with_a_fresh_purse(screen):
 def test_monsters_side_faces_the_records_set_on_the_towers_side(game):
     win_towers_level(game)  # level 1 cleared with a railgun on (6, 4)
     game.side, game.state = "towers", "victory"
-    game.level_idx = 19
+    game.level_idx = LAST
     game.advance()
     assert game.side == "monsters" and game.towers == {}, "wave 1 had no towers in the record"
     game.place_defender(5)
@@ -71,11 +73,90 @@ def test_monsters_side_faces_the_records_set_on_the_towers_side(game):
 
 
 def test_levels_won_counts_across_passes_and_sets_the_best_run(game):
-    game.load_level(19)
+    game.load_level(LAST)
     win_towers_level(game)
     game.advance()
     win_monsters_level(game)
     assert game.levels_won == 2 and Profile.load(main.PROFILE_FILE).best_run == 2
+
+
+# ---- finales: a Towers pass ends where the Monsters pass before it was won ---------------
+def win_monsters_pass(screen, level_idx=2, wave=3):
+    """A Monsters pass won on wave `wave` of level `level_idx` (0-based), with 25 Basics."""
+    g = main.Game(screen, log_dir=None, side="monsters")
+    g.load_level(level_idx)
+    g.towers, g.lives = {}, 1
+    for _ in range(wave - 1):
+        g.send_wave()
+        run_wave(g)
+    win_monsters_level(g)
+    assert g.state == "victory" and g.finale == (level_idx + 1, wave)
+    return g
+
+
+def test_the_towers_pass_after_a_monsters_win_ends_on_the_wave_it_was_won(screen):
+    g = win_monsters_pass(screen)
+    g.advance()
+    assert (g.side, g.finale, g.last_level_idx) == ("towers", (3, 3), 2)
+    assert main.load_save()["finale"] == (3, 3)
+    g.load_level(1)
+    assert g.level_waves == main.WAVES_PER_LEVEL and not g.is_boss_level
+    g.load_level(2)
+    assert g.level_waves == 3 and g.level_boss == "warden"
+    put(g, "railgun", (6, 4))
+    for _ in range(3):
+        g.start_wave()
+        g.hp_mult = 0.01
+        run_wave(g)
+    assert g.state == "victory" and g.wave_idx == 3
+
+
+def test_the_warden_joins_the_finale_wave_once(screen):
+    g = win_monsters_pass(screen)
+    g.advance()
+    g.load_level(2)
+    g.wave_idx = 1
+    g.start_wave()
+    assert g.spawn_queue[-1] != "warden", "only the finale wave"
+    g.state, g.wave_idx = "build", 2
+    g.start_wave()
+    record = g.profile.monster_record(3)[3]["queue"]
+    assert g.spawn_queue == record + ["warden"]
+    g.profile.monster_records["3"]["3"]["queue"] = ["warden", "basic"]  # a record that drafted it already
+    g.state, g.wave_idx = "build", 2
+    g.start_wave()
+    assert g.spawn_queue == ["basic", "warden"]
+
+
+def test_a_finale_on_the_last_wave_of_the_last_level_is_the_full_pass_with_the_warden(screen):
+    g = win_monsters_pass(screen, len(main.LEVELS) - 1, main.WAVES_PER_LEVEL)
+    g.advance()
+    assert g.last_level_idx == LAST and g.level_waves == main.WAVES_PER_LEVEL
+
+
+def test_the_monsters_pass_after_a_finale_and_new_runs_have_none(screen):
+    g = win_monsters_pass(screen)
+    g.advance()
+    g.level_idx, g.state = 2, "victory"
+    g.advance()
+    assert g.side == "monsters" and g.finale is None and g.last_level_idx == LAST
+    g.finale = (3, 3)
+    g.new_run("towers")
+    assert g.finale is None and g.last_level_idx == LAST
+
+
+def test_continue_keeps_the_finale(screen):
+    main.write_save({"side": "towers", "pass": 2, "levels_won": 4, "level": 1, "gold": 150, "lives": 20,
+                     "layout": [], "finale": [3, 2]})
+    g = main.Game(screen, log_dir=None)
+    g.continue_game()
+    assert g.finale == (3, 2) and g.last_level_idx == 2
+
+
+@pytest.mark.parametrize("finale", [[1, 2], [len(main.LEVELS) + 1, 1], [3, 0], [3, 6]])
+def test_a_finale_that_doesnt_fit_the_save_is_dropped(finale):
+    main.write_save({"side": "towers", "level": 1, "gold": 150, "lives": 20, "layout": [], "finale": finale})
+    assert main.load_save()["finale"] is None
 
 
 # ---- the run ending -------------------------------------------------------------------
@@ -140,7 +221,8 @@ def test_continue_resumes_side_pass_and_score(screen):
 def test_old_saves_count_as_towers_pass_1():
     main.write_save({"level": 6, "gold": 500, "lives": 9, "layout": []})
     assert main.load_save() == {"side": "towers", "pass": 1, "levels_won": 6, "monster_wins": 0, "level": 6,
-                                "gold": 500, "lives": 9, "layout": []}
+                                "gold": 500, "lives": 9, "layout": [], "upgrades": {}, "escort": 0,
+                                "share_growth": 0.0, "finale": None}
 
 
 def test_no_continue_once_the_run_on_screen_is_played(game):
@@ -164,5 +246,12 @@ def test_run_screens_draw(screen, scale, mouse):
         for state in ("game_over", "victory"):
             g.state = state
             g.draw()
+    g.side, g.finale, g.state = "towers", (1, 3), "build"
+    g.load_level(0)
+    g.draw()  # finale banner
+    g.banner_timer = 0
+    for state in ("wave", "victory"):
+        g.state = state
+        g.draw()
     g.picking_side = True
     g.draw()

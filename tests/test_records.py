@@ -166,7 +166,7 @@ def test_a_won_monsters_level_comes_back_on_the_towers_side(screen):
     attacker.cast("frenzy")
     while attacker.state == "wave":
         attacker.update(1 / 60)
-    assert attacker.state == "level_complete"
+    assert attacker.state == "victory", "30 Fast monsters past no towers take all 20 lives"
 
     defender = main.Game(screen, log_dir=None)  # same profile file
     defender.start_wave()

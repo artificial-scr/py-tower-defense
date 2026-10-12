@@ -1,7 +1,7 @@
 {
   "_comment": [
     "Unlock cards, loaded when the game starts. After a level is won, the player picks one of three cards",
-    "drawn from that side's pool (tower cards only once Monsters level 20 has been beaten). Picks are permanent.",
+    "drawn from that side's pool (tower cards only once the Monsters side's last level has been beaten). Picks are permanent.",
     "Every card: name, desc, effect, weight (how likely it is to be drawn), max (ranks; default 1), rare (gold",
     "border; default false), plus what its effect needs.",
     "Monster effects: type (makes `type` draftable), ability (unlocks `ability`; each extra rank cuts its",

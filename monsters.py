@@ -1,4 +1,5 @@
-"""Monster data: enemy stats, looks and mechanics, and the monster player's abilities, from monsters.json.
+"""Monster data: enemy stats, looks and mechanics, and the monster player's abilities and stat upgrades,
+from monsters.json.
 
 Read and checked once, at import. A mistake stops the game with a message naming the problem.
 """
@@ -20,11 +21,17 @@ ABILITY_EXTRAS = ("radius", "amount", "duration")
 EFFECTS = {"disable": ("duration",), "range": ("amount", "duration"), "haste": ("amount", "duration"),
            "heal": ("amount",), "shield": ("amount", "duration")}
 TARGETS = ("area", "all")
-BUDGET_FIELDS = ("share_start", "share_per_win", "starter_picks")
+BUDGET_FIELDS = ("share_start", "starter_picks", "upgrade_price", "escort_per_wave", "max_lives_per_level",
+                 "pace_per_life", "pace_max", "pace_min")
+TIERS = ("weak", "normal", "strong")
+TIER_FIELDS = ("cards", "rare", "share")
+UPGRADE_FIELDS = ("name", "desc", "stat", "per_rank", "max")
+UPGRADE_STATS = ("hp", "speed", "armor")
+SPEED_UPGRADE_CAP = 0.5  # a speed upgrade's ranks add up to +50% speed at most
 
 
 def load_monsters(path):
-    """Return (enemy types, abilities, budget rules) from monsters.json."""
+    """Return (enemy types, abilities, budget rules, stat upgrades, reward tiers) from monsters.json."""
     data = read_json(path)
     name = os.path.basename(path)
 
@@ -80,8 +87,31 @@ def load_monsters(path):
     budget = data["budget"]
     check_fields("budget", budget, BUDGET_FIELDS, ())
     if not all(isinstance(budget[f], (int, float)) and budget[f] >= 0 for f in BUDGET_FIELDS):
-        fail("budget", "share_start, share_per_win and starter_picks must be numbers, 0 or more")
-    return enemies, abilities, budget
+        fail("budget", f"{', '.join(BUDGET_FIELDS)} must be numbers, 0 or more")
+
+    upgrades = {}
+    for key, raw in data["upgrades"].items():
+        what = f"upgrade {key!r}"
+        check_fields(what, raw, UPGRADE_FIELDS, ())
+        if raw["stat"] not in UPGRADE_STATS:
+            fail(what, f"stat must be one of {UPGRADE_STATS}")
+        if not (raw["per_rank"] > 0 and isinstance(raw["max"], int) and raw["max"] >= 1):
+            fail(what, "per_rank must be positive and max a whole number, 1 or more")
+        if raw["stat"] == "speed" and raw["per_rank"] * raw["max"] > SPEED_UPGRADE_CAP + 1e-9:
+            fail(what, f"speed can go up by {SPEED_UPGRADE_CAP:.0%} at most (per_rank x max)")
+        upgrades[key] = dict(raw)
+
+    rewards = data["rewards"]
+    check_fields("rewards", rewards, ("tiers",) + TIERS, ())
+    for side in ("monsters", "towers"):
+        bounds = rewards["tiers"].get(side)
+        if not (isinstance(bounds, list) and len(bounds) == 2 and 0 <= bounds[0] <= bounds[1]):
+            fail("rewards", f"tiers.{side} must be [weak below, strong from], in order")
+    for tier in TIERS:
+        check_fields(f"rewards tier {tier!r}", rewards[tier], TIER_FIELDS, ())
+        if not (isinstance(rewards[tier]["cards"], int) and rewards[tier]["cards"] >= 1):
+            fail(f"rewards tier {tier!r}", "cards must be a whole number, 1 or more")
+    return enemies, abilities, budget, upgrades, rewards
 
 
-ENEMY_TYPES, ABILITIES, BUDGET = load_monsters(MONSTERS_FILE)
+ENEMY_TYPES, ABILITIES, BUDGET, UPGRADES, REWARDS = load_monsters(MONSTERS_FILE)

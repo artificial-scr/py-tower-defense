@@ -29,12 +29,12 @@ def test_game_can_be_won(game):
     """Seed 1 is a known winning run; if it starts losing, the game got harder (or the bot worse)."""
     random.seed(1)
     bot_play(game)
-    assert game.state == "victory" and game.level_idx == 19
+    assert game.state == "victory" and game.level_idx == len(main.LEVELS) - 1
 
 
 def test_stress_at_10x(game):
-    """Level 20's last wave against 40 final-form towers, updated and drawn at 10x until it ends."""
-    game.load_level(19)
+    """The last level's last wave against 40 final-form towers, updated and drawn at 10x until it ends."""
+    game.load_level(len(main.LEVELS) - 1)
     game.speed = 10
     finals = [k for k, s in TOWERS.items() if s["tier"] == 4]
     for i, tile in enumerate(free_tiles(game)[:40]):
@@ -59,17 +59,20 @@ def records(game):
     assert game.profile.tower_record(2)
 
 
-@pytest.mark.parametrize("save_for_last, wins", [(True, True), (False, False)])
-def test_monsters_level_1_is_won_by_saving_up(records, screen, save_for_last, wins):
-    """With no unlocks, the first Monsters level falls to one big push but holds against even waves.
-    It must stay winnable: monster cards only come from Monsters wins."""
+@pytest.mark.parametrize("save_for_last, outcome", [(True, "victory"), (False, "level_complete")])
+def test_monsters_level_1_falls_to_both_plans(records, screen, save_for_last, outcome):
+    """With no unlocks, even waves take a few lives (enough to clear the level), while one big push takes
+    all 20 and wins the whole pass on its first level (there's no cap on lives per level). It must stay
+    winnable: monster cards only come from Monsters wins."""
     g = main.Game(screen, log_dir=None, side="monsters")
-    assert scripted_attack(g, ["tank", "basic", "elite"], save_for_last) == wins
+    assert scripted_attack(g, ["tank", "basic", "elite"], save_for_last)
+    assert g.state == outcome
 
 
 @pytest.mark.parametrize("save_for_last, wins", [(True, False), (False, True)])
 def test_monsters_level_2_is_won_by_pacing(records, screen, save_for_last, wins):
-    """Level 2's record ends on Dragon + Absolute Zero, which melts one big push but not steady waves."""
+    """Level 2's record ends on Dragon + Absolute Zero, which melts one big push (not a single life taken)
+    but not steady waves."""
     g = main.Game(screen, log_dir=None, side="monsters")
     g.monster_wins = 1  # as after winning level 1
     g.load_level(1)

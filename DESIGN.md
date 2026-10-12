@@ -5,15 +5,15 @@ section, and [Balance findings](#9-balance-findings) for why the budget rule cha
 
 ## 1. The loop
 
-A **run** is a series of **passes**. A pass is all 20 levels played from one side.
+A **run** is a series of **passes**. A pass is all 10 levels played from one side.
 
 ```
-Pass 1: Towers  L1 ... L20  ──beat L20──▶  Pass 2: Monsters  L1 ... L20  ──beat L20──▶  Pass 3: Towers ...
+Pass 1: Towers  L1 ... L10  ──beat L10──▶  Pass 2: Monsters  L1 ... L10  ──beat L10──▶  Pass 3: Towers ...
          │                                          │
          └──── lose any level ──▶  RUN OVER  ◀──────┘
                                        │
                                        ▼
-                 New run: pick a side (only once Towers L20 has been beaten for the first time)
+                 New run: pick a side (only once Towers L10 has been beaten for the first time)
 ```
 
 - **Towers side:** the game as it is today: build, fuse, survive 5 waves.
@@ -22,8 +22,11 @@ Pass 1: Towers  L1 ... L20  ──beat L20──▶  Pass 2: Monsters  L1 ... L2
 - Each pass you clear sets the records the next pass plays against, so every pass faces your
   own previous best.
 - Losing ends the run. Unlocks are kept forever.
-- There's no final victory screen any more. Beating Monsters L20 sends you back to Towers L1, and a
+- There's no final victory screen any more. Beating Monsters L10 sends you back to Towers L1, and a
   run goes on until you lose. Your score is the number of levels won in the run.
+- A pass was 20 levels at first and was cut to 10, because a full pass felt too long. Levels 11–20 and
+  their boss, the Overlord, are still in `levels.py` (`ALL_LEVELS`, `ALL_BOSS_LEVELS`), switched off
+  by `LEVEL_COUNT = 10`. Raising `LEVEL_COUNT` brings them back.
 
 ## 2. Records: what each side plays against
 
@@ -53,7 +56,7 @@ Records are kept **per wave**: each level has five slots, one for each of its wa
   so the Towers side gets the generated wave there. A wave with no towers on the map isn't
   recorded either, so on the Monsters side the defender keeps the comp of the latest earlier wave
   (or has nothing, if no earlier wave had towers).
-- The Monsters side only opens after Towers L20 has been beaten, so by then all 20 tower records
+- The Monsters side only opens after Towers L10 has been beaten, so by then all 10 tower records
   exist.
 
 ## 3. Monsters side
@@ -61,17 +64,41 @@ Records are kept **per wave**: each level has five slots, one for each of its wa
 ### The defender
 - **The defender grows wave by wave.** At the start of wave w, the map is set to the tower
   record's wave w comp. During the draft before wave w you see that comp, so you can plan against it.
-- The towers don't move, sell or fuse during a wave. The defender has **20 lives**, reset every level.
-- **You win** the level by draining all 20 lives within the 5 waves. **You lose** (and the run
-  ends) if the defender survives wave 5.
+- The towers don't move, sell or fuse during a wave.
+- The defender has **20 lives for the whole pass**; they don't come back between levels. (This
+  matches the Towers side, whose lives also last the pass.)
+- **You clear a level** by taking at least 1 life within its 5 waves. The level always plays all 5
+  waves, since extra lives taken carry forward. The panel shows the pace, e.g. "-3 here: cleared
+  (6 to go)".
+- **You win the pass** the moment the last life goes, on any level. The pass ends there and you
+  switch sides.
+- **The finale:** the Towers pass after a won Monsters pass ends on the level and wave where the
+  last life went, and **the Warden joins that wave** (on top of the recorded wave, with its hp
+  multiplier and upgrades; a Warden already drafted into it isn't doubled). The banner says "FINAL
+  LEVEL", the header reads "Level 3 of 3", and the wave counter counts to the finale wave. Clearing
+  it wins that Towers pass. Winning the Monsters pass early makes the next Towers pass shorter, but
+  it ends on the wave that just beat you, plus a boss. That punishes ending early without ruling it
+  out, and it gives speedruns their own challenge. A win on the last wave of the last level is the
+  full pass, with the Warden added to the record's last wave.
+  - The finale belongs to the run (`finale` in the save). Monsters passes, and Towers passes that
+    start a new run, have none.
+- **You lose** (and the run ends) if a level takes no lives, or if the last level ends with lives
+  left.
+- There's no cap on how many lives one level can take (`max_lives_per_level: 0` in
+  `monsters.json`). See section 9 for what that allows.
 
 ### Budget
 - Each wave adds **the larger of** two amounts to the budget:
   - the **value of the original generated wave** for that level and wave (made with a seeded RNG,
     so it's the same every time), and
-  - a **share of the defender's comp value** for that wave. The share starts at **40%** and grows by
-    **+2% for every Monsters level won in the run** ("stealing" from the towers). It resets with
-    the run.
+  - a **share of the defender's comp value** for that wave. The share starts at **40%** and grows
+    with every Monsters level won in the run ("stealing" from the towers): +1%, +2% or +3% for a
+    weak, normal or strong record (section 5). It resets with the run.
+- **Pace bonus (catch-up):** at the start of each level the share goes up **3% for every life the
+  run is behind** an even pace (2 lives per level: 0 expected at level 1, 10 by level 6), at most
+  **+15%**. Being ahead doesn't lower it (`pace_min: 0`): when it did, a strong first level left
+  too small a share to take a life on the next one, so a good start lost the run. The panel shows
+  it, e.g. "claims 55%  (+15% for pace)".
 - Every monster type gets a `cost`. For the existing types, cost = the old kill reward
   (basic 5, fast 6, tank 12, elite 80, bosses 400 / 1000). So "the army your towers beat" and "the
   gold your towers earned from it" are the same number.
@@ -79,11 +106,26 @@ Records are kept **per wave**: each level has five slots, one for each of its wa
   and save up for one big push.
 - The rare **War Chest** unlock raises the budget (+15% per rank) on top of that. A bigger army is
   also worth more kill gold when your next Towers pass faces it, so the tower side earns more.
-- The three numbers (`share_start`, `share_per_win`, `starter_picks`) are in `monsters.json`.
+- The numbers (`share_start`, `pace_per_life`, `pace_max`, `pace_min`, `starter_picks`, and the
+  reward tiers) are in `monsters.json`.
 - Monster HP still scales with the level's and wave's hp multiplier, exactly as today.
 - On boss levels the boss is in the last wave's draft. It costs its value, and if it gets through
-  the defender loses all 20 lives.
+  the defender loses every life it has left, which wins the pass.
 
+### Stat upgrades
+- Three upgrades are bought with the budget during the draft and **last for the rest of the pass**,
+  applying to every monster sent: **Vitality** (+15% HP per rank), **Stride** (+10% speed per rank,
+  capped at +50%) and **Plating** (+2 flat armor per rank, so it also armors monsters with none).
+  Up to 5 ranks each.
+- **Price:** rank r costs `upgrade_price` (25%) × r × the current level's budget (its five waves'
+  budgets added up), so they stay expensive as budgets grow.
+- **Escort:** every purchase also sends Basics worth its price (price ÷ 5), so the money still turns
+  into monsters. At most `escort_per_wave` (60) go with one wave; the rest wait for the next ones,
+  across levels. Escorts are part of the wave, so they're in the monster record and pay kill gold on
+  the Towers side.
+- A rank bought in the current draft can be sold back (right click). Upgrades and the escort still
+  to send are saved with the run, and reset at the start of every Monsters pass.
+- Keys `Q` `W` `E`, or click the buttons under the draft list.
 ### Draft phase (between waves)
 - The panel lists your unlocked monster types with their cost.
 - Click (or press `1`–`9`) to add one to the queue, and Shift to add 5.
@@ -91,7 +133,7 @@ Records are kept **per wave**: each level has five slots, one for each of its wa
 - Press `Space` to send the wave. Monsters spawn in queue order, each with its type's spawn gap.
 
 ### Watch phase (during a wave)
-- Your unlocked **abilities** sit in the panel with cooldown bars, on keys `Q` `W` `E` `R` `A`.
+- Your unlocked **abilities** sit in the panel with cooldown bars, on keys `1`–`5`.
 - Targeted abilities ask for a click on the map, and the others fire at once.
 - Cooldowns count game time, so they speed up with the game.
 
@@ -135,15 +177,33 @@ Extra ranks of an ability cut its cooldown by 15%.
 On the Towers side, abilities from a monster record are **replayed** at their recorded time and
 place. Each one is shown as a ring about 1 s before it lands, so you can see it coming.
 
-## 5. Unlocks: pick 1 of 3
+## 5. Unlocks: pick 1 of 3 (or 2)
 
-There are two pools, one per side. A win draws three cards from **its own side's** pool, and
-picks are **permanent**.
+There are two pools, one per side. A win draws cards from **its own side's** pool, and picks are
+**permanent**.
+
+**What you beat sets what you get** (like Clash of Clans paying less loot for weaker bases). Every
+level's record is rated against **par**, the value of the level's generated waves:
+
+- **Monsters side:** the defender's strongest comp in the level ÷ par. On a real run's records this
+  goes from 1.3× (level 1) through 2.2–3.1× (levels 2–4) to 4.0–4.6× (levels 5–7, the hardest).
+- **Towers side:** the monster record's waves added up (generated waves where there's none) ÷ par,
+  so playing generated waves is exactly 1×.
+
+| Tier | Monsters side | Towers side | Cards offered | Share growth (Monsters wins) |
+|---|---|---|---|---|
+| Weak | under 2× | under 1× | 2 | +1% |
+| Normal | 2× to 4× | 1× to 2.5× | 3 | +2% |
+| Strong | 4× and up | 2.5× and up | 3, one of them a sure rare (while any are left) | +3% |
+
+The card screen says which tier the win was and what it gave. Crushing a weak level 1 pays the
+least, and the walls pay the most. The starter pack is always normal. The score (levels won) isn't
+weighted by tier yet.
 
 | Win on | Gives | Available |
 |---|---|---|
 | Monsters side | A monster card (types, buffs, abilities, War Chest) | Always |
-| Towers side | A tower card (see below) | Only after Monsters L20 has been beaten once |
+| Towers side | A tower card (see below) | Only after Monsters L10 has been beaten once |
 
 The first time you play the Monsters side, you get a **starter pack**: 3 pick-1-of-3 screens of
 monster cards. After that, monster cards only come from Monsters wins. So Monsters level 1 must
@@ -174,7 +234,7 @@ There are two files, both git-ignored:
 | File | Lifetime | Contents |
 |---|---|---|
 | `profile.json` | Forever | Unlocks and ranks (both pools), per-wave tower and monster records, `monsters_side_unlocked`, `tower_cards_unlocked`, best run |
-| `savegame.json` | One run | Side, pass, level, gold and lives (Towers side), rebuild list, carried budget (Monsters side) |
+| `savegame.json` | One run | Side, pass, level, gold and lives (the defender's on the Monsters side), rebuild list (Towers side), stat upgrades and escort still to send (Monsters side), the finale (level, wave) a Towers pass ends on |
 
 - The save becomes the **run in progress**. Continue on the start screen resumes it at the start
   of the current level.
@@ -209,8 +269,8 @@ Each phase ends with the full test suite green, and you can play the game after 
 | 1 | **Monster data and mechanics** | `monsters.json` + loader; the 6 new types, 5 buffs, 5 abilities as plain functions on entities; tower status effects. No UI yet | One test per mechanic (armor vs rapid fire, split, phase, heal, EMP, smoke…); broken-file errors |
 | 2 | **Monsters side** | Defender from a record, draft UI, budget and carry-over, abilities during waves, win / lose, monster record saved | Clicks and keys drive a draft; win by draining lives; lose after wave 5; budget is deterministic |
 | 3 | **Towers side vs records** | Waves come from monster records, abilities replayed with warning rings, kill gold = monster cost | Replay matches the record; fallback to generated waves |
-| 4 | **Rewards** | `unlocks.json`, both pools; pick-1-of-3 screen after wins (tower cards gated until Monsters L20 is beaten); tower card effects | Seeded draws, maxed items leave the pool, the pick is saved, the gate works, each tower card's effect |
-| 5 | **Run flow** | Passes, side switch after L20, run over, side pick (once unlocked), save v2, Continue | A full simulated loop T→M→T with bots; run over deletes the save and keeps the profile |
+| 4 | **Rewards** | `unlocks.json`, both pools; pick-1-of-3 screen after wins (tower cards gated until Monsters L10 is beaten); tower card effects | Seeded draws, maxed items leave the pool, the pick is saved, the gate works, each tower card's effect |
+| 5 | **Run flow** | Passes, side switch after L10, run over, side pick (once unlocked), save v2, Continue | A full simulated loop T→M→T with bots; run over deletes the save and keeps the profile |
 | 6 | **Balance and docs** | Bot experiments, the budget rule fixed (section 9), scripted-draft slow tests, README / TESTING / docstrings | Slow tests: Monsters L1 stays winnable; level 1 and 2 reward different plans |
 
 Phases 0–1 change nothing you can see, apart from the records being written. Phase 2 is the
@@ -251,6 +311,49 @@ one push wins level 1 every time, and evenly paced waves still lose. That's the 
 
 Juggernauts (immune to slows) beat that level 2 record outright. Both rows are pinned by slow tests.
 
+**Lives carried over (the current rule).** Against the tower records from a real run (levels
+1–10, 410 to 5,920 gold), with lives lasting the pass and no cap per level:
+
+| Strategy | Lives taken per level | Result |
+|---|---|---|
+| Splitter / Armored / Tank + Bulwark (the player's unlocks), even waves | 20 | Pass won on level 1 |
+| No unlocks, save for wave 5 | 20 | Pass won on level 1 |
+| No unlocks, even Basic / Fast / Tank | 0 | Run over on level 1 |
+| No unlocks, Tanks only | 10, 8, 0 | Run over on level 3 |
+
+Each level on its own: levels 1–3 and 8–10 fall easily, levels 4–6 (2,320 to 3,840 gold) hold
+against most plans. A cap of 3 lives per level made the pass last until about level 7, and was
+won only by bots that put the rest of each level's budget into upgrades once the cap was reached.
+**No cap was chosen for now**: an early blowout ends the pass, forfeits the levels (score) and cards
+it skipped, and leaves a record the Towers side has to beat. That record is all or nothing: the
+Towers bot lost level 1 six times out of six to a Splitter/Armored push saved for wave 5, but held
+easily against an even-paced record and a push without unlock types.
+
+**Pace bonus and record tiers (current).** Same records, no cap:
+- Level-1 blowouts still win the pass (nothing is expected by level 1, so the pace can't apply), but
+  level 1's record is weak: 2 cards and +1% instead of 3 cards and +2%.
+- A pace cut for being ahead (3% per life, up to 15%) made strong starts lose: "save for waves 3 and
+  5" took 15 lives on level 1, then 0 on level 2 at a 26% share, so the run ended with 5 lives to go.
+  Without the cut it wins the pass on level 2. Hence `pace_min: 0`.
+- The bonus for being behind barely moves levels 4–7. Even +50% left most plans at 0 lives there,
+  and levels 7 and 8 have the same 3,840-gold comp but only level 8 falls. Those defenses
+  (Avalanche, Dragon and Tesla slowing, burning and chaining crowds) are beaten by counters, not by
+  budget: the Splitter/Armored mix breaks levels 4, 5 and 7, and with upgrades level 6 too.
+
+**The finale.** We won Monsters passes against the tower records of a real run, then had the Towers
+bot play the shorter pass that followed, on 4 seeds, with the Warden and with a Basic in its place:
+
+| Monsters pass won with | Finale | Bot wins with a Basic | Bot wins with the Warden |
+|---|---|---|---|
+| No unlocks, save for wave 5 | L1 w5 (67 monsters) | 4 / 4 | 4 / 4 |
+| No unlocks, every upgrade | L3 w2 (+15% HP, +2 armor) | 4 / 4 | 3 / 4 |
+| Unlocks, even waves | L1 w5 (15 monsters) | 4 / 4 | 4 / 4 |
+| Unlocks, upgrades, save for wave 5 | L1 w5 (+30% HP, +2 armor) | 4 / 4 | 2 / 4 |
+| Unlocks, save for wave 5 | L1 w5 (46 monsters) | 0 / 4 | 0 / 4 (the record alone already wins) |
+
+The Warden makes the finale harder, most of all after upgrades (it gets them too), but it can be
+beaten.
+
 **Not yet known:** balance past level 2, and on Towers passes against real monster records. The
 bots are crude (they don't counter-pick or aim abilities), and their tower records spend every
 coin, so human records will be weaker. These need playtesting. The balance logs record everything
@@ -262,3 +365,7 @@ needed to tune from real games.
 - If you quit during the starter pack, it's offered again in full next time (on top of the picks
   already made).
 - On the Monsters side the panel shows no stats for a selected tower, only its range on the map.
+- With no cap on lives per level, a strong push can win the Monsters pass on level 1 (section 9). The
+  finale (section 3) makes the next Towers pass end on that wave with the Warden added.
+  A record the Towers side can't beat is kept forever, so it could block every later Towers pass at
+  that level.

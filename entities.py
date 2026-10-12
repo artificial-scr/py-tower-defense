@@ -22,14 +22,15 @@ ARMOR_MIN_SHARE = 0.2  # armor never blocks more than 80% of a hit
 SPLIT_SPREAD = 10  # pixels between the monsters a Splitter breaks into
 
 
-NO_MODS = {"hp": 1.0, "speed": 1.0, "burn": 1.0, "thaw": 0.0, "armor": 1.0}
+NO_MODS = {"hp": 1.0, "speed": 1.0, "burn": 1.0, "thaw": 0.0, "armor": 1.0, "armor_flat": 0}
 
 
 class Enemy:
     def __init__(self, kind, path_pts, hp_mult, mods=None):
         """`mods` are the monster player's buffs (and the tower player's counters to them):
         hp, speed and burn (damage taken from burns) multipliers, thaw (share of every slow
-        ignored) and armor (multiplier on the type's armor). Missing keys mean no change."""
+        ignored), armor_flat (armor added to the type's, from the Plating upgrade) and armor (multiplier
+        on the total armor). Missing keys mean no change."""
         self.uid = next(ENEMY_IDS)
         self.kind = kind
         self.spec = ENEMY_TYPES[kind]
@@ -37,7 +38,7 @@ class Enemy:
         self.mods = {**NO_MODS, **(mods or {})}
         self.max_hp = self.spec["hp"] * hp_mult * self.mods["hp"]
         self.hp = self.max_hp
-        self.armor = self.spec.get("armor", 0) * self.mods["armor"]
+        self.armor = (self.spec.get("armor", 0) + self.mods["armor_flat"]) * self.mods["armor"]
         self.path = path_pts
         self.pos = path_pts[0].copy()
         self.idx = 1

@@ -6,7 +6,8 @@ import json
 import pytest
 
 import towers
-from levels import BOSS_LEVELS, COLS, LEVELS, ROWS, THEMES, build_path_cells, make_wave
+from levels import (ALL_BOSS_LEVELS, ALL_LEVELS, BOSS_LEVELS, COLS, LEVEL_COUNT, LEVELS, ROWS, THEMES,
+                    build_path_cells, make_wave)
 from towers import CROSS, EVOLVE, LINES, TOWER_ORDER, TOWERS, fusion_options, load_evolution, load_towers
 
 
@@ -147,15 +148,22 @@ def on_map(x, y):
 
 
 def test_twenty_distinct_levels():
-    assert len(LEVELS) == 20
+    assert len(ALL_LEVELS) == 20
     assert len({t.name for t in THEMES}) == 20
-    assert len({tuple(map(tuple, w)) for _, w in LEVELS}) == 20
+    assert len({tuple(map(tuple, w)) for _, w in ALL_LEVELS}) == 20
+
+
+def test_a_pass_plays_the_first_ten_levels():
+    """Levels 11-20 are kept as a backup; only the first LEVEL_COUNT are played, with their bosses."""
+    assert LEVEL_COUNT == 10 and LEVELS == ALL_LEVELS[:10]
+    assert BOSS_LEVELS == {10: "warden"} and ALL_BOSS_LEVELS[20] == "overlord"
 
 
 @pytest.mark.parametrize("n", range(1, 21))
 def test_level_path(n):
-    """Paths enter and leave off the map, are axis-aligned, and never run alongside themselves."""
-    theme, wps = LEVELS[n - 1]
+    """Paths enter and leave off the map, are axis-aligned, and never run alongside themselves.
+    Covers the backup levels too, so they still work if they're brought back."""
+    theme, wps = ALL_LEVELS[n - 1]
     assert not on_map(*wps[0]) and not on_map(*wps[-1])
     assert all(on_map(*p) for p in wps[1:-1])
     segments = []
@@ -168,7 +176,7 @@ def test_level_path(n):
             assert gap >= 2, f"{theme.name}: segments {i} and {j} touch"
 
 
-@pytest.mark.parametrize("level_idx", range(20))
+@pytest.mark.parametrize("level_idx", range(LEVEL_COUNT))
 def test_wave_composition(level_idx):
     """Only the last wave of a level has its elite or boss, and only boss levels have bosses."""
     for wave_idx in range(4):
@@ -180,5 +188,5 @@ def test_wave_composition(level_idx):
 
 
 def test_waves_get_harder():
-    mults = [make_wave(level, wave)[1] for level in range(20) for wave in range(5)]
+    mults = [make_wave(level, wave)[1] for level in range(LEVEL_COUNT) for wave in range(5)]
     assert mults == sorted(mults) and mults[0] == 1

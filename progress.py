@@ -98,8 +98,8 @@ class Profile:
         self.unlocks = {side: {k: min(int(r), UNLOCKS[side][k]["max"]) for k, r in saved.get(side, {}).items()
                                if k in UNLOCKS[side]}
                         for side in UNLOCKS}
-        # monsters_side: Towers level 20 beaten once (the Monsters side opens);
-        # tower_cards: Monsters level 20 beaten once (Towers-side wins give tower cards);
+        # monsters_side: Towers' last level beaten once (the Monsters side opens);
+        # tower_cards: Monsters' last level beaten once (Towers-side wins give tower cards);
         # starter_pack: the first time on the Monsters side, its starter cards were picked
         self.milestones = {"monsters_side": False, "tower_cards": False, "starter_pack": False,
                            **data.get("milestones", {})}
@@ -139,10 +139,16 @@ class Profile:
             return None
         return "monster" if side_won == "monsters" else "tower"
 
-    def draw_cards(self, pool, rng, n=3):
-        """Up to n different card ids from a pool, weighted, leaving out cards already at max rank."""
+    def draw_cards(self, pool, rng, n=3, rare=False):
+        """Up to n different card ids from a pool, weighted, leaving out cards already at max rank. With
+        `rare`, the first is a rare card (if any are left)."""
         open_cards = {k: c for k, c in UNLOCKS[pool].items() if self.rank(pool, k) < c["max"]}
         cards = []
+        rares = [k for k, c in open_cards.items() if c["rare"]]
+        if rare and rares and n:
+            pick = rng.choices(rares, weights=[open_cards[k]["weight"] for k in rares])[0]
+            cards.append(pick)
+            del open_cards[pick]
         while open_cards and len(cards) < n:
             pick = rng.choices(list(open_cards), weights=[c["weight"] for c in open_cards.values()])[0]
             cards.append(pick)

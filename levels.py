@@ -67,8 +67,14 @@ def rotate_180(waypoints):
 
 
 # Levels 11-20 reuse the first ten layouts rotated, so every level has its own path.
-LEVELS = list(zip(THEMES, LAYOUTS + [rotate_180(w) for w in LAYOUTS]))
-BOSS_LEVELS = {10: "warden", 20: "overlord"}  # 1-based level number -> boss that ends its last wave
+ALL_LEVELS = list(zip(THEMES, LAYOUTS + [rotate_180(w) for w in LAYOUTS]))
+ALL_BOSS_LEVELS = {10: "warden", 20: "overlord"}  # 1-based level number -> boss that ends its last wave
+
+# How many levels a pass has. Levels 11-20 (and the Overlord) are kept in ALL_LEVELS as a backup:
+# raise this to bring them back.
+LEVEL_COUNT = 10
+LEVELS = ALL_LEVELS[:LEVEL_COUNT]
+BOSS_LEVELS = {n: boss for n, boss in ALL_BOSS_LEVELS.items() if n <= LEVEL_COUNT}
 
 
 # --------------------------------------------------------------------------

@@ -2,17 +2,28 @@
 
 The towers are the player's tower record for the level: before wave w, the map is set to the
 strongest comp they had during wave w. The player drafts each wave from a budget (the larger of
-what the generated wave would have been worth and a share of that comp's value, a share that
-grows with every Monsters level won in the run; whatever isn't spent carries over), sends it, and
-uses abilities while it runs. Draining the defender's lives wins the level; if the towers are still
-standing after the last wave, the run is over.
+what the generated wave would have been worth and a share of that comp's value; whatever isn't
+spent carries over), sends it, and uses abilities while it runs. The share grows with every
+Monsters level won in the run (more for stronger records, see main.Game.record_tier), and for each
+level it's raised when the run is behind an even pace of lives taken and lowered when it's ahead.
+
+The defender has DEFENDER_LIVES for the whole pass. A level is cleared by taking at least one of
+them; the pass is won the moment the last one goes. A level that takes none, or reaching the end of
+the last level with lives left, ends the run. The Towers pass that follows a won one ends on the
+wave it was won on, with the Warden joining that wave (main.Game.finale): ending a pass early makes
+the next one shorter but harder.
+
+Stat upgrades (monsters.json) are bought with the budget and last for the rest of the pass. Each
+purchase also sends Basics worth its price as an escort, at most escort_per_wave with each wave.
 
 Controls on this side:
   1-9, 0       draft phase: draft that monster (Shift: 5); during a wave: use that ability
+  Q / W / E    draft phase: buy a rank of Vitality / Stride / Plating
   Backspace    take the last monster off the queue (or click its icon on the map)
-  Left click   on a panel row: draft / use it; on the map: cast an aimed ability, or see a
-               tower's range
-  Right click  cancel aiming (Esc too)
+  Left click   on a panel row: draft / use it; on an upgrade: buy a rank; on the map: cast an aimed
+               ability, or see a tower's range
+  Right click  on an upgrade: sell back a rank bought in this draft phase; elsewhere: cancel aiming
+               (Esc too)
 """
 
 import pygame
@@ -20,19 +31,28 @@ import pygame
 from entities import Tower, cast_ability
 from graphics import MAP_W, TILE, Popup, tile_center
 from levels import BOSS_LEVELS, LEVELS, WAVES_PER_LEVEL, wave_hp_mult, wave_value
-from monsters import ABILITIES, BUDGET, ENEMY_TYPES
+from monsters import ABILITIES, BUDGET, ENEMY_TYPES, REWARDS, UPGRADES
 from towers import NO_TOWER_MODS
 
-DEFENDER_LIVES = 20
-QUEUE_MAX = 150  # monsters per wave; keeps very long waves (and frame times) in check
+DEFENDER_LIVES = 20  # for the whole pass
+QUEUE_MAX = 150  # drafted monsters per wave; keeps very long waves (and frame times) in check
 DRAFT_ROWS = 10  # monster kinds listed in the panel, and digit keys to draft them
+UPGRADE_KEYS = (pygame.K_q, pygame.K_w, pygame.K_e)  # in monsters.json order
+ESCORT_KIND = "basic"
 
 
 class AttackMixin:
-    # ---- level setup -------------------------------------------------------
+    # ---- pass and level setup ------------------------------------------------
+    def start_attack_pass(self, upgrades=None, escort=0):
+        """Pass-long state on the Monsters side: the defender's lives and the stat upgrades bought."""
+        self.lives = DEFENDER_LIVES
+        self.upgrades = {k: min(int((upgrades or {}).get(k, 0)), spec["max"]) for k, spec in UPGRADES.items()}
+        self.escort = escort  # Basics still to send for upgrades bought (see buy_upgrade)
+
     def setup_attack_level(self):
         """Called by load_level on the Monsters side."""
-        self.lives = DEFENDER_LIVES
+        self.bought = []  # (upgrade, price) bought in this draft phase, which can still be sold back
+        self.pace_bonus = self.pace_adjustment()
         self.budget = 0
         self.queue = []  # monster kinds drafted for the next wave, in spawn order
         self.aiming = None  # an area ability waiting for a click on the map
@@ -41,6 +61,7 @@ class AttackMixin:
         self.sent_waves = {}  # wave number -> the wave as it goes into the monster record
         self.wave_started_at = 0.0
         self.defender_record = self.profile.tower_record(self.level_idx + 1)
+        self.level_budget = sum(self.wave_budget(w) for w in range(1, WAVES_PER_LEVEL + 1))
         self.prepare_draft()
         if not self.profile.milestones["starter_pack"]:
             self.starter_picks = int(BUDGET["starter_picks"])
@@ -49,7 +70,15 @@ class AttackMixin:
     @property
     def share(self):
         """The share of the defender's comp value the budget can claim (see monsters.json)."""
-        return BUDGET["share_start"] + BUDGET["share_per_win"] * self.monster_wins
+        return max(0.0, BUDGET["share_start"] + self.share_growth + self.pace_bonus)
+
+    def pace_adjustment(self):
+        """At the start of a level: pace_per_life for every life the run is behind an even pace (the
+        defender's lives spread over the levels), negative when it's ahead; at most pace_max up and pace_min
+        down."""
+        expected = DEFENDER_LIVES * self.level_idx / len(LEVELS)
+        behind = expected - (DEFENDER_LIVES - self.lives_at_start)
+        return max(-BUDGET["pace_min"], min(BUDGET["pace_max"], BUDGET["pace_per_life"] * behind))
 
     def wave_budget(self, wave):
         """What drafting wave `wave` (1-based) adds to the budget, War Chest included."""
@@ -117,17 +146,66 @@ class AttackMixin:
         if self.state == "build" and self.queue:
             self.budget += ENEMY_TYPES[self.queue.pop(index)]["cost"]
 
+    # ---- stat upgrades ----------------------------------------------------------
+    def upgrade_price(self, key):
+        """The next rank's price: a share of this level's budget, times the rank."""
+        return max(1, round(BUDGET["upgrade_price"] * (self.upgrades[key] + 1) * self.level_budget))
+
+    def can_upgrade(self, key):
+        return (self.state == "build" and self.upgrades[key] < UPGRADES[key]["max"]
+                and self.budget >= self.upgrade_price(key))
+
+    def buy_upgrade(self, key):
+        """A rank of a stat upgrade for the rest of the pass, plus an escort of Basics worth its price."""
+        if not self.can_upgrade(key):
+            return
+        price = self.upgrade_price(key)
+        self.budget -= price
+        self.upgrades[key] += 1
+        self.escort += price // ENEMY_TYPES[ESCORT_KIND]["cost"]
+        self.bought.append((key, price))
+        self.log_event("upgrade", upgrade=key, rank=self.upgrades[key], price=price)
+
+    def sell_upgrade(self, key):
+        """Undo the latest rank of `key` bought in this draft phase."""
+        for i in range(len(self.bought) - 1, -1, -1):
+            if self.bought[i][0] == key and self.state == "build":
+                price = self.bought.pop(i)[1]
+                self.budget += price
+                self.upgrades[key] -= 1
+                self.escort -= price // ENEMY_TYPES[ESCORT_KIND]["cost"]
+                self.log_event("upgrade_sold", upgrade=key, rank=self.upgrades[key], price=price)
+                return
+
+    def upgrade_mods(self):
+        """Enemy modifiers from the monster cards and the upgrades bought (see entities.Enemy)."""
+        mods = {**self.profile.monster_mods(), "armor_flat": 0}
+        for key, rank in self.upgrades.items():
+            spec = UPGRADES[key]
+            if spec["stat"] == "armor":
+                mods["armor_flat"] += spec["per_rank"] * rank
+            else:
+                mods[spec["stat"]] *= 1 + spec["per_rank"] * rank
+        return mods
+
+    def escort_for_next_wave(self):
+        return min(self.escort, int(BUDGET["escort_per_wave"]))
+
     def send_wave(self):
-        """Start the next wave with the drafted queue (an empty one is allowed: it saves the budget)."""
+        """Start the next wave with the escort and the drafted queue (an empty one is allowed: it saves the
+        budget)."""
         if self.state != "build" or self.wave_idx >= WAVES_PER_LEVEL:
             return
         self.hp_mult = wave_hp_mult(self.level_idx, self.wave_idx)
-        self.wave_mods = self.profile.monster_mods()
-        self.spawn_queue = list(self.queue)
+        self.wave_mods = self.upgrade_mods()
+        escort = self.escort_for_next_wave()
+        self.escort -= escort
+        self.bought = []
+        self.spawn_queue = [ESCORT_KIND] * escort + self.queue
         fight_mods = {**self.wave_mods, "armor": self.defender_mods["armor"]}  # the defender's Piercing card
         self.wave_idx += 1
-        self.sent_waves[self.wave_idx] = {"value": sum(ENEMY_TYPES[k]["cost"] for k in self.queue),
-                                          "queue": list(self.queue), "hp_mult": self.hp_mult,
+        self.sent_waves[self.wave_idx] = {"value": sum(ENEMY_TYPES[k]["cost"] for k in self.spawn_queue),
+                                          "queue": list(self.spawn_queue), "hp_mult": self.hp_mult,
                                           "mods": dict(self.wave_mods), "casts": []}
         self.wave_mods = fight_mods
         self.queue = []
@@ -159,30 +237,53 @@ class AttackMixin:
             self.cooldowns[k] = max(0.0, self.cooldowns[k] - dt)
 
     # ---- winning and losing ------------------------------------------------------
+    @property
+    def lives_taken(self):
+        """Lives the defender has lost in this level."""
+        return self.lives_at_start - max(self.lives, 0)
+
+    @property
+    def lives_in_reach(self):
+        """How many more lives this level can take (see max_lives_per_level in monsters.json)."""
+        cap = int(BUDGET["max_lives_per_level"])
+        return min(self.lives, cap - self.lives_taken) if cap else self.lives
+
+    @property
+    def levels_left(self):
+        """Levels after this one in the pass."""
+        return len(LEVELS) - 1 - self.level_idx
+
     def end_attack_wave(self):
-        """A wave is over and the towers still stand: draft the next one, or the level is lost."""
+        """A wave is over and the towers still stand: draft the next one, or the level is over. It's
+        cleared if it took a life, unless it was the last level (where every life had to go)."""
         self.aiming = None
         if self.wave_idx < WAVES_PER_LEVEL:
             self.state = "build"
             self.prepare_draft()
             self.popups.append(Popup((MAP_W / 2, 300), f"Budget {self.budget}", (255, 210, 70)))
+        elif self.lives_taken > 0 and self.levels_left > 0:
+            self.win_attack_level(pass_won=False)
         else:
             self.run_over()
 
-    def win_attack_level(self):
-        """The defender is out of lives: the waves sent go into the monster record."""
-        self.lives = 0
+    def win_attack_level(self, pass_won):
+        """The level is cleared (pass_won: the defender is out of lives, which also wins the pass). The
+        waves sent go into the monster record."""
         self.aiming = None
-        self.spawn_queue = []
-        self.enemies = []
-        self.projectiles = []
+        if pass_won:
+            self.lives = 0
+            self.spawn_queue = []
+            self.enemies = []
+            self.projectiles = []
         self.profile.record_monsters(self.level_idx + 1, self.sent_waves)
-        self.state = "level_complete" if self.level_idx + 1 < len(LEVELS) else "victory"
-        if self.state == "victory":
+        self.state = "victory" if pass_won else "level_complete"
+        if pass_won:
             self.profile.reach("tower_cards")
+            self.finale = (self.level_idx + 1, self.wave_idx)  # where the next Towers pass ends
         self.monster_wins += 1
+        self.share_growth += REWARDS[self.record_tier]["share"]
         self.level_won()
-        self.offer_rewards("monsters")
+        self.offer_rewards("monsters", self.record_tier)
         self.finish_log("cleared")
 
     # ---- input --------------------------------------------------------------------
@@ -195,6 +296,10 @@ class AttackMixin:
                 self.draft(self.draftable()[i], 5 if pygame.key.get_mods() & pygame.KMOD_SHIFT else 1)
             elif self.state == "wave" and i < len(self.cooldowns):
                 self.cast(list(self.cooldowns)[i])
+            return True
+        if key in UPGRADE_KEYS:
+            if self.state == "build":
+                self.buy_upgrade(list(UPGRADES)[UPGRADE_KEYS.index(key)])
             return True
         if key == pygame.K_BACKSPACE:
             self.undraft()
@@ -221,6 +326,13 @@ class AttackMixin:
                 self.selected = self.towers.get((pos[0] // TILE, pos[1] // TILE))  # see a tower's range
                 return True
             return False
+        for key, rect in self.upgrade_buttons():
+            if rect.collidepoint(pos):
+                if button == 1:
+                    self.buy_upgrade(key)
+                elif button == 3:
+                    self.sell_upgrade(key)
+                return True
         if button != 1:
             return False
         for key, rect in self.attack_rows():
@@ -236,7 +348,11 @@ class AttackMixin:
     def attack_rows(self):
         """(monster kind or ability, panel rect): the draft list in the build phase, abilities during a wave."""
         keys = self.draftable() if self.state == "build" else list(self.cooldowns) if self.state == "wave" else []
-        return [(k, pygame.Rect(MAP_W + 12, 192 + i * 28, 196, 26)) for i, k in enumerate(keys)]
+        return [(k, pygame.Rect(MAP_W + 12, 206 + i * 24, 196, 22)) for i, k in enumerate(keys)]
+
+    def upgrade_buttons(self):
+        """(upgrade, panel rect): a row of three under the draft list."""
+        return [(k, pygame.Rect(MAP_W + 12 + i * 67, 474, 62, 46)) for i, k in enumerate(UPGRADES)]
 
     def queue_icons(self):
         """(queue index, center) for the drafted monsters shown along the bottom of the map."""

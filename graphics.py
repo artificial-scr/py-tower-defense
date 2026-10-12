@@ -13,8 +13,8 @@ import math
 
 import pygame
 
-from levels import BOSS_LEVELS, COLS, ENEMY_TYPES, LEVELS, ROWS, WAVES_PER_LEVEL
-from monsters import ABILITIES
+from levels import COLS, ENEMY_TYPES, LEVELS, ROWS, WAVES_PER_LEVEL
+from monsters import ABILITIES, REWARDS
 from progress import UNLOCKS
 from towers import CROSS, EVOLVE, LINES, TOWERS
 
@@ -37,6 +37,7 @@ GOOD = (90, 220, 110)
 BAD = (235, 80, 80)
 GOLD = (255, 210, 70)
 TIER_RIM = {1: (15, 15, 20), 2: (176, 116, 64), 3: (205, 205, 220), 4: GOLD}
+TIER_COLORS = {"weak": TEXT_DIM, "normal": TEXT, "strong": GOLD}  # record tiers on the reward screen
 
 
 def wrap(text, width):
@@ -418,6 +419,8 @@ class GameView:
         if self.side == "monsters":
             self.draw_attack_map(fx)
         screen.blit(fx, (0, 0))
+        if self.side == "monsters":
+            self.draw_queue_text()
         mx, my = mouse_pos()
         hover = tile_center(mx // TILE, my // TILE)
         if self.build_kind and mx < MAP_W:
@@ -547,8 +550,12 @@ class GameView:
                                     self.theme.accent)
         if self.side == "monsters":
             sub = self.font.render("MONSTERS: draft a wave in the panel, then press Space to send it", True, TEXT)
+        elif self.finale_on and self.level_idx == self.last_level_idx:
+            boss = ENEMY_TYPES[self.level_boss]["boss"]
+            sub = self.font.render(f"FINAL LEVEL - {boss} joins wave {self.level_waves}, where your monsters won",
+                                   True, self.theme.accent)
         elif self.is_boss_level:
-            boss = ENEMY_TYPES[BOSS_LEVELS[self.level_idx + 1]]["boss"]
+            boss = ENEMY_TYPES[self.level_boss]["boss"]
             sub = self.font.render(f"BOSS LEVEL - {boss} waits at the end of wave {WAVES_PER_LEVEL}",
                                    True, self.theme.accent)
         elif self.rebuild_layout:
@@ -569,28 +576,35 @@ class GameView:
         run_over = [(f"Levels won this run: {self.levels_won}   (best: {self.profile.best_run})", TEXT, self.font_l),
                     ("Records and unlocks are kept. Press R or click for a new run.", TEXT, self.font)]
         if self.state == "level_complete" and self.side == "monsters":
-            lines = [(f"{self.theme.name} has fallen!", self.theme.accent, self.font_xl),
-                     (f"Next up: {LEVELS[self.level_idx + 1][0].name}", TEXT, self.font_l),
-                     ("Press Space or click to continue.", TEXT, self.font)]
+            lines = [(f"{self.theme.name} breached!", self.theme.accent, self.font_xl),
+                     (f"The towers lost {self.lives_taken} lives here: {self.lives} left for "
+                      f"{self.levels_left} more levels", TEXT, self.font_l),
+                     (f"Next up: {LEVELS[self.level_idx + 1][0].name}. Press Space or click to continue.", TEXT,
+                      self.font)]
         elif self.state == "level_complete":
             nxt = LEVELS[self.level_idx + 1][0]
             lines = [(f"{self.theme.name} cleared!", self.theme.accent, self.font_xl),
                      (f"Next up: {nxt.name}", nxt.accent, self.font_l),
                      ("Towers are refunded in full. Press Space or click to continue.", TEXT, self.font)]
         elif self.state == "game_over" and self.side == "monsters":
-            lines = [("THE TOWERS HELD - RUN OVER", BAD, self.font_xl),
-                     (f"Level {self.level_idx + 1}: they kept {self.lives} lives", TEXT, self.font)] + run_over
+            why = (f"The last level is over and they still have {self.lives} lives" if self.lives_taken else
+                   f"Level {self.level_idx + 1}: they didn't lose a single life")
+            lines = [("THE TOWERS HELD - RUN OVER", BAD, self.font_xl), (why, TEXT, self.font)] + run_over
         elif self.state == "game_over":
             lines = [("RUN OVER", BAD, self.font_xl),
                      (f"Lost at level {self.level_idx + 1}, wave {self.wave_idx}", TEXT, self.font)] + run_over
         elif self.state == "victory" and self.side == "monsters":
             lines = [("EVERY DEFENSE BROKEN!", GOLD, self.font_xl),
-                     (f"Pass {self.pass_no} complete. Next: defend against your own waves.", TEXT, self.font_l),
+                     (f"Their last life went at level {self.level_idx + 1}, wave {self.wave_idx}. "
+                      f"Pass {self.pass_no} complete.", TEXT, self.font_l),
+                     ("Next: defend against your own waves, up to this very wave,", TEXT, self.font),
+                     ("where The Warden joins them.", TEXT, self.font),
                      ("Press Space or click to switch sides.", TEXT, self.font)]
         elif self.state == "victory":
-            lines = [("PASS COMPLETE!", GOLD, self.font_xl),
-                     (f"All {len(LEVELS)} levels defended. Next: break your own defenses.", TEXT, self.font_l),
-                     ("Press Space or click to switch sides.", TEXT, self.font)]
+            held = (f"The Warden fell: held to level {self.level_idx + 1}, wave {self.wave_idx}." if self.finale_on
+                    else f"All {len(LEVELS)} levels defended.")
+            lines = [("PASS COMPLETE!", GOLD, self.font_xl), (held, TEXT, self.font_l),
+                     ("Next: break your own defenses. Press Space or click to switch sides.", TEXT, self.font)]
         elif self.paused:
             lines = [("PAUSED", TEXT, self.font_xl), ("Press P to resume", TEXT_DIM, self.font)]
         else:
@@ -611,7 +625,7 @@ class GameView:
         self.text(self.font_xl, "NEW RUN", GOLD, (MAP_W / 2, 90), "midtop")
         self.text(self.font, f"Pick the side you start on. Best run so far: {self.profile.best_run} levels won.",
                   TEXT_DIM, (MAP_W / 2, 160), "midtop")
-        about = {"towers": ("TOWERS", ["Build and fuse towers to hold", "all 20 levels against your own",
+        about = {"towers": ("TOWERS", ["Build and fuse towers to hold", f"all {len(LEVELS)} levels against your own",
                                        "recorded monster waves."]),
                  "monsters": ("MONSTERS", ["Draft waves and use abilities", "to break your own recorded",
                                            "tower defenses, level by level."])}
@@ -668,6 +682,9 @@ class GameView:
         note = "Monster unlocks: for your waves on the Monsters side" if monster else \
             "Tower cards: they power up your towers"
         self.text(self.font_s, note, TEXT_DIM, (MAP_W / 2, MAP_H / 2 - 150), "midtop")
+        if self.starter_picks is None:  # a win, not the starter pack: say what the record's tier gave
+            self.text(self.font_s, self.tier_note(), TIER_COLORS[self.reward_tier], (MAP_W / 2, MAP_H / 2 - 132),
+                      "midtop")
         mouse = mouse_pos()
         for i, (rect, key) in enumerate(zip(self.reward_card_rects(), self.reward_cards)):
             card = UNLOCKS[self.reward_pool][key]
@@ -694,6 +711,13 @@ class GameView:
             if card["rare"]:
                 self.text(self.font_s, "RARE", GOLD, (rect.right - 10, rect.top + 8), "topright")
             self.text(self.font, f"[{i + 1}]", GOLD, (rect.centerx, rect.bottom - 12), "midbottom")
+
+    def tier_note(self):
+        spec = REWARDS[self.reward_tier]
+        gave = [f"{spec['cards']} cards"] + (["a sure rare"] if spec["rare"] else [])
+        if self.reward_pool == "monster":
+            gave.append(f"+{spec['share']:.0%} budget share")
+        return f"{self.reward_tier.capitalize()} record ({self.record_ratio:.1f}x par): " + ", ".join(gave)
 
     @staticmethod
     def stat_line(spec):
@@ -808,7 +832,7 @@ class GameView:
         screen = self.screen
         x = MAP_W + 12
         self.draw_panel_header()
-        self.text(self.font, f"Wave  {self.wave_idx} / {WAVES_PER_LEVEL}", TEXT, (x, 84))
+        self.text(self.font, f"Wave  {self.wave_idx} / {self.level_waves}", TEXT, (x, 84))
         self.text(self.font, f"Lives  {self.lives}", BAD if self.lives <= 5 else TEXT, (x, 110))
         self.text(self.font, f"Gold  {self.gold}", GOLD, (x, 136))
         self.text(self.font_s, "TOWERS", TEXT_DIM, (x, 176))
@@ -868,7 +892,8 @@ class GameView:
         sdraw.rect(screen, self.theme.accent, header, border_radius=8)
         name_font = self.font_l if self.font_l.size(self.theme.name)[0] <= (header.width - 12) * SCALE else self.font
         self.text(name_font, self.theme.name, (20, 20, 25), (header.centerx, header.top + 20), "center")
-        level_label = f"Level {self.level_idx + 1} of {len(LEVELS)}" + ("  -  BOSS" if self.is_boss_level else "")
+        level_label = (f"Level {self.level_idx + 1} of {self.last_level_idx + 1}"
+                       + ("  -  BOSS" if self.is_boss_level else ""))
         self.text(self.font_s, level_label, (20, 20, 25), (header.centerx, header.bottom - 6), "midbottom")
 
     def draw_panel_footer(self):

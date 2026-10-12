@@ -8,7 +8,7 @@ import pytest
 import monsters
 from entities import Enemy, Tower, cast_ability, heal_auras
 from helpers import dummy_enemy, put, run_wave
-from levels import BOSS_LEVELS
+from levels import ALL_BOSS_LEVELS
 from monsters import ABILITIES, ENEMY_TYPES, load_monsters
 
 
@@ -22,7 +22,7 @@ def test_roster():
     assert [k for k, d in drafts.items() if d == "starter"] == ["basic", "fast", "tank", "elite"]
     assert sorted(k for k, d in drafts.items() if d == "unlock") == \
         ["armored", "healer", "juggernaut", "phantom", "splitter", "swarmling"]
-    assert all(drafts[boss] == "boss" and ENEMY_TYPES[boss]["fatal"] for boss in BOSS_LEVELS.values())
+    assert all(drafts[boss] == "boss" and ENEMY_TYPES[boss]["fatal"] for boss in ALL_BOSS_LEVELS.values())
     assert sorted(ABILITIES) == ["bulwark", "emp", "frenzy", "mend", "smoke"]
 
 
@@ -55,7 +55,14 @@ def shipped():
     (lambda d: d["abilities"]["emp"].pop("radius"), "disable on area needs ['radius']"),
     (lambda d: d["abilities"]["frenzy"].pop("duration"), "haste on all needs ['duration']"),
     (lambda d: d["budget"].pop("share_start"), "budget: missing fields ['share_start']"),
-    (lambda d: d["budget"].update(share_per_win=-1), "must be numbers, 0 or more"),
+    (lambda d: d["budget"].update(pace_max=-1), "must be numbers, 0 or more"),
+    (lambda d: d["rewards"]["tiers"].update(towers=[3, 1]), "tiers.towers must be"),
+    (lambda d: d["rewards"]["strong"].pop("rare"), "missing fields ['rare']"),
+    (lambda d: d["rewards"]["weak"].update(cards=0), "cards must be a whole number"),
+    (lambda d: d["budget"].pop("upgrade_price"), "budget: missing fields ['upgrade_price']"),
+    (lambda d: d["upgrades"]["vitality"].update(stat="luck"), "stat must be one of"),
+    (lambda d: d["upgrades"]["plating"].update(max=0), "max a whole number"),
+    (lambda d: d["upgrades"]["stride"].update(max=6), "speed can go up by 50% at most"),
 ])
 def test_broken_monsters_file(tmp_path, change, message):
     data = shipped()

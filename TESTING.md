@@ -29,11 +29,11 @@ uv run pytest --durations=10             # list the slowest tests
 | `test_fusion.py`, `test_combat.py` | Game rules: buying, fusing, moving and selling towers; tower mechanics; enemies and bosses |
 | `test_controls.py`, `test_launch.py` | Input and the game loop: keys, clicks at every display scale, the settings screen, saved settings, quitting |
 | `test_progress.py` | Moving between levels: the wave lock after a level change, Rebuild, the saved checkpoint and Continue |
-| `test_runs.py` | Runs: passes that switch sides after level 20, the run ending on a loss, picking a side, saving and continuing a run |
+| `test_runs.py` | Runs: passes that switch sides after the last level, finales (a Towers pass ending on the wave the Monsters pass was won, with the Warden), the run ending on a loss, picking a side, saving and continuing a run |
 | `test_records.py` | Comps per wave, tower records (only stronger slots replace), the profile file, and the Towers side playing monster records (replayed abilities included) |
 | `test_monsters.py` | Loading `monsters.json` and its error messages; monster mechanics (armor, healing, splitting, phasing, buffs) and abilities |
-| `test_attack.py` | The Monsters side: the defender from a record, budget and share, drafting, abilities, winning and losing, the starter pack, drawing |
-| `test_unlocks.py` | `unlocks.json`, drawing and picking cards after wins, milestones, and what each tower card does |
+| `test_attack.py` | The Monsters side: the defender from a record, budget and share, drafting, abilities, lives that last the pass (clearing, winning and losing), stat upgrades and escorts, the starter pack, drawing |
+| `test_unlocks.py` | `unlocks.json`, drawing and picking cards after wins (record tiers, sure rares), milestones, and what each tower card does |
 | `test_balance_log.py` | The per-level balance logs: file names, uniqueness, and cross-checks that their numbers add up |
 | `test_rendering.py` | Drawing: every screen at every display scale, plus pixel snapshots |
 | `test_playthrough.py` | Long simulations with bot players, on both sides (marked `slow`) |
@@ -76,11 +76,12 @@ On the Monsters side, the bot first sets tower records for levels 1 and 2, then 
 (`scripted_attack` in `tests/helpers.py`) attack them with no unlocks. They pin two properties of
 the current balance:
 
-- **Monsters level 1 stays winnable** (by saving the budget for one push). This matters more than
-  it looks: monster cards only come from Monsters wins, so an unwinnable first level would be a
-  dead end.
-- **How you spend matters**: level 1 holds against evenly paced waves, while level 2 (whose record
-  ends on Dragon + Absolute Zero) is the other way round.
+- **Monsters level 1 stays winnable.** Even waves take enough lives to clear it, and one big push
+  takes all 20, which wins the whole pass (there's no cap on lives per level). This matters more
+  than it looks: monster cards only come from Monsters wins, so an unwinnable first level would be
+  a dead end.
+- **How you spend matters**: level 2 (whose record ends on Dragon + Absolute Zero) holds against one
+  big push but not against evenly paced waves.
 
 If a change to `monsters.json` or `towers.json` breaks these, look at the budget rules in
 `monsters.json` first.

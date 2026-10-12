@@ -85,8 +85,8 @@ def scenes(scale, mouse, monkeypatch):
     yield "boss", g
     g.boss_alert = 0
     yield "boss_no_alert", g
-    g.load_level(19)
-    yield "level20_banner", g
+    g.load_level(len(main.LEVELS) - 1)
+    yield "last_level_banner", g
 
 
 @pytest.mark.parametrize("scale", SCALES)

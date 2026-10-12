@@ -8,14 +8,17 @@ Towers are never upgraded directly: they evolve by fusing.
   Tier 4  two tier 3 towers from *different* lines fuse into one of 12 final,
           cross-type towers (press T in game to see the whole tree)
 
-There are 20 levels, each with its own color theme and path. Levels 10 and 20
-are boss levels: their last wave ends with a boss that summons minions, resists
-slows, and takes every life if it gets through.
+There are 10 levels, each with its own color theme and path (levels.py keeps 10
+more as a backup, switched off by LEVEL_COUNT). Level 10 is a boss level: its
+last wave ends with a boss that summons minions, resists slows, and takes every
+life if it gets through.
 
-A run is a series of passes of the 20 levels, switching sides after level 20:
+A run is a series of passes of the 10 levels, switching sides after level 10:
 Towers (build and defend) then Monsters (attack.py: draft waves against your own
 tower records) then Towers again (against your own monster records), and so on.
-Losing a level ends the run. Records, unlock cards and milestones are permanent
+Losing a level ends the run. On the Monsters side the defender's lives last the
+whole pass: each level has to take at least one, and the pass is won (early, if
+need be) when the last one goes. Records, unlock cards and milestones are permanent
 (progress.Profile, in profile.json); the run in progress is saved to
 savegame.json at the start of every level.
 
@@ -31,7 +34,7 @@ S              sell the selected tower
 B              rebuild the previous level's towers (see below)
 C              continue the saved run (on the start screen)
 T              show the evolution tree
-Space          start the next wave, continue to the next level, or switch sides after level 20
+Space          start the next wave, continue to the next level, or switch sides after level 10
 F              cycle game speed: 1x, 2x, 4x, 10x (Shift+F goes back)
 P              pause
 O              settings (display scale); also shown at launch
@@ -76,8 +79,8 @@ from entities import Enemy, Tower, cast_ability, heal_auras
 from graphics import (BAD, GOLD, HEIGHT, MAP_H, MAP_W, PANEL_W, SCALES, TILE, Button, GameView, Popup, Ring,
                       CastWarning, mouse_pos, render_map, set_scale, tile_center, to_logical, window_size)
 from levels import (BOSS_LEVELS, COLS, ENEMY_TYPES, LEVELS, ROWS, START_GOLD, START_LIVES, WAVES_PER_LEVEL,
-                    build_path_cells, make_wave)
-from monsters import ABILITIES, BUDGET
+                    build_path_cells, make_wave, wave_value)
+from monsters import ABILITIES, BUDGET, REWARDS, UPGRADES
 from progress import UNLOCKS, Profile, comp_snapshot, stronger
 from towers import TOWER_ORDER, TOWERS, fusion_options
 
@@ -88,6 +91,7 @@ FPS = 60
 SPEEDS = (1, 2, 4, 10)  # game steps per frame
 CAST_WARNING = 1.0  # seconds a replayed ability is shown before it lands
 WAVE_LOCK = 1.0  # seconds after a level change before Space can send a wave (stops double presses)
+FINALE_BOSS = "warden"  # joins the last wave of a Towers pass that ends early (see Game.finale)
 
 LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
 SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "settings.json")
@@ -119,8 +123,10 @@ def save_settings(settings):
 # The run in progress, saved at the start of every level (see DESIGN.md)
 # --------------------------------------------------------------------------
 def load_save():
-    """The run in progress as {"side", "pass", "levels_won", "monster_wins", "level", "gold", "lives", "layout"}, or None
-    if there's no valid one. Saves from before passes existed count as pass 1 on the Towers side."""
+    """The run in progress as {"side", "pass", "levels_won", "monster_wins", "share_growth", "level", "gold", "lives",
+    "layout", "upgrades", "escort", "finale"}, or None if there's no valid one. Saves from before passes existed count as
+    pass 1 on the Towers side. lives are the defender's on the Monsters side; upgrades and escort are only used there.
+    finale is [level, wave] (1-based) where a Towers pass ends early (see Game.finale), or None."""
     try:
         with open(SAVE_FILE, encoding="utf-8") as f:
             data = json.load(f)
@@ -134,10 +140,20 @@ def load_save():
         # towers whose kind no longer exists in towers.json are dropped
         layout = [{"kind": e["kind"], "spent": int(e["spent"]), "tile": tuple(int(v) for v in e["tile"][:2])}
                   for e in data["layout"] if e["kind"] in TOWERS]
+        upgrades = {k: max(0, int(r)) for k, r in data.get("upgrades", {}).items() if k in UPGRADES}
+        escort = max(0, int(data.get("escort", 0)))
+        # saves from before record tiers: every win grew the share like a normal record
+        share_growth = float(data.get("share_growth", monster_wins * REWARDS["normal"]["share"]))
+        finale = data.get("finale")
+        if finale is not None:
+            finale = (int(finale[0]), int(finale[1]))
+            if side != "towers" or not level < finale[0] <= len(LEVELS) or not 1 <= finale[1] <= WAVES_PER_LEVEL:
+                finale = None  # doesn't fit this pass (or the level count changed): the full pass
     except (OSError, ValueError, KeyError, TypeError, AttributeError):
         return None
-    return {"side": side, "pass": pass_no, "levels_won": levels_won, "monster_wins": monster_wins, "level": level,
-            "gold": gold, "lives": lives, "layout": layout}
+    return {"side": side, "pass": pass_no, "levels_won": levels_won, "monster_wins": monster_wins,
+            "share_growth": share_growth, "level": level, "gold": gold, "lives": lives, "layout": layout,
+            "upgrades": upgrades, "escort": escort, "finale": finale}
 
 
 def write_save(save):
@@ -203,7 +219,7 @@ class Game(AttackMixin, AttackView, GameView):
     def new_run(self, side):
         """Level 1 of pass 1 on `side`, with nothing won yet."""
         gold, lives = self.pass_start_purse()
-        self.start_run(0, gold, lives, side=side)
+        self.start_run(0, gold, DEFENDER_LIVES if side == "monsters" else lives, side=side)
 
     def pass_start_purse(self):
         """Gold and lives at the start of a Towers pass, tower cards included."""
@@ -216,19 +232,25 @@ class Game(AttackMixin, AttackView, GameView):
             self.side_chosen = True
             s = self.save
             self.start_run(s["level"], s["gold"], s["lives"], s["layout"], s["side"], s["pass"], s["levels_won"],
-                           s["monster_wins"])
+                           s["monster_wins"], s["upgrades"], s["escort"], s["share_growth"], s["finale"])
             self.untouched = False
 
-    def start_run(self, idx, gold, lives, layout=(), side="towers", pass_no=1, levels_won=0, monster_wins=0):
+    def start_run(self, idx, gold, lives, layout=(), side="towers", pass_no=1, levels_won=0, monster_wins=0,
+                  upgrades=None, escort=0, share_growth=0.0, finale=None):
         self.finish_log("abandoned")
         if self.log_session:
             self.log_session.run += 1
         self.side = side
         self.pass_no = pass_no
         self.levels_won = levels_won  # this run's score
-        self.monster_wins = monster_wins  # Monsters levels won this run: each raises the budget share
+        self.monster_wins = monster_wins  # Monsters levels won this run
+        self.share_growth = share_growth  # what those wins added to the budget share (attack.py)
+        # (level, wave), 1-based: where the Monsters pass was won. The Towers pass after it ends on that wave,
+        # with the Warden joining it (None: the full pass). Set on the Monsters side, used on the Towers side.
+        self.finale = finale
         self.untouched = True  # nothing played yet: Continue is still on offer
         self.gold = gold
+        self.start_attack_pass(upgrades, escort)
         self.lives = lives
         self.speed = 1
         self.paused = False
@@ -239,8 +261,10 @@ class Game(AttackMixin, AttackView, GameView):
     def checkpoint(self, layout=()):
         """Save the run at the start of the current level."""
         self.save = {"side": self.side, "pass": self.pass_no, "levels_won": self.levels_won,
-                     "monster_wins": self.monster_wins, "level": self.level_idx, "gold": self.gold, "lives": self.lives,
-                     "layout": list(layout)}
+                     "monster_wins": self.monster_wins, "share_growth": self.share_growth, "level": self.level_idx,
+                     "gold": self.gold, "lives": self.lives,
+                     "layout": list(layout), "upgrades": dict(self.upgrades), "escort": self.escort,
+                     "finale": list(self.finale) if self.finale else None}
         write_save(self.save)
 
     def level_won(self):
@@ -269,11 +293,15 @@ class Game(AttackMixin, AttackView, GameView):
         self.new_run(side)
 
     def next_pass(self):
-        """Level 20 is won: switch sides and start level 1 again, facing the records just set."""
+        """The pass is won: switch sides and start level 1 again, facing the records just set. A Towers pass
+        keeps the finale the Monsters pass set; a Monsters pass has none."""
         self.side = "monsters" if self.side == "towers" else "towers"
         self.pass_no += 1
         if self.side == "towers":
             self.gold, self.lives = self.pass_start_purse()
+        else:
+            self.finale = None
+            self.start_attack_pass()
         self.load_level(0)
         self.wave_lock = WAVE_LOCK
         self.checkpoint()
@@ -309,18 +337,43 @@ class Game(AttackMixin, AttackView, GameView):
         self.card_mods = self.profile.tower_mods()  # the player's tower cards (towers.NO_TOWER_MODS)
         self.reward_cards = []  # card ids on offer after a win (see offer_rewards)
         self.reward_pool = None
+        self.reward_tier = "normal"  # the record tier the cards on offer were drawn for
         self.starter_picks = None  # Monsters side, first time: starter cards still to offer
         self.wave_started_at = 0.0
         self.replay = []  # Towers side: recorded ability casts still to come this wave
         self.aiming, self.queue, self.budget, self.cooldowns = None, [], 0, {}  # Monsters side (attack.py)
-        if self.side == "monsters":
-            self.lives = DEFENDER_LIVES
+        self.lives_at_start = self.lives
+        self.pace_bonus = 0.0  # Monsters side: set by setup_attack_level
         if self.log_session:
             path_length = sum(a.distance_to(b) for a, b in zip(self.path_pts, self.path_pts[1:]))
             self.log = LevelLog(self.log_session, idx + 1, self.theme.name, self.is_boss_level, path_length,
                                 self.lives, self.gold, spec_snapshot(), self.side)
         if self.side == "monsters":
             self.setup_attack_level()
+        self.record_ratio = self.record_strength()
+        self.record_tier = self.tier_for(self.record_ratio)
+        self.log_event("record", ratio=round(self.record_ratio, 2), tier=self.record_tier,
+                       share=round(self.share, 3) if self.side == "monsters" else None,
+                       pace=round(self.pace_bonus, 3) if self.side == "monsters" else None)
+
+    # ---- record strength ---------------------------------------------------
+    def record_strength(self):
+        """How strong this level's record is against par (what its generated waves are worth): on the
+        Monsters side the defender's strongest comp, on the Towers side the monster waves faced (the
+        generated ones where there's no record), added up."""
+        par = sum(wave_value(self.level_idx, w) for w in range(WAVES_PER_LEVEL))
+        if self.side == "monsters":
+            strength = max((c["value"] for c in self.defender_record.values()), default=0)
+        else:
+            record = self.profile.monster_record(self.level_idx + 1)
+            strength = sum(record[w]["value"] if w in record else wave_value(self.level_idx, w - 1)
+                           for w in range(1, WAVES_PER_LEVEL + 1))
+        return strength / par
+
+    def tier_for(self, ratio):
+        """weak, normal or strong, from the thresholds for this side in monsters.json."""
+        weak_below, strong_from = REWARDS["tiers"][self.side]
+        return "weak" if ratio < weak_below else "strong" if ratio >= strong_from else "normal"
 
     # ---- balance log ------------------------------------------------------
     def log_event(self, event_type, **data):
@@ -367,8 +420,30 @@ class Game(AttackMixin, AttackView, GameView):
                 self.log.current_wave()["summoned"] += 1
 
     @property
+    def finale_on(self):
+        """Whether this pass ends early, on the wave its Monsters pass was won (Towers side only)."""
+        return self.side == "towers" and self.finale is not None
+
+    @property
+    def last_level_idx(self):
+        """Index of the level that ends this pass."""
+        return self.finale[0] - 1 if self.finale_on else len(LEVELS) - 1
+
+    @property
+    def level_waves(self):
+        """Waves in the current level: fewer on a finale's level, which ends on the finale wave."""
+        return self.finale[1] if self.finale_on and self.level_idx == self.last_level_idx else WAVES_PER_LEVEL
+
+    @property
+    def level_boss(self):
+        """The boss that joins this level's last wave, or None: a finale's level gets FINALE_BOSS."""
+        if self.finale_on and self.level_idx == self.last_level_idx:
+            return FINALE_BOSS
+        return BOSS_LEVELS.get(self.level_idx + 1)
+
+    @property
     def is_boss_level(self):
-        return self.level_idx + 1 in BOSS_LEVELS
+        return self.level_boss is not None
 
     @property
     def can_continue(self):
@@ -386,16 +461,20 @@ class Game(AttackMixin, AttackView, GameView):
                 or bool(self.reward_cards) or self.picking_side)
 
     # ---- unlock cards -------------------------------------------------------
-    def offer_rewards(self, side_won):
-        """After a win: three cards from that side's pool to pick one from (if it gives cards yet)."""
+    def offer_rewards(self, side_won, tier="normal"):
+        """After a win: cards from that side's pool to pick one from (if it gives cards yet). How many, and
+        whether one is a sure rare, depends on the record's tier (the starter pack counts as normal)."""
+        spec = REWARDS[tier]
+        self.reward_tier = tier
         self.reward_pool = self.profile.reward_side(side_won)
-        self.reward_cards = self.profile.draw_cards(self.reward_pool, random) if self.reward_pool else []
+        self.reward_cards = (self.profile.draw_cards(self.reward_pool, random, spec["cards"], spec["rare"])
+                             if self.reward_pool else [])
 
     def pick_reward(self, index):
         card = self.reward_cards[index]
         self.profile.unlock(self.reward_pool, card)
         self.log_event("unlock", pool=self.reward_pool, card=card, rank=self.profile.rank(self.reward_pool, card),
-                       offered=self.reward_cards)
+                       offered=self.reward_cards, tier=self.reward_tier)
         self.popups.append(Popup((MAP_W / 2, MAP_H / 2 + 120), f"Unlocked: {UNLOCKS[self.reward_pool][card]['name']}",
                                  GOLD))
         self.reward_cards = []
@@ -459,7 +538,7 @@ class Game(AttackMixin, AttackView, GameView):
             self.untouched = False
         if self.side == "monsters":
             return self.send_wave()
-        if self.state != "build" or self.wave_idx >= WAVES_PER_LEVEL:
+        if self.state != "build" or self.wave_idx >= self.level_waves:
             return
         recorded = self.profile.monster_record(self.level_idx + 1).get(self.wave_idx + 1)
         if recorded:  # the player's own strongest wave from the Monsters side, abilities included
@@ -472,6 +551,9 @@ class Game(AttackMixin, AttackView, GameView):
         else:
             self.spawn_queue, self.hp_mult = make_wave(self.level_idx, self.wave_idx)
             self.wave_mods, self.replay = {}, []
+        if self.finale_on and self.level_idx == self.last_level_idx and self.wave_idx + 1 == self.level_waves:
+            # the wave the Monsters pass was won on, and the Warden with it
+            self.spawn_queue = [k for k in self.spawn_queue if "boss" not in ENEMY_TYPES[k]] + [FINALE_BOSS]
         self.wave_mods["armor"] = self.card_mods["armor"]
         self.wave_idx += 1
         self.spawn_timer = 0.0
@@ -628,6 +710,8 @@ class Game(AttackMixin, AttackView, GameView):
             e.end_t = self.clock
             if e.escaped:
                 lost = self.lives if e.spec.get("fatal") else e.spec["damage"]
+                if self.side == "monsters":
+                    lost = max(0, min(lost, self.lives_in_reach))
                 self.lives -= lost
                 self.effects.append(Ring(e.pos, 30, BAD, 0.4))
                 if wave_log:
@@ -648,7 +732,7 @@ class Game(AttackMixin, AttackView, GameView):
 
         if self.side == "monsters":
             if self.lives <= 0:
-                self.win_attack_level()
+                self.win_attack_level(pass_won=True)
             elif self.state == "wave" and not self.spawn_queue and not self.enemies:
                 self.end_attack_wave()
         elif self.lives <= 0:
@@ -663,15 +747,15 @@ class Game(AttackMixin, AttackView, GameView):
             self.popups.append(Popup((MAP_W / 2, MAP_H / 2), f"Wave cleared! +{bonus}", GOLD))
             self.projectiles.clear()
             self.check_comp("wave_end")  # closes this wave's window
-            if self.wave_idx < WAVES_PER_LEVEL:
+            if self.wave_idx < self.level_waves:
                 self.state = "build"
             else:
-                self.state = "level_complete" if self.level_idx + 1 < len(LEVELS) else "victory"
+                self.state = "level_complete" if self.level_idx < self.last_level_idx else "victory"
                 self.profile.record_towers(self.level_idx + 1, self.comps_by_wave, self.card_mods)
                 if self.state == "victory":
                     self.profile.reach("monsters_side")
                 self.level_won()
-                self.offer_rewards("towers")
+                self.offer_rewards("towers", self.record_tier)
                 self.finish_log("cleared")
 
     def replay_casts(self):
