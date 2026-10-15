@@ -523,3 +523,16 @@ def test_old_saves_grow_the_share_like_normal_records(screen):
     g = main.Game(screen, log_dir=None)
     g.continue_game()
     assert g.share_growth == pytest.approx(3 * REWARDS["normal"]["share"]) and g.lives == 12
+
+
+def test_a_looter_brings_budget_back_instead_of_lives(attack):
+    g = attack
+    g.send_wave()
+    budget, lives = g.budget, g.lives
+    g.register_enemy(Enemy("tank", g.path_pts, 1000), "wave")  # keeps the wave going
+    e = Enemy("looter", g.path_pts, 1)
+    g.register_enemy(e, "wave")
+    e.alive, e.escaped = False, True
+    g.update(1 / 60)
+    cost, (_, multiple) = ENEMY_TYPES["looter"]["cost"], ENEMY_TYPES["looter"]["loot"]
+    assert g.budget == budget + round(cost * multiple) and g.lives == lives

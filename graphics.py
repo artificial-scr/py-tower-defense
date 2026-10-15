@@ -15,7 +15,7 @@ import os
 import pygame
 
 from levels import COLS, ENEMY_TYPES, LEVELS, ROWS, TILE, WAVES_PER_LEVEL, tile_center
-from monsters import ABILITIES, REWARDS
+from monsters import ABILITIES, REWARDS, WARD_BREAK
 from progress import UNLOCKS
 import ambience
 import sprites
@@ -284,6 +284,7 @@ def draw_enemy_shadow(surf, enemy):
 
 
 BLINK_EVERY, BLINK_TIME = 3.2, 0.14  # seconds
+ANGRY, FURIOUS = 0.25, 0.6  # a Berserker's face changes at these shares of its full rage
 
 
 def enemy_lift(enemy):
@@ -321,14 +322,40 @@ def draw_enemy(surf, enemy):
         angle = enemy.heading.as_polar()[1] if spec["sides"] == 3 and "shape" not in spec else enemy.spin
     else:
         angle = enemy.spin if design.get("spins") else enemy.facing
-    look = "phased" if enemy.phased else "hit" if enemy.flash > 0 else "normal"
+    look = "phased" if enemy.phased else "illusion" if enemy.illusion else "hit" if enemy.flash > 0 else "normal"
     pos = enemy.pos - pygame.Vector2(0, enemy_lift(enemy))
+    if enemy.illusion:  # a shimmer, side to side
+        pos += pygame.Vector2(math.sin(enemy.phase_t * 17) * 1.2, 0)
+    if "rebound" in spec and enemy.slowed and enemy.slow_factor < 1:
+        # a slowed Thawling shivers, harder as the slow runs out and its sprint gets near
+        amp = 0.8 + 1.6 * max(0.0, 1 - enemy.slow_timer)
+        pos += pygame.Vector2(math.sin(enemy.phase_t * 53), math.sin(enemy.phase_t * 41 + 1.3)) * amp
     if design and design.get("halo"):
         halo = sprites.glow(mix(spec["color"], (255, 255, 255), 0.3), size + 12, SCALE)
         halo.set_alpha(round(150 + 70 * math.sin(enemy.phase_t * 4)))
         blit_center(surf, halo, pos)
     if design and "corona" in design:
         blit_center(surf, sprites.enemy_corona(enemy.kind, sprites.angle_step(-enemy.spin * 0.5), SCALE), pos)
+    if "speed_aura" in spec and not enemy.illusion:  # how far a Banner Bearer's rally reaches
+        ring = sprites.rally_ring(spec["speed_aura"][0], SCALE)
+        ring.set_alpha(round(190 + 65 * math.sin(enemy.phase_t * 3)))
+        blit_center(surf, ring, enemy.pos)
+    if enemy.rally > 0:  # rallied: gold speed streaks behind it
+        side = enemy.heading.rotate(90) * size * 0.45
+        for k in (-1, 1):
+            start = pos - enemy.heading * (size + 2) + side * k
+            sdraw.line(surf, (255, 205, 90), start, start - enemy.heading * 7, 2)
+    if enemy.rebounding:  # a Thawling sprinting off its thaw trails steam
+        for i in range(4):
+            back = pos - enemy.heading * (size * 0.6 + 6 + i * 6)
+            sway = enemy.heading.rotate(90) * math.sin(enemy.phase_t * 9 + i * 1.8) * 3
+            puff = sprites.steam_puff(round(6 + i * 2), SCALE)
+            puff.set_alpha(220 - 45 * i)
+            blit_center(surf, puff, back + sway)
+    if enemy.rage > 0.05:  # a Berserker burns hotter the angrier it gets
+        aura = sprites.rage_aura(size, int(enemy.phase_t * 14) % sprites.FRAMES, SCALE)
+        aura.set_alpha(round(255 * min(1.0, 0.25 + enemy.rage / spec["enrage"])))
+        blit_center(surf, aura, pos)
     img = sprites.enemy_body(enemy.kind, sprites.angle_step(angle), SCALE, look, enemy_frame(enemy))
     blit_center(surf, img, pos)
     if design and "face" in design:
@@ -338,10 +365,19 @@ def draw_enemy(surf, enemy):
         blit_center(surf, sprites.orb(color, r, SCALE), pos + orbit)
     if not enemy.phased:
         draw_eyes(surf, enemy, pos)
+    if "sabotage" in spec:  # the charge's light, blinking faster as the Saboteur nears death
+        f = pygame.Vector2(1, 0).rotate(enemy.facing)
+        tip = pos + (f * sprites.SABOTEUR_ANTENNA[0] + f.rotate(90) * sprites.SABOTEUR_ANTENNA[1]) * size
+        rate = 1.5 + 6 * (1 - enemy.hp / enemy.max_hp)
+        if (enemy.phase_t * rate + enemy.spawn_t) % 1 < 0.5:
+            blit_center(surf, sprites.glow((255, 60, 40), 9, SCALE), tip)
+            sdraw.circle(surf, (255, 90, 70), tip, max(1.6, size * 0.17))
     if enemy.burn_timer > 0:
         sdraw.circle(surf, (255, 120, 20), pos, max(3, size // 3))
     if enemy.slowed:
         sdraw.circle(surf, (150, 230, 255), pos, size + 4, 2)
+    if "ward" in spec:
+        draw_ward(surf, enemy, pos)
     if enemy.shield_timer > 0:
         sdraw.circle(surf, (240, 220, 120), pos, size + 7, 2)
     if enemy.haste_timer > 0:
@@ -356,6 +392,34 @@ def draw_enemy(surf, enemy):
         sdraw.rect(surf, GOOD, bar)
 
 
+WARD_COLOR = (150, 210, 255)
+
+
+def draw_ward(surf, enemy, pos):
+    """Warded: the bubble while the ward is up (shimmering), a shatter just after it absorbs a hit, and a
+    thin arc filling round it as the ward comes back."""
+    size = enemy.spec["size"]
+    r = size + 6
+    if enemy.warded:
+        bubble = sprites.ward_bubble(size, SCALE)
+        bubble.set_alpha(round(205 + 50 * math.sin(enemy.phase_t * 5 + enemy.spawn_t)))
+        blit_center(surf, bubble, pos)
+        return
+    if enemy.ward_break > 0:  # the hexagon bursts outward in six shards
+        k = 1 - enemy.ward_break / WARD_BREAK
+        corners = regular_polygon(pygame.Vector2(), r * (1 + 0.6 * k), 6, 30 + 25 * k)
+        for a, b in zip(corners, corners[1:] + corners[:1]):
+            mid, half = (a + b) / 2, (b - a) * 0.3 * (1 - k)
+            sdraw.line(surf, mix(WARD_COLOR, (255, 255, 255), 0.5 * (1 - k)), pos + mid - half, pos + mid + half,
+                       2.5 * (1 - k) + 1)
+    charge = 1 - enemy.ward_timer / enemy.spec["ward"]
+    if charge > 0:
+        steps = max(2, round(24 * charge))
+        arc = [pos + pygame.Vector2(0, -r).rotate(360 * charge * i / steps) for i in range(steps + 1)]
+        for a, b in zip(arc, arc[1:]):
+            sdraw.line(surf, mix(WARD_COLOR, (40, 60, 90), 0.35), a, b, 1.5)
+
+
 def draw_eyes(surf, enemy, pos):
     """Two eyes looking where the enemy is going, blinking now and then."""
     ahead = pygame.Vector2(1, 0).rotate(enemy.facing)
@@ -363,6 +427,20 @@ def draw_eyes(surf, enemy, pos):
     look = round(enemy.facing * sprites.EYE_LOOKS / 360) % sprites.EYE_LOOKS
     # the spawn time staggers the blinks, so a wave doesn't blink all at once
     closed = (enemy.phase_t + enemy.spawn_t * 1.7) % BLINK_EVERY > BLINK_EVERY - BLINK_TIME
+    fury = enemy.rage / enemy.spec["enrage"] if "enrage" in enemy.spec else 0
+    if fury >= FURIOUS:  # a Berserker past FURIOUS glares, red-eyed, and snarls; it doesn't blink
+        style, closed = "furious", False
+        mouth = pos + ahead * enemy.spec["size"] * 0.86
+        blit_center(surf, sprites.snarl(enemy.spec["size"], sprites.angle_step(enemy.facing), SCALE), mouth)
+    elif fury >= ANGRY:
+        style = "angry"
+    if style == "queen" and enemy.hp < enemy.max_hp * 0.5:  # the Brood Mother, hurt: red-hot eyes
+        style = "queen_rage"
+    if sprites.CREATURES.get(enemy.kind, {}).get("maw"):  # her maw gapes in a shriek as she shoots out a brood
+        since = enemy.spec["summon"][2] - enemy.summon_timer
+        gape = 2 if since < 0.35 else 1 if since < 0.6 else 0
+        mouth = pos + ahead * enemy.spec["size"] * 1.02
+        blit_center(surf, sprites.maw(enemy.spec["size"], sprites.angle_step(enemy.facing), gape, SCALE), mouth)
     for offset, k in eyes:
         blit_center(surf, sprites.eye(r, look, closed, SCALE, style, k), pos + offset)
 
@@ -1090,7 +1168,7 @@ class GameView:
         elif self.state == "game_over":
             label, enabled = "New run [R]", True
         else:
-            left = len(self.enemies) + len(self.spawn_queue)
+            left = sum(1 for e in self.enemies if not e.illusion) + len(self.spawn_queue)
             label, enabled = f"{left} {'enemy' if left == 1 else 'enemies'} left", False
         self.draw_button(self.wave_button, label, enabled, active=enabled)
         self.draw_button(self.speed_button, f"F:{self.speed}x", True, active=self.speed > 1, font=self.font_s)

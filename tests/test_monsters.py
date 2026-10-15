@@ -6,7 +6,7 @@ import pygame
 import pytest
 
 import monsters
-from entities import Enemy, Tower, cast_ability, heal_auras
+from entities import Enemy, Tower, cast_ability, heal_auras, speed_auras
 from helpers import dummy_enemy, put, run_wave
 from levels import ALL_BOSS_LEVELS
 from monsters import ABILITIES, ENEMY_TYPES, load_monsters
@@ -21,7 +21,8 @@ def test_roster():
     drafts = {k: s["draft"] for k, s in ENEMY_TYPES.items()}
     assert [k for k, d in drafts.items() if d == "starter"] == ["basic", "fast", "tank", "elite"]
     assert sorted(k for k, d in drafts.items() if d == "unlock") == \
-        ["armored", "healer", "juggernaut", "phantom", "splitter", "swarmling"]
+        ["armored", "bearer", "berserker", "healer", "juggernaut", "looter", "mirage", "phantom", "saboteur", "splitter", "swarmling", "thawling",
+         "warded"]
     assert all(drafts[boss] == "boss" and ENEMY_TYPES[boss]["fatal"] for boss in ALL_BOSS_LEVELS.values())
     assert sorted(ABILITIES) == ["bulwark", "emp", "frenzy", "mend", "smoke"]
 
@@ -51,6 +52,14 @@ def shipped():
     (lambda d: d["enemies"]["basic"].update(shape="blob"), "unknown shape 'blob'"),
     (lambda d: d["enemies"]["splitter"].update(split=["ghost", 2]), "split makes 'ghost'"),
     (lambda d: d["enemies"]["warden"].pop("boss"), "bosses need both"),
+    (lambda d: d["enemies"]["warded"].update(ward=0), "ward must be a positive number"),
+    (lambda d: d["enemies"]["mirage"].update(decoy=[2, 40]), "decoy must be"),
+    (lambda d: d["enemies"]["berserker"].update(enrage=-1), "enrage must be"),
+    (lambda d: d["enemies"]["thawling"].update(rebound=[0.8]), "rebound must be"),
+    (lambda d: d["enemies"]["saboteur"].update(sabotage=[60, -1]), "sabotage must be"),
+    (lambda d: d["enemies"]["looter"].update(loot=[1.5, 2]), "loot must be"),
+    (lambda d: d["enemies"]["bearer"].update(speed_aura=[80]), "speed_aura must be"),
+    (lambda d: d["enemies"]["brood"]["summon"][3].pop(), "summon offsets need one per"),
     (lambda d: d["abilities"]["emp"].update(effect="explode"), "effect must be one of"),
     (lambda d: d["abilities"]["emp"].pop("radius"), "disable on area needs ['radius']"),
     (lambda d: d["abilities"]["frenzy"].pop("duration"), "haste on all needs ['duration']"),
@@ -214,3 +223,203 @@ def test_frenzy_mend_bulwark():
     assert e.hp == pytest.approx(12.5)
     e.update(5)
     assert e.speed == 60 and e.shield_timer <= 0
+
+
+# ---- Warded ---------------------------------------------------------------------------
+def test_a_ward_absorbs_one_whole_hit_then_recharges():
+    e = Enemy("warded", line(), 1)
+    tower = Tower("gun", (0, 0))
+    assert e.warded and not e.hit(40, (tower, "gun"))
+    assert e.hp == e.max_hp and not e.warded and tower.stats["gun"]["warded"] == 1
+    assert e.hit(10, (tower, "gun")) and e.hp == e.max_hp - 10, "the next hit lands"
+    e.update(ENEMY_TYPES["warded"]["ward"])
+    assert e.warded, "back up after its recharge time"
+
+
+def test_a_ward_blocks_the_hits_slow_and_burn_but_not_burns():
+    e = Enemy("warded", line(), 1)
+    shatter = Tower("shatter", (0, 0))
+    from entities import Projectile
+    Projectile(shatter, e).strike(e, 40, "direct")
+    assert e.hp == e.max_hp and not e.slowed, "the absorbed hit didn't slow it"
+    e.apply_burn(10, 2)
+    e.update(0.5)
+    assert e.hp < e.max_hp, "burns go through"
+    hp = e.hp
+    Projectile(shatter, e).strike(e, 40, "direct")
+    assert e.slowed and e.hp < hp
+
+
+def test_a_wave_of_warded_plays_out(game):
+    """Splash, chain and instant hits all respect the ward in a real wave."""
+    for kind, tile in (("tesla", (6, 4)), ("railgun", (8, 4)), ("avalanche", (10, 4))):
+        put(game, kind, tile)
+    game.start_wave()
+    game.spawn_queue = ["warded"] * 6
+    run_wave(game)
+    assert sum(t.stats[t.kind]["warded"] for t in game.towers.values()) >= 6
+
+
+# ---- Mirage ---------------------------------------------------------------------------
+def test_an_illusion_runs_ahead_pops_on_any_hit_and_fades():
+    caster = Enemy("mirage", line(), 3)
+    caster.advance(100)
+    fake = caster.cast_illusion()
+    every, ahead, life = ENEMY_TYPES["mirage"]["decoy"]
+    assert fake.illusion and fake.travelled == caster.travelled + ahead and fake.hp == fake.max_hp == 1
+    tower = Tower("sniper", (0, 0))
+    assert not fake.hit(500, (tower, "sniper")) and not fake.alive
+    assert tower.stats["sniper"]["decoyed"] == 1 and tower.stats["sniper"]["kills"] == 0
+    other = caster.cast_illusion()
+    other.update(life)
+    assert not other.alive and not other.escaped, "faded away"
+
+
+def test_illusions_draw_fire_but_give_nothing(game):
+    gold, lives = game.gold, game.lives
+    game.start_wave()
+    game.spawn_queue = ["mirage"]
+    while not any(e.illusion for e in game.enemies):  # the Sniper comes once the first illusion is out
+        game.update(1 / 60)
+    sniper = put(game, "sniper", (6, 4))
+    fakes = 0
+    for _ in range(4000):
+        if game.state != "wave":
+            break
+        fakes = max(fakes, sum(e.illusion for e in game.enemies))
+        game.update(1 / 60)
+    assert fakes >= 1 and sniper.stats["sniper"]["decoyed"] >= 1
+    killed = ENEMY_TYPES["mirage"]["cost"] if game.lives == lives else 0
+    bonus = 20 + 5 * game.wave_idx
+    assert game.gold == gold + killed + bonus, "only the real Mirage paid out"
+    assert game.lives >= lives - ENEMY_TYPES["mirage"]["damage"], "illusions take no lives"
+    assert game.wave_monsters == 1
+
+
+# ---- Berserker ------------------------------------------------------------------------
+def test_a_berserker_speeds_up_as_it_is_hurt_and_slows_still_apply():
+    e = Enemy("berserker", line(), 2)
+    base = ENEMY_TYPES["berserker"]["speed"]
+    assert e.speed == base and e.rage == 0
+    e.hit(e.max_hp / 2)
+    assert e.speed == pytest.approx(base * 1.5)
+    e.hp = e.max_hp * 0.01
+    assert e.speed == pytest.approx(base * 1.99)
+    e.apply_slow(0.5, 2)
+    assert e.speed == pytest.approx(base * 1.99 * 0.5)
+    e.heal(e.max_hp)
+    assert e.rage == 0, "healing calms it down"
+
+
+# ---- Thawling -------------------------------------------------------------------------
+def test_a_thawling_sprints_when_a_slow_wears_off():
+    e = Enemy("thawling", line(), 1)
+    base = ENEMY_TYPES["thawling"]["speed"]
+    boost, seconds = ENEMY_TYPES["thawling"]["rebound"]
+    e.apply_slow(0.5, 1.0)
+    assert e.speed == pytest.approx(base * 0.5) and not e.rebounding
+    e.update(1.0)
+    assert e.rebounding and e.speed == pytest.approx(base * (1 + boost))
+    e.update(seconds / 2)
+    e.apply_slow(0.5, 1.0)
+    assert not e.rebounding and e.speed == pytest.approx(base * 0.5), "a new slow ends the sprint"
+    e.update(1.0)
+    e.update(seconds + 0.01)
+    assert not e.rebounding and e.speed == pytest.approx(base)
+
+
+def test_slow_immune_thawlings_never_sprint():
+    e = Enemy("thawling", line(), 1, {"thaw": 1.0})  # Thaw cards stacked to full: slows do nothing
+    e.apply_slow(0.5, 1.0)
+    e.update(1.0)
+    assert not e.rebounding, "a slow that did nothing gives no sprint"
+
+
+# ---- Saboteur -------------------------------------------------------------------------
+def test_a_killed_saboteur_knocks_out_the_towers_next_to_it(game):
+    radius, seconds = ENEMY_TYPES["saboteur"]["sabotage"]
+    game.start_wave()
+    game.spawn_queue = []
+    e = Enemy("saboteur", game.path_pts, 1)
+    e.advance(200)
+    game.register_enemy(e, "wave")
+    tile = (int(e.pos.x // 40), int(e.pos.y // 40))
+    near = put(game, "gun", (tile[0], tile[1] - 1))
+    far = put(game, "gun", (tile[0] + 5, tile[1] + 5))
+    assert near.pos.distance_to(e.pos) <= radius < far.pos.distance_to(e.pos)
+    e.hit(e.max_hp * 2)
+    game.update(1 / 60)
+    assert near.disabled and near.disabled_timer == pytest.approx(seconds, abs=0.05) and not far.disabled
+
+
+def test_a_saboteur_that_gets_through_does_nothing(game):
+    game.start_wave()
+    game.spawn_queue = []
+    e = Enemy("saboteur", game.path_pts, 1)
+    game.register_enemy(e, "wave")
+    tower = put(game, "gun", (0, 0))
+    e.pos = tower.pos.copy()
+    e.alive, e.escaped = False, True
+    game.update(1 / 60)
+    assert not tower.disabled
+
+
+# ---- Looter ---------------------------------------------------------------------------
+def leak(game, kind):
+    """`kind` gets through, while another monster keeps the wave going."""
+    game.register_enemy(Enemy("tank", game.path_pts, 1000), "wave")
+    e = Enemy(kind, game.path_pts, 1)
+    game.register_enemy(e, "wave")
+    e.alive, e.escaped = False, True
+    game.update(1 / 60)
+
+
+def test_a_looter_steals_gold_not_lives(game):
+    game.start_wave()
+    game.spawn_queue = []
+    game.gold, lives = 1000, game.lives
+    leak(game, "looter")
+    share = ENEMY_TYPES["looter"]["loot"][0]
+    assert game.gold == 1000 - int(1000 * share) and game.lives == lives
+
+
+
+# ---- Banner Bearer ----------------------------------------------------------------------
+def test_a_banner_bearer_rallies_the_monsters_around_it_but_not_itself():
+    radius, share = ENEMY_TYPES["bearer"]["speed_aura"]
+    bearer = Enemy("bearer", line(), 1)
+    near, far = Enemy("basic", line(), 1), Enemy("basic", line(), 1)
+    bearer.advance(200)
+    near.advance(200 + radius - 5)
+    far.advance(200 + radius + 5)
+    speed_auras([bearer, near, far])
+    assert near.speed == pytest.approx(ENEMY_TYPES["basic"]["speed"] * (1 + share))
+    assert far.speed == ENEMY_TYPES["basic"]["speed"] and bearer.rally == 0
+    second = Enemy("bearer", line(), 1)
+    second.advance(200)
+    speed_auras([bearer, second, near])
+    assert near.rally == share and bearer.rally == share, "auras don't stack, but bearers rally each other"
+    bearer.alive = second.alive = False
+    speed_auras([bearer, second, near])
+    assert near.rally == 0, "a dead bearer rallies no one"
+
+
+# ---- The Brood Mother ---------------------------------------------------------------------
+def test_the_brood_mother_is_a_boss_no_level_uses_yet():
+    spec = ENEMY_TYPES["brood"]
+    assert spec["draft"] == "boss" and spec["fatal"] and "brood" not in ALL_BOSS_LEVELS.values()
+
+
+def test_the_brood_mother_shoots_out_swarmlings_one_behind_two_in_front(game):
+    kind, count, every, offsets = ENEMY_TYPES["brood"]["summon"]
+    game.start_wave()
+    game.spawn_queue = []
+    brood = Enemy("brood", game.path_pts, 1)
+    brood.advance(300)
+    game.register_enemy(brood, "wave")
+    brood.summon_timer = 1 / 120
+    game.update(1 / 60)
+    minions = [e for e in game.enemies if e.origin == "summon:brood"]
+    assert len(minions) == count == 3 and all(m.kind == kind == "spiderling" for m in minions)
+    assert sorted(round(m.travelled - brood.travelled) for m in minions) == sorted(offsets)
+    assert sum(m.travelled < brood.travelled for m in minions) == 1, "one behind, two in front"

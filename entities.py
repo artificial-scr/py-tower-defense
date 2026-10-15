@@ -15,7 +15,7 @@ import pygame
 from balance_log import new_kind_stats
 from effects import Beam, Explosion, Ring, Sparks
 from levels import tile_center
-from monsters import ENEMY_TYPES
+from monsters import ENEMY_TYPES, WARD_BREAK
 from towers import NO_TOWER_MODS, TOWER_LINES, TOWERS, fusion_options
 
 ENEMY_IDS = itertools.count(1)
@@ -66,8 +66,15 @@ class Enemy:
         self.shield = 0.0  # share of damage blocked while shield_timer runs
         self.shield_timer = 0.0
         self.phase_t = 0.0
+        self.ward_timer = 0.0  # Warded: seconds until the ward is back (0 or less: it's up)
+        self.rebound_timer = 0.0  # Thawling: seconds left of the sprint after a slow wore off
+        self.rally = 0.0  # extra speed share from a Banner Bearer's aura (see speed_auras)
+        self.ward_break = 0.0  # drawing only: see WARD_BREAK
         self.flash = 0.0  # drawing only: see HIT_FLASH
         self.summon_timer = self.spec["summon"][2] if "summon" in self.spec else 0.0
+        self.decoy_timer = self.spec["decoy"][0] if "decoy" in self.spec else 0.0
+        self.illusion = False  # a Mirage's illusion: see cast_illusion
+        self.fade = 0.0  # an illusion's seconds left
         self.alive = True
         self.escaped = False
         # Balance-log bookkeeping. A damage source is a (tower, tower kind when it fired) pair.
@@ -103,11 +110,33 @@ class Enemy:
         return self.phase_t % every >= every - duration
 
     @property
+    def warded(self):
+        """Whether a ward is up, ready to absorb the next hit."""
+        return "ward" in self.spec and self.ward_timer <= 0
+
+    @property
+    def rage(self):
+        """Berserker: the speed share it has gained from the hp it's lost (0 at full hp)."""
+        return self.spec.get("enrage", 0) * max(0.0, 1 - self.hp / self.max_hp)
+
+    @property
     def speed(self):
         haste = 1 + self.haste if self.haste_timer > 0 else 1
-        return self.spec["speed"] * self.mods["speed"] * self.slow_factor * haste
+        rebound = 1 + self.spec["rebound"][0] if self.rebounding else 1
+        return (self.spec["speed"] * self.mods["speed"] * self.slow_factor * haste * (1 + self.rage) * rebound
+                * (1 + self.rally))
+
+    @property
+    def rebounding(self):
+        """Thawling: sprinting after a slow wore off."""
+        return self.rebound_timer > 0 and not self.slowed
 
     def update(self, dt):
+        if self.illusion:
+            self.fade -= dt
+            if self.fade <= 0:
+                self.alive = False
+                return
         if self.burn_timer > 0:
             self.burn_timer -= dt
             self.burning_seconds += dt
@@ -118,9 +147,15 @@ class Enemy:
             self.slow_timer -= dt
             self.slowed_seconds += dt
             if self.slow_timer <= 0:
+                if "rebound" in self.spec and self.slow_factor < 1:  # only if it was really slowed
+                    self.rebound_timer = self.spec["rebound"][1]
                 self.slow_factor = 1.0
+        else:
+            self.rebound_timer -= dt
         self.haste_timer -= dt
         self.shield_timer -= dt
+        self.ward_timer -= dt
+        self.ward_break -= dt
         self.flash -= dt
         self.phase_t += dt
         self.advance(self.speed * dt)
@@ -147,12 +182,24 @@ class Enemy:
             self.escaped = True
 
     def hit(self, damage, source=None, how="direct", bonus_frac=0.0):
-        """Take damage. `bonus_frac` is the part of it that came from a vs_slowed multiplier.
+        """Take damage. `bonus_frac` is the part of it that came from a vs_slowed multiplier. Returns
+        whether the hit landed: a ward that's up absorbs a whole hit (burns excluded) and goes down.
 
         Armor blocks a flat amount of every hit except burns, but at least ARMOR_MIN_SHARE of a
         hit always gets through; a shield then blocks its share of what's left."""
         if not self.alive:
-            return
+            return False
+        if self.illusion:  # popped by any hit; the shot was wasted
+            self.alive = False
+            if source:
+                source[0].stats[source[1]]["decoyed"] += 1
+            return False
+        if how != "burn" and self.warded:
+            self.ward_timer = self.spec["ward"]
+            self.ward_break = WARD_BREAK
+            if source:
+                source[0].stats[source[1]]["warded"] += 1
+            return False
         if self.armor and how != "burn":
             damage = max(damage - self.armor, damage * ARMOR_MIN_SHARE)
         if self.shield_timer > 0:
@@ -171,12 +218,14 @@ class Enemy:
             if source:
                 self.killed_by = {"tower": tower.uid, "kind": kind, "how": how}
                 tower.stats[kind]["kills"] += 1
+        return True
 
     def apply_slow(self, factor, duration):
         factor = 1 - (1 - factor) * (1 - self.mods["thaw"])
         factor = max(factor, self.spec.get("slow_floor", 0))
         self.slow_factor = min(self.slow_factor, factor)
         self.slow_timer = max(self.slow_timer, duration)
+        self.rebound_timer = 0.0  # a new slow ends a Thawling's sprint
 
     def apply_burn(self, dps, duration, source=None):
         dps *= self.mods["burn"]
@@ -185,6 +234,18 @@ class Enemy:
             self.burn_dps = dps
             self.burn_source = source
         self.burn_timer = max(self.burn_timer, duration)
+
+    def cast_illusion(self):
+        """A Mirage's illusion of itself, `ahead` pixels further along the path: one hit pops it, it's worth
+        no gold, takes no lives and fades after `life` seconds."""
+        _, ahead, life = self.spec["decoy"]
+        fake = Enemy(self.kind, self.path, self.hp_mult, self.mods)
+        fake.illusion, fake.fade = True, life
+        fake.hp = fake.max_hp = 1
+        fake.decoy_timer = math.inf  # illusions don't cast illusions
+        fake.follow(self)
+        fake.advance(ahead)
+        return fake
 
     def heal(self, amount):
         if self.alive:
@@ -213,6 +274,25 @@ def heal_auras(enemies, dt):
         for e in enemies:
             if e is not healer and e.alive and e.pos.distance_to(healer.pos) <= radius:
                 e.heal(e.max_hp * share * dt)
+
+
+def speed_auras(enemies):
+    """Banner Bearers rally the monsters around them (not themselves): each one moves faster by the
+    strongest aura it's in. Illusions don't carry banners."""
+    bearers = [e for e in enemies if e.alive and "speed_aura" in e.spec and not e.illusion]
+    for e in enemies:
+        e.rally = max((b.spec["speed_aura"][1] for b in bearers
+                       if b is not e and e.pos.distance_to(b.pos) <= b.spec["speed_aura"][0]), default=0.0)
+
+
+def sabotage(enemy, towers, effects):
+    """A Saboteur killed: the towers within its radius stop firing for a while, as under an EMP."""
+    radius, seconds = enemy.spec["sabotage"]
+    effects.append(Ring(enemy.pos.copy(), radius, (120, 200, 255), 0.5))
+    effects.append(Sparks(enemy.pos, (255, 200, 40), 10, radius * 0.6))
+    for t in towers:
+        if t.pos.distance_to(enemy.pos) <= radius:
+            t.disabled_timer = max(t.disabled_timer, seconds)
 
 
 def cast_ability(spec, pos, towers, enemies, effects, area_duration=1.0):
@@ -272,7 +352,8 @@ class Projectile:
         if enemy.slowed and "vs_slowed" in spec:
             damage *= spec["vs_slowed"]
             bonus_frac = 1 - 1 / spec["vs_slowed"]
-        enemy.hit(damage, self.source, how, bonus_frac)
+        if not enemy.hit(damage, self.source, how, bonus_frac):
+            return  # absorbed by a ward, slow and burn too
         if "slow" in spec:
             enemy.apply_slow(spec["slow"], spec["slow_time"])
         if "burn" in spec:

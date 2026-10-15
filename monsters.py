@@ -12,7 +12,9 @@ MONSTERS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "monste
 
 ENEMY_FIELDS = ("name", "hp", "speed", "cost", "damage", "gap", "draft", "size", "color", "sides")
 # Optional fields; their meaning is in the comment at the top of monsters.json.
-ENEMY_EXTRAS = ("boss", "fatal", "shape", "inner", "armor", "heal_aura", "split", "phase", "slow_floor", "summon")
+ENEMY_EXTRAS = ("boss", "fatal", "shape", "inner", "armor", "heal_aura", "split", "phase", "slow_floor", "summon",
+                "ward", "decoy", "enrage", "rebound", "sabotage", "loot",
+                "speed_aura")
 DRAFT = ("starter", "unlock", "boss", "never")
 
 ABILITY_FIELDS = ("name", "desc", "target", "effect", "cooldown", "color")
@@ -28,6 +30,7 @@ TIER_FIELDS = ("cards", "rare", "share")
 UPGRADE_FIELDS = ("name", "desc", "stat", "per_rank", "max")
 UPGRADE_STATS = ("hp", "speed", "armor")
 SPEED_UPGRADE_CAP = 0.5  # a speed upgrade's ranks add up to +50% speed at most
+WARD_BREAK = 0.3  # seconds a Warded's ward is drawn shattering after it absorbs a hit
 
 
 def load_monsters(path):
@@ -54,6 +57,24 @@ def load_monsters(path):
             fail(what, "bosses need both a boss name and draft: boss")
         if raw["hp"] <= 0 or raw["speed"] <= 0 or raw["cost"] <= 0:
             fail(what, "hp, speed and cost must be positive")
+        if "ward" in raw and not (isinstance(raw["ward"], (int, float)) and raw["ward"] > 0):
+            fail(what, "ward must be a positive number of seconds")
+        if "decoy" in raw and not (len(raw["decoy"]) == 3 and all(isinstance(x, (int, float)) and x > 0
+                                                                 for x in raw["decoy"])):
+            fail(what, "decoy must be [every, ahead, life], all positive")
+        if "enrage" in raw and not (isinstance(raw["enrage"], (int, float)) and raw["enrage"] > 0):
+            fail(what, "enrage must be a positive speed share")
+        if "rebound" in raw and not (len(raw["rebound"]) == 2 and all(isinstance(x, (int, float)) and x > 0
+                                                                     for x in raw["rebound"])):
+            fail(what, "rebound must be [speed share, seconds], both positive")
+        if "sabotage" in raw and not (len(raw["sabotage"]) == 2 and all(isinstance(x, (int, float)) and x > 0
+                                                                       for x in raw["sabotage"])):
+            fail(what, "sabotage must be [radius, seconds], both positive")
+        if "loot" in raw and not (len(raw["loot"]) == 2 and 0 < raw["loot"][0] <= 1 and raw["loot"][1] >= 0):
+            fail(what, "loot must be [share of gold, 0 to 1; budget multiple, 0 or more]")
+        if "speed_aura" in raw and not (len(raw["speed_aura"]) == 2 and all(isinstance(x, (int, float)) and x > 0
+                                                                           for x in raw["speed_aura"])):
+            fail(what, "speed_aura must be [radius, speed share], both positive")
         for shape in [raw.get("shape"), raw.get("inner", [None])[0]]:
             if shape is not None and shape not in SHAPES:
                 fail(what, f"unknown shape {shape!r}")
@@ -61,7 +82,8 @@ def load_monsters(path):
         if "inner" in raw:
             shape, r, color = raw["inner"]
             spec["inner"] = (shape, r, tuple(color))
-        for f in ("heal_aura", "split", "phase", "summon"):
+        for f in ("heal_aura", "split", "phase", "summon", "decoy", "rebound", "sabotage", "loot",
+                  "speed_aura"):
             if f in raw:
                 spec[f] = tuple(raw[f])
         enemies[kind] = spec
@@ -69,6 +91,8 @@ def load_monsters(path):
         for f in ("split", "summon"):
             if f in spec and spec[f][0] not in enemies:
                 fail(f"enemy {kind!r}", f"{f} makes {spec[f][0]!r}, which isn't an enemy")
+        if "summon" in spec and len(spec["summon"]) == 4 and len(spec["summon"][3]) != spec["summon"][1]:
+            fail(f"enemy {kind!r}", "summon offsets need one per summoned monster")
 
     abilities = {}
     for key, raw in data["abilities"].items():

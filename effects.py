@@ -171,6 +171,83 @@ class Shards:
             sdraw.polygon(surf, tones[i % 2], regular_polygon(center, r, 3, direction.as_polar()[1] + 500 * k * speed))
 
 
+class GooSpray:
+    """Droplets flying from a summoner to where a minion it shot out lands, then a splat there."""
+
+    duration = 0.3
+
+    def __init__(self, a, b, color):
+        self.a, self.b = pygame.Vector2(a), pygame.Vector2(b)
+        self.color = color
+        self.t = 0.0
+
+    def update(self, dt):
+        self.t += dt
+        return self.t < self.duration
+
+    def draw(self, surf):
+        k = self.t / self.duration
+        alpha = int(255 * (1 - k))
+        for i in range(4):  # a string of droplets, the front one leading
+            f = min(1.0, k * 1.6 - i * 0.12)
+            if f > 0:
+                sdraw.circle(surf, (*self.color, alpha), self.a.lerp(self.b, f), 2.4 - i * 0.4)
+        if k > 0.5:
+            sdraw.circle(surf, (*shade(self.color, 0.7), alpha), self.b, 4 + 6 * (k - 0.5), 2)
+
+
+class GoldBurst:
+    """A Looter's sack bursting at the end of the path: a golden flash, scraps of sacking, and a shower of
+    coins thrown up and out that tumble (flipping edge-on and back), land, and fade. The throws come from
+    where it burst, not a random roll, so drawing stays repeatable."""
+
+    duration = 1.1
+    COINS = 18
+    GOLD, RIM, SACK = (255, 214, 80), (190, 135, 30), (150, 105, 45)
+
+    def __init__(self, pos):
+        self.pos = pygame.Vector2(pos)
+        self.t = 0.0
+        seed = int(self.pos.x * 7.3 + self.pos.y * 3.1)
+        self.coins = []
+        for i in range(self.COINS):
+            j = (seed + i * 37) % 100 / 100
+            d = pygame.Vector2(1, 0).rotate(seed + i * 360 / self.COINS + j * 18)
+            self.coins.append((d * (16 + 24 * j), 34 + 30 * ((i * 53) % 10) / 10, 9 + 9 * j))  # out, up, spin
+
+    def update(self, dt):
+        self.t += dt
+        return self.t < self.duration
+
+    def draw(self, surf):
+        k = self.t / self.duration
+        if k < 0.2:  # the burst
+            f = k / 0.2
+            sdraw.circle(surf, (*mix((255, 250, 200), self.GOLD, f), int(220 * (1 - f))), self.pos, 8 + 14 * f)
+        if k < 0.5:  # scraps of the sack
+            f = k / 0.5
+            for i in range(5):
+                d = pygame.Vector2(1, 0).rotate(i * 72 + 20)
+                at = self.pos + d * 22 * (1 - (1 - f) ** 2)
+                sdraw.polygon(surf, (*self.SACK, int(230 * (1 - f))), regular_polygon(at, 3.2, 3, i * 50 + 400 * f))
+        fade = int(255 * min(1.0, (1 - k) / 0.35))
+        flight = 0.55  # seconds in the air
+        for out, up, spin in self.coins:
+            t = min(self.t, flight)
+            ease = t / flight
+            ground = self.pos + out * (1 - (1 - ease) ** 2)
+            height = up * t - 0.5 * (2 * up / flight) * t * t  # up and back down by the time it lands
+            sdraw.circle(surf, (0, 0, 0, fade // 4), ground + (1, 2), 2.2)
+            at = ground - pygame.Vector2(0, height)
+            turn = abs(math.cos(spin * self.t)) if self.t < flight else 0.9
+            w, h = 3.0 * max(0.18, turn), 3.0
+            edge = [at + (math.cos(a) * w, math.sin(a) * h) for a in (math.tau * n / 12 for n in range(12))]
+            sdraw.polygon(surf, (*self.RIM, fade), edge)
+            sdraw.polygon(surf, (*self.GOLD, fade), [at + (p - at) * 0.72 for p in edge])
+            if turn > 0.5:
+                sdraw.circle(surf, (255, 250, 220, fade), at + (-w * 0.3, -h * 0.35), 0.8)
+
+
 class Popup:
     """Floating text such as '+5'."""
 

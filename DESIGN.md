@@ -330,6 +330,25 @@ reached level 10 (with 1–9 lives), and `+0.75` lost it few lives but left 600�
 3. The Monsters side keeps the plain curve (`wave_hp_mult`) for its drafts, so a monster record
 replayed on levels 1–3 is weaker than the generated wave it replaces.
 
+**Berserkers and Saboteurs in the later waves (2026-10-15).** The first playthrough's later levels were a
+walkover for five adjacent Frost Lances, so generated waves swap Basics for Berserkers (10% of the wave
+from level 4, 15% from 6, 20% from 8) and Saboteurs (1, then 2 in waves 4–5 from level 6; 2, then 3 from
+level 8): `BERSERKERS` and `SABOTEURS` in `levels.py`. Levels 1–3 roll nothing extra and don't change.
+Replaying that playthrough's own comps, wave by wave on the tiles they stood on (towers frozen, no
+building between waves):
+
+| Level | Lives lost before | After | Most towers knocked out at once |
+|---|---|---|---|
+| 4–5 | 0 | 0 | 0 |
+| 6 | 0 | 6 | 1 |
+| 7 | 10 | 20 | 5 |
+| 8 | 0 | 12 | 6 |
+
+Berserkers alone don't trouble Frost Lances (they rarely survive a hit long enough to sprint); the
+Saboteurs, blacking out the stacked Lances, do. The replay can't spend the 2,000+ gold that run had banked
+by level 6, so a real player spreading out and building more should lose much less. The swaps also raise
+`wave_value`, so Monsters-side budgets on levels 4+ grow by about as much.
+
 **Lives carried over (the current rule).** Against the tower records from a real run (levels
 1–10, 410 to 5,920 gold), with lives lasting the pass and no cap per level:
 

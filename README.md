@@ -109,7 +109,15 @@ The towers on the map are your **tower record** for the level, and you have to g
 | Splitter | Breaks into 3 Swarmlings when killed | Card |
 | Phantom | Every 4 s it can't be targeted for 1.5 s (splash still hits it) | Card |
 | Juggernaut | Huge and immune to slows | Rare card |
+| Warded | A ward absorbs one whole hit (slow and burn included), then recharges for 2.5 s | Card |
+| Mirage | Every 2.5 s, casts an illusion of itself ahead on the path: one hit pops it, it's worth nothing | Card |
+| Berserker | Gets faster as it's hurt, up to twice as fast near death | Card |
+| Thawling | Sprints +80% for 2 s whenever a slow wears off | Card |
+| Saboteur | When killed, towers within 1.5 tiles stop firing for 2 s | Card |
+| Looter | Takes no lives: steals 15% of the tower player's gold, or brings back 2× its cost as budget | Card |
+| Banner Bearer | Monsters around it move 25% faster | Card |
 | **The Warden** | Boss of level 10: summons Fast monsters and resists slows | Boss level, last wave; a Towers pass's finale wave |
+| **The Brood Mother** | Boss: every 2.5 s shoots out 3 Spiderlings (1 behind, 2 in front); resists slows | No level yet |
 
 If a boss gets through, its side loses every life at once.
 

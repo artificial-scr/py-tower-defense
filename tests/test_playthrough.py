@@ -2,7 +2,7 @@
 
 These double as balance checks. Since the early waves got their hp boost (levels.EARLY_HP) the bot
 no longer wins: with its mixed buys (Gun, Cannon, Frost) it clears level 1 and falls on levels 2-4, and
-buying only Guns, the strongest early line, takes it furthest (level 3-7, seeds 0-5). On the Monsters
+buying only Guns, the strongest early line, takes it furthest (level 3-6, seeds 0-5). On the Monsters
 side, scripted drafts against the bot's own tower records check that the first levels stay winnable.
 """
 
@@ -26,11 +26,11 @@ def test_mixed_bot_clears_level_1_then_falls(game, seed):
 
 
 def test_gun_bot_goes_furthest(game):
-    """Seed 1 buying only Guns reaches level 7; if it falls before level 6, the game got harder (or the bot
-    worse)."""
+    """Seed 1 buying only Guns reaches level 5 (Berserkers join the waves from level 4); if it falls before
+    level 5, the game got harder (or the bot worse)."""
     random.seed(1)
     bot_play(game, buy=("gun",))
-    assert game.state == "game_over" and game.level_idx >= 5
+    assert game.state == "game_over" and game.level_idx >= 4
 
 
 def test_stress_at_10x(game):

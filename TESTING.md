@@ -89,7 +89,7 @@ the current balance:
   to spend; see DESIGN.md section 9.
 
 On the Towers side the bot no longer wins: its mixed buys clear level 1 and fall on levels 2-4, and
-buying only Guns (seed 1) reaches level 7. Those are pinned too.
+buying only Guns (seed 1) reaches level 5. Those are pinned too.
 
 If a change to `monsters.json` or `towers.json` breaks these, look at the budget rules in
 `monsters.json` first.

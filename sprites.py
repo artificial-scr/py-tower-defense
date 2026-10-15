@@ -26,6 +26,7 @@ METAL = (70, 72, 84)
 PLATE = (52, 54, 64)
 ENEMY_SQUASH = (1.15, 0.88)  # an enemy just hit is drawn this much wider and flatter
 PHASED_ALPHA = 0.35  # how solid a Phantom out of reach looks
+ILLUSION_ALPHA = 0.55  # how solid a Mirage's illusion looks (paler too, so players can tell; towers can't)
 
 _cache = {}
 
@@ -411,6 +412,282 @@ BONE = (228, 214, 186)
 RUBY = (220, 40, 60)
 
 
+def paint_sentinel(cv, size, color, inner, f, p):
+    """Warded: a squat copper sentinel on two feet, a blue ward crystal set in its chest and a little
+    emitter on its brow that keeps the ward up."""
+    s = f.rotate(90)
+    a = f.as_polar()[1]
+    _feet(cv, color, f, p, size, spread=0.72, foot=0.34, stride=0.4)
+    for k in (-1, 1):  # shoulder plates
+        pad = s * k * size * 0.78 - f * size * 0.1
+        gem(cv, shade(color, 0.8), pad, regular_polygon(pad, size * 0.36, 6, a), 1)
+    gem(cv, color, (0, 0), regular_polygon(V(), size, 6, a), 1.5)
+    gem(cv, inner, -f * size * 0.12, regular_polygon(-f * size * 0.12, size * 0.42, 6, a + 30), 1)
+    cv.circle(mix(inner, WHITE, 0.6), -f * size * 0.12 + LIGHT * size * 0.12, max(0.8, size * 0.1))
+    emitter = f * size * 0.78
+    gem(cv, mix(inner, WHITE, 0.25), emitter, regular_polygon(emitter, size * 0.2, 4, a + 45), 0.8)
+
+
+def paint_mage(cv, size, color, inner, f, p):
+    """Mirage: a hooded caster floating in a robe whose hem ripples behind it, holding out a crystal that
+    pulses as it casts, with two motes circling it."""
+    s = f.rotate(90)
+    # the cloak: from the shoulders back to a hem that ripples across its width
+    hem = [-f * size * (1.05 + 0.13 * math.sin(math.tau * p + i * 1.3)) + s * size * (0.8 - i * 0.32)
+           for i in range(6)]
+    cloak = [f * size * 0.1 + s * size * 0.62, *hem, f * size * 0.1 - s * size * 0.62]
+    cv.polygon(shade(color, 0.55), cloak)
+    cv.polygon(shade(color, 0.72), [f * size * 0.05 + s * size * 0.4, *[h * 0.8 for h in hem[1:-1]],
+                                    f * size * 0.05 - s * size * 0.4])
+    cv.polygon(shade(color, 0.35), cloak, 1)
+    blob(cv, color, -f * size * 0.1, f, size * 0.8, size * 0.74, 1.5)
+    sphere(cv, shade(color, 0.85), f * size * 0.28, size * 0.52, 1)
+    pulse = 0.5 + 0.5 * math.sin(math.tau * p)
+    focus = f * size * 0.95
+    cv.circle((*mix(inner, WHITE, 0.3), round(90 + 100 * pulse)), focus, size * (0.34 + 0.12 * pulse))
+    gem(cv, inner, focus, regular_polygon(focus, size * 0.24, 4, f.as_polar()[1]), 0.8)
+    for k in range(2):
+        mote = focus + V(size * 0.5, 0).rotate(360 * p + k * 180)
+        cv.circle(mix(inner, WHITE, 0.5), mote, max(0.6, size * 0.08))
+
+
+def paint_icicle(cv, size, color, inner, f, p):
+    """Thawling: a chunk of ice scuttling on stubby feet, icicles down its back, a warm ember glowing
+    through its middle (what thaws it), and a drip falling now and then."""
+    s = f.rotate(90)
+    a = f.as_polar()[1]
+    _feet(cv, mix(color, (60, 90, 120), 0.4), f, p, size, spread=0.7, foot=0.3, stride=0.4)
+    for k in (-1, 0, 1):  # icicles pointing back
+        root = -f * size * 0.55 + s * k * size * 0.42
+        tip = root - f * size * (0.75 - 0.2 * abs(k)) + s * k * size * 0.12
+        cv.polygon(mix(color, WHITE, 0.4), [root + s * size * 0.16, tip, root - s * size * 0.16])
+        cv.polygon(shade(color, 0.6), [root + s * size * 0.16, tip, root - s * size * 0.16], 0.7)
+    gem(cv, color, (0, 0), regular_polygon(V(), size, 5, a), 1.5)
+    core = -f * size * 0.1
+    cv.circle((*mix(inner, WHITE, 0.2), 120), core, size * 0.5)
+    cv.circle((*mix(inner, WHITE, 0.35), 200), core, size * 0.36)
+    sphere(cv, mix(inner, (255, 230, 120), 0.4), core, size * 0.24, 0)
+    for i, corner in enumerate(regular_polygon(V(), size * 0.72, 5, a + 36)):  # frost facets
+        cv.line(mix(color, WHITE, 0.7), corner * 0.55, corner, max(0.6, size * 0.06))
+    drip = (p * 2) % 1
+    if drip < 0.6:
+        cv.circle((*mix(color, WHITE, 0.3), 200), s * size * 0.75 - f * size * (0.2 + drip * 0.6), max(0.7, size * 0.1))
+
+
+SABOTEUR_ANTENNA = (-1.05, 0.62)  # where a Saboteur's antenna tip is, in sizes back along and across it
+
+
+def paint_saboteur(cv, size, color, inner, f, p):
+    """Saboteur: a sneaking creature on quick feet, a hazard-striped charge strapped to its back and an
+    antenna on the charge (graphics.py blinks its light)."""
+    s = f.rotate(90)
+    a = f.as_polar()[1]
+    _feet(cv, color, f, p, size, spread=0.8, foot=0.32, stride=0.5)
+    sphere(cv, color, (0, 0), size, 1.5)
+    pack = -f * size * 0.42
+    corners = [pack + (f * x + s * y) * size for x, y in ((0.35, 0.55), (-0.45, 0.55), (-0.45, -0.55), (0.35, -0.55))]
+    cv.polygon(inner, corners)
+    for i in range(4):  # black hazard stripes, slanted
+        x0 = 0.35 - i * 0.22
+        stripe = [pack + (f * x + s * y) * size for x, y in ((x0, 0.55), (x0 - 0.1, 0.55), (x0 - 0.3, -0.55), (x0 - 0.2, -0.55))]
+        stripe = [pack + (pt - pack) for pt in stripe]
+        cv.polygon((40, 38, 30), stripe)
+    cv.polygon((40, 38, 30), corners, 1)
+    cv.line((150, 150, 150), (corners[0] + corners[3]) / 2 + f * size * 0.05, (corners[1] + corners[2]) / 2,
+            max(0.6, size * 0.08))  # the strap
+    root = -f * size * 0.6 + s * size * 0.35
+    tip = f * size * SABOTEUR_ANTENNA[0] + s * size * SABOTEUR_ANTENNA[1]
+    cv.line((60, 60, 60), root, tip, max(0.6, size * 0.08))
+    cv.circle((90, 20, 20), tip, max(0.8, size * 0.13))
+
+
+def paint_looter(cv, size, color, inner, f, p):
+    """Looter: a quick thief in a bandit mask, its tails fluttering, a bulging sack of gold over its back."""
+    s = f.rotate(90)
+    _feet(cv, color, f, p, size, spread=0.75, foot=0.3, stride=0.6)
+    sack = -f * size * 0.95 + s * size * 0.15
+    blob(cv, mix(inner, (200, 140, 40), 0.25), sack, f, size * 0.72, size * 0.82, 1)
+    for k, (x, y) in enumerate(((-0.25, 0.3), (0.05, -0.2), (-0.45, -0.1))):  # coins peeking out
+        coin = sack + (f * x + s * y) * size
+        cv.circle(shade(inner, 0.6), coin, size * 0.24)
+        cv.circle(mix(inner, WHITE, 0.35), coin, size * 0.19)
+    sphere(cv, color, (0, 0), size, 1.5)
+    knot = -f * size * 0.3 + s * size * 0.15
+    cv.line((120, 85, 40), knot, sack + f * size * 0.5, max(0.8, size * 0.16))  # the sack's neck
+    mask = (30, 24, 36)
+    xs = [0.08 + 0.64 * i / 6 for i in range(7)]  # a band round the head, following its curve
+    band = [f * size * x + s * size * 1.03 * math.sqrt(1 - x * x) for x in xs] + \
+        [f * size * x - s * size * 1.03 * math.sqrt(1 - x * x) for x in reversed(xs)]
+    cv.polygon(mask, band)
+    flutter = math.sin(math.tau * p) * 0.15
+    for k in (-1, 1):  # the mask's tails, streaming behind
+        root = f * size * 0.35 + s * k * size * 0.92
+        cv.polygon(mask, [root, root - f * size * 0.75 + s * k * size * (0.35 + flutter * k),
+                          root - f * size * 0.55 + s * k * size * (0.05 + flutter * k)])
+
+
+def paint_bearer(cv, size, color, inner, f, p):
+    """Banner Bearer: a stout walker holding up a pole, its red pennant (gold-trimmed) streaming back and
+    rippling as it marches."""
+    s = f.rotate(90)
+    _feet(cv, color, f, p, size, spread=0.8, foot=0.36, stride=0.42)
+    sphere(cv, color, (0, 0), size, 1.5)
+    top = s * size * 0.7 + f * size * 0.15  # the pole, seen from above: a short shaft ending in a finial
+    cv.line((90, 60, 35), s * size * 0.45, top, max(1.0, size * 0.16))
+    flag = []
+    for i in range(7):
+        t = i / 6
+        wave = math.sin(math.tau * p + t * 3.2) * 0.3 * size * t
+        flag.append(top - f * size * 2.0 * t + s * wave)
+    lower = [pt + s * size * 1.0 * (1 - 0.6 * t) for pt, t in zip(flag, (i / 6 for i in range(7)))]
+    pennant = flag + lower[::-1]
+    cv.polygon(inner, pennant)
+    cv.polygon(mix(inner, WHITE, 0.25), flag[:4] + [lower[3], lower[0]])
+    cv.polygon(GOLD, pennant, max(0.6, size * 0.08))
+    cv.circle(GOLD, top, max(1.0, size * 0.17))
+
+
+def rally_ring(radius, scale):
+    """The reach of a Banner Bearer's aura: a faint gold disc with a dashed rim."""
+    def make():
+        cv = Canvas(2 * radius + 4, scale)
+        cv.circle((255, 200, 80, 34), (0, 0), radius)
+        for i in range(24):
+            if i % 2 == 0:
+                a, b = V(radius, 0).rotate(i * 15), V(radius, 0).rotate(i * 15 + 12)
+                cv.line((255, 215, 110, 190), a, b, 1.6)
+        return cv.done()
+    return cached(("rally", radius, scale), make)
+
+
+def paint_brood(cv, size, color, inner, f, p):
+    """The Brood Mother: a huge brood queen creeping on eight jointed, clawed legs. A ridged, spiny carapace;
+    a head crowned with horns, curved mandibles and a cluster of small red eyes; and behind, a swollen,
+    see-through egg sac whose eggs glow and swell in turn."""
+    s = f.rotate(90)
+    dark, leg = shade(color, 0.5), shade(color, 0.32)
+    for i, along in enumerate((0.5, 0.2, -0.1, -0.4)):  # legs: thigh, shin, claw
+        for k in (-1, 1):
+            swing = math.sin(math.tau * p + i * 1.6 + (k > 0) * math.pi) * 0.28
+            root = f * along * size + s * k * size * 0.5
+            knee = root + (s * k).rotate(k * (swing * 40 - 30 + i * 18)) * size * 0.62
+            foot = knee + (s * k).rotate(k * (swing * 40 + 30 + i * 18)) * size * 0.5
+            claw = foot + (foot - knee).normalize().rotate(k * 35) * size * 0.14
+            cv.line(leg, root, knee, max(1.2, size * 0.1))
+            cv.line(leg, knee, foot, max(1.0, size * 0.075))
+            cv.line(shade(color, 0.2), foot, claw, max(0.8, size * 0.05))
+            cv.circle(dark, knee, max(0.8, size * 0.06))
+    sac = -f * size * 0.75  # the egg sac, swollen and see-through
+    blob(cv, mix(color, inner, 0.35), sac, f, size * 0.72, size * 0.7, 1.2)
+    cv.polygon((*mix(inner, WHITE, 0.4), 60), ellipse_points(sac, f, size * 0.62, size * 0.6))
+    for i, (x, y) in enumerate(((0.0, 0.0), (0.25, 0.32), (0.25, -0.32), (-0.28, 0.25), (-0.28, -0.25),
+                                (0.42, 0.0), (-0.48, 0.0), (0.05, 0.5), (0.05, -0.5))):
+        swell = 1 + 0.18 * math.sin(math.tau * p + i * 0.9)
+        egg = sac + (f * x + s * y) * size
+        cv.circle((*mix(inner, WHITE, 0.3), 70), egg, size * 0.15 * swell)
+        sphere(cv, inner, egg, size * 0.1 * swell, 0.5)
+    shell = [f * size * x + s * size * y for x, y in ((0.55, 0), (0.42, 0.5), (0.0, 0.62), (-0.35, 0.5), (-0.45, 0),
+                                                      (-0.35, -0.5), (0.0, -0.62), (0.42, -0.5))]
+    gem(cv, color, f * size * 0.05, shell, 1.5)
+    for x in (0.28, 0.0, -0.28):  # ridges and spines down the carapace
+        cv.line(dark, f * size * x + s * size * 0.45, f * size * x - s * size * 0.45, max(0.8, size * 0.05))
+        spine = f * size * x
+        cv.polygon(shade(color, 0.35), [spine + s * size * 0.07, spine - f * size * 0.2, spine - s * size * 0.07])
+    head = f * size * 0.78
+    clack = 0.5 + 0.5 * math.sin(math.tau * p * 2)  # the mandibles open and snap shut as she walks
+    for k in (-1, 1):  # mandibles, then horns
+        root = head + f * size * 0.2 + s * k * size * 0.16
+        _tapered(cv, shade(color, 0.6), root, root + f * size * 0.32 + s * k * size * (0.18 + 0.1 * clack),
+                 root + f * size * 0.36 - s * k * size * (0.08 - 0.14 * clack), size * 0.07)
+    sphere(cv, shade(color, 0.85), head, size * 0.33, 1.2)
+    for k, spread in ((-1, 1.0), (1, 1.0), (-1, 0.45), (1, 0.45)):  # a crown of horns, sweeping back
+        root = head - f * size * 0.24 + s * k * size * 0.12 * spread
+        _tapered(cv, (230, 225, 190), root, root - f * size * 0.2 + s * k * size * 0.3 * spread,
+                 root - f * size * 0.5 + s * k * size * 0.42 * spread, size * 0.065)
+    for k in (-1, 1):  # the small red eyes, beside the big pair graphics.py draws
+        for j, (x, y) in enumerate(((0.16, 0.3), (0.0, 0.33))):
+            cv.circle((230, 40, 40), head + f * size * x + s * k * size * y, max(0.7, size * (0.045 - j * 0.01)))
+
+
+def paint_spiderling(cv, size, color, inner, f, p):
+    """Spiderling: one of the Brood Mother's young, skittering on eight quick legs, a pale spot on its back."""
+    s = f.rotate(90)
+    for i, along in enumerate((0.45, 0.15, -0.15, -0.45)):
+        for k in (-1, 1):
+            swing = math.sin(math.tau * p + i * 1.7 + (k > 0) * math.pi) * 0.4
+            root = f * along * size + s * k * size * 0.4
+            knee = root + (s * k).rotate(k * (swing * 45 - 25 + i * 16)) * size * 0.7
+            foot = knee + (s * k).rotate(k * (swing * 45 + 40 + i * 16)) * size * 0.55
+            cv.line(shade(color, 0.35), root, knee, max(0.7, size * 0.12))
+            cv.line(shade(color, 0.35), knee, foot, max(0.6, size * 0.1))
+    blob(cv, color, -f * size * 0.3, f, size * 0.75, size * 0.65, 1)
+    sphere(cv, shade(color, 0.85), f * size * 0.5, size * 0.45, 0.8)
+    cv.circle(inner, -f * size * 0.35, max(0.6, size * 0.22))
+
+
+def maw(size, step, gape, scale):
+    """The Brood Mother's maw, facing one of the ANGLES directions: `gape` 0 is shut (a grim line of fangs),
+    up to 2, wide open in a shriek."""
+    def make():
+        cv = Canvas(size * 0.9, scale)
+        f = V(1, 0).rotate(step_angle(step))
+        s = f.rotate(90)
+        w, h = size * 0.2, size * (0.03 + 0.07 * gape)
+        mouth = ellipse_points(V(), f, h, w, 16)
+        cv.polygon((40, 8, 12), mouth)
+        if gape:
+            cv.polygon((200, 60, 40), ellipse_points(-f * h * 0.2, f, h * 0.5, w * 0.6, 12))  # its throat
+        for k in (-1, 1):  # two fangs, longer as it gapes
+            root = s * k * w * 0.45 - f * h * 0.6
+            cv.polygon((245, 240, 220), [root + s * size * 0.035, root - s * size * 0.035,
+                                         root + f * size * (0.08 + 0.05 * gape)])
+        return cv.done()
+    return cached(("maw", size, step, gape, scale), make)
+
+
+def steam_puff(r, scale):
+    """A soft white puff of steam (a Thawling sprinting off its thaw)."""
+    def make():
+        cv = Canvas(2 * r + 2, scale)
+        for i in range(8):
+            k = i / 7
+            cv.circle((235, 245, 255, round(40 + 150 * k)), LIGHT * r * 0.25 * k, r * (1 - 0.7 * k))
+        return cv.done()
+    return cached(("steam", r, scale), make)
+
+
+def rage_aura(size, frame, scale):
+    """A Berserker's rage: a hot red glow with flame tongues licking out, one of FRAMES flickers."""
+    def make():
+        r = size + 10
+        cv = Canvas(2 * r + 4, scale)
+        for i in range(10):
+            k = i / 9
+            cv.circle((255, round(60 + 120 * k), 30, round(40 + 90 * k)), (0, 0), r * (1 - 0.6 * k))
+        for j in range(9):
+            a = j * 40 + frame * 13
+            length = r * (0.95 + 0.2 * math.sin(frame * 1.7 + j * 2.3))
+            base = V(size * 0.85, 0).rotate(a)
+            cv.polygon((255, 140, 40, 150), [base.rotate(-9), V(length, 0).rotate(a + 6), base.rotate(9)])
+        return cv.done()
+    return cached(("rage", size, frame, scale), make)
+
+
+def ward_bubble(size, scale):
+    """The hexagonal ward a Warded keeps up around itself: see-through, with a bright rim and a glint."""
+    def make():
+        r = size + 6
+        cv = Canvas(2 * r + 4, scale)
+        hexagon = regular_polygon(V(), r, 6, 30)
+        cv.polygon((120, 190, 255, 64), hexagon)
+        cv.polygon((120, 190, 255, 70), regular_polygon(V(), r * 0.82, 6, 30), 1.2)
+        cv.polygon((200, 235, 255, 235), hexagon, 1.8)
+        glint = [V(-0.55, -0.62) * r, V(-0.12, -0.84) * r, V(-0.2, -0.7) * r, V(-0.62, -0.46) * r]
+        cv.polygon((235, 248, 255, 170), glint)
+        return cv.done()
+    return cached(("ward", size, scale), make)
+
+
 def _tapered(cv, color, base, mid, tip, width, rim=0.8):
     """A curved horn or claw: a quadratic curve from base through mid to tip, thinning to a point."""
     n = 8
@@ -425,6 +702,27 @@ def _tapered(cv, color, base, mid, tip, width, rim=0.8):
     cv.polygon(shade(color, 0.7), outline)
     cv.polygon(mix(color, WHITE, 0.3), left[: n // 2 + 1] + [pts[n // 2]] + pts[n // 2::-1][1:])  # lit half
     cv.polygon(shade(color, 0.4), outline, rim)
+
+
+def paint_brute(cv, size, color, inner, f, p):
+    """Berserker: a hunched brute on heavy feet, two horns curling forward, a war-paint chevron on its back."""
+    s = f.rotate(90)
+    _feet(cv, color, f, p, size, spread=0.75, foot=0.36, stride=0.5)
+    for k in (-1, 1):
+        root = f * size * 0.35 + s * k * size * 0.62
+        _tapered(cv, (235, 225, 200), root, root + s * k * size * 0.55 + f * size * 0.15,
+                 root + s * k * size * 0.35 + f * size * 0.75, size * 0.2)
+    sphere(cv, color, (0, 0), size, 1.5)
+    mane = []  # a dark spiky ridge down its back
+    for i in range(7):
+        t = i / 6
+        width = size * 0.42 * math.sin(math.pi * (0.15 + 0.7 * t))
+        tip = 0.22 * size if i % 2 else 0
+        mane.append((-f * size * (0.05 + 0.85 * t), width + tip))
+    ridge = [c + s * w for c, w in mane] + [c - s * w for c, w in reversed(mane)]
+    cv.polygon(shade(color, 0.55), ridge)
+    cv.polygon(shade(color, 0.35), ridge, 1)
+    cv.circle(inner, f * size * 0.62 + s * size * 0.0, max(0.8, size * 0.1))  # a hot glint between the horns
 
 
 def _chain(cv, start, end, sag, size):
@@ -553,6 +851,24 @@ CREATURES = {
                  "eyes": (0.45, 0.32, 0.24, "round")},
     "phantom": {"paint": paint_ghost, "clock": "time", "rate": 1.8, "move": "hover", "reach": 2.0, "alpha": 0.8,
                 "eyes": (0.32, 0.3, 0.24, "hollow")},
+    "brood": {"paint": paint_brood, "clock": "walk", "stride": 1.2, "move": None, "reach": 1.75, "halo": True,
+              "eyes": (0.84, 0.17, 0.14, "queen"), "maw": True},  # see graphics.draw_eyes
+    "spiderling": {"paint": paint_spiderling, "clock": "walk", "stride": 1.6, "move": None, "reach": 1.7,
+                   "eyes": (0.62, 0.22, 0.2, "round")},
+    "bearer": {"paint": paint_bearer, "clock": "walk", "stride": 2.2, "move": "hop", "reach": 2.4,
+               "eyes": (0.4, 0.34, 0.24, "round")},
+    "looter": {"paint": paint_looter, "clock": "walk", "stride": 2.8, "move": "hop", "reach": 1.8,
+               "eyes": (0.4, 0.34, 0.24, "round")},
+    "saboteur": {"paint": paint_saboteur, "clock": "walk", "stride": 2.4, "move": "hop", "reach": 1.4,
+                 "eyes": (0.45, 0.32, 0.22, "round")},
+    "thawling": {"paint": paint_icicle, "clock": "walk", "stride": 1.8, "move": None, "reach": 1.45,
+                 "eyes": (0.4, 0.32, 0.22, "round")},
+    "berserker": {"paint": paint_brute, "clock": "walk", "stride": 2.2, "move": "hop", "reach": 1.45,
+                  "eyes": (0.5, 0.3, 0.2, "round")},  # angrier as it rages: see graphics.draw_eyes
+    "mirage": {"paint": paint_mage, "clock": "time", "rate": 1.4, "move": "hover", "reach": 1.5,
+               "eyes": (0.32, 0.26, 0.2, "round")},
+    "warded": {"paint": paint_sentinel, "clock": "walk", "stride": 2.3, "move": "hop", "reach": 1.3,
+               "eyes": (0.42, 0.3, 0.2, "round")},
     "elite": {"paint": paint_champion, "clock": "walk", "stride": 2.4, "move": "hop", "reach": 1.3,
               "eyes": (0.3, 0.3, 0.2, "angry")},
     "juggernaut": {"paint": paint_golem, "clock": "walk", "stride": 2.0, "move": "hop", "reach": 1.45,
@@ -598,16 +914,19 @@ def _reach(kind):
 
 def enemy_body(kind, step, scale, look="normal", frame=0):
     """An enemy facing one of the ANGLES directions, at one frame of its animation. `look`: "normal",
-    "hit" (whitened and squashed, for a moment after a hit) or "phased" (see-through)."""
+    "hit" (whitened and squashed, for a moment after a hit), "phased" (see-through) or "illusion" (pale and
+    see-through)."""
     def make():
         spec = ENEMY_TYPES[kind]
         half = spec["size"] * _reach(kind) + 3
         cv = Canvas(2 * half, scale)
-        _paint_enemy(cv, kind, spec["size"], step_angle(step), frame, 0.65 if look == "hit" else 0.0)
+        whiten = {"hit": 0.65, "illusion": 0.3}.get(look, 0.0)
+        _paint_enemy(cv, kind, spec["size"], step_angle(step), frame, whiten)
         if look == "hit":
             return cv.done((2 * half * ENEMY_SQUASH[0], 2 * half * ENEMY_SQUASH[1]))
         img = cv.done()
-        alpha = CREATURES.get(kind, {}).get("alpha", 1.0) * (PHASED_ALPHA if look == "phased" else 1.0)
+        alpha = CREATURES.get(kind, {}).get("alpha", 1.0) * {"phased": PHASED_ALPHA,
+                                                             "illusion": ILLUSION_ALPHA}.get(look, 1.0)
         if alpha < 1:
             img.fill((255, 255, 255, round(255 * alpha)), special_flags=pygame.BLEND_RGBA_MULT)
         return img
@@ -683,11 +1002,14 @@ INK = (25, 18, 30)
 def _paint_eye(cv, c, r, d, closed, style, k):
     """An eye at c looking along d; k (-1 or 1) is which side of the face it's on, for angry brows."""
     c = V(c)
-    if style == "glow":
-        cv.circle((255, 120, 30), c, r)
-        cv.circle((255, 215, 90) if not closed else (150, 70, 20), c, r * 0.7)
+    if style in ("glow", "queen", "queen_rage"):
+        hot = style == "queen_rage"
+        cv.circle((255, 40, 20) if hot else (255, 120, 30), c, r)
+        cv.circle(((255, 150, 120) if hot else (255, 215, 90)) if not closed else (150, 70, 20), c, r * 0.7)
         if not closed:
             cv.circle(WHITE, c + d * r * 0.15, r * 0.3)
+        if style != "glow":  # a heavy brow, slanting down toward the middle of the face
+            _brow(cv, c, r, d, k, (35, 45, 25))
         return
     if style == "hollow":
         cv.polygon(INK, ellipse_points(c, d, r * 1.15, r * 0.8, 14))
@@ -698,15 +1020,24 @@ def _paint_eye(cv, c, r, d, closed, style, k):
         cv.line(INK, c + side * r * 0.9, c - side * r * 0.9, max(0.8, r * 0.35))
         return
     cv.circle(INK, c, r + 0.5)
-    cv.circle(WHITE, c, r)
-    cv.circle(INK, c + d * r * 0.38, r * 0.55)
+    cv.circle(WHITE if style != "furious" else (255, 225, 210), c, r)
+    if style == "furious":  # a red-hot iris round a pinprick pupil
+        cv.circle((230, 40, 20), c + d * r * 0.38, r * 0.6)
+        cv.circle(INK, c + d * r * 0.42, r * 0.22)
+    else:
+        cv.circle(INK, c + d * r * 0.38, r * 0.55)
     cv.circle(WHITE, c + d * r * 0.38 + LIGHT * r * 0.25, max(0.4, r * 0.18))
-    if style == "angry":  # a lid over the back of the eye, slanting down toward the middle of the face
-        n = (-d * 0.6 + side * k * -0.8).normalize()
-        h = 0.1  # the lid's edge, as a share of r from the center
-        a, span = n.as_polar()[1], math.degrees(math.acos(h))
-        arc = [c + V(r + 0.6, 0).rotate(a + span * (i / 6 * 2 - 1)) for i in range(7)]
-        cv.polygon(INK, arc)
+    if style in ("angry", "furious"):  # a lid over the back of the eye, slanting down toward the middle of the face
+        _brow(cv, c, r, d, k, INK)
+
+
+def _brow(cv, c, r, d, k, color):
+    """An angry lid over the back of an eye looking along d, slanting down toward the middle of the face."""
+    n = (-d * 0.6 + d.rotate(90) * k * -0.8).normalize()
+    h = 0.1  # the lid's edge, as a share of r from the center
+    a, span = n.as_polar()[1], math.degrees(math.acos(h))
+    arc = [c + V(r + 0.6, 0).rotate(a + span * (i / 6 * 2 - 1)) for i in range(7)]
+    cv.polygon(color, arc)
 
 
 def eye(r, look, closed, scale, style="round", k=1):
@@ -715,7 +1046,26 @@ def eye(r, look, closed, scale, style="round", k=1):
         cv = Canvas(2 * r + 3, scale)
         _paint_eye(cv, (0, 0), r, V(1, 0).rotate(look * 360 / EYE_LOOKS), closed, style, k)
         return cv.done()
-    return cached(("eye", r, look, closed, style, k if style == "angry" else 0, scale), make)
+    return cached(("eye", r, look, closed, style, k if style in ("angry", "furious", "queen", "queen_rage") else 0,
+                   scale), make)
+
+
+def snarl(size, step, scale):
+    """A Berserker's snarl at its fury's height: a dark mouth of bared teeth, facing one of the ANGLES
+    directions, centered where it goes (in front of the eyes)."""
+    def make():
+        cv = Canvas(size * 1.2, scale)
+        f = V(1, 0).rotate(step_angle(step))
+        s = f.rotate(90)
+        w, h = size * 0.34, size * 0.11
+        cv.polygon(INK, [s * w, f * h + s * w * 0.6, f * h * 1.2 - s * w * 0.6, -s * w, -f * h - s * w * 0.6,
+                         -f * h * 1.2 + s * w * 0.6])
+        for i in range(4):  # teeth, top and bottom in turn
+            x = (i - 1.5) / 1.5 * w * 0.7
+            edge = -1 if i % 2 else 1
+            cv.polygon(WHITE, [s * (x - w * 0.14) + f * h * edge, s * (x + w * 0.14) + f * h * edge, s * x])
+        return cv.done()
+    return cached(("snarl", size, step, scale), make)
 
 
 def shell(color, r, scale):

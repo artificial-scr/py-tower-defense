@@ -111,6 +111,18 @@ EARLY_HP = 1.5
 EARLY_WAVES = 3 * WAVES_PER_LEVEL
 
 
+# Special monsters swapped in for Basics in generated waves, from a level on (1-based level -> amount, the
+# highest level not past the current one counts). Berserkers come in as a share of the wave; Saboteurs as a
+# count, (in waves 1-3, in waves 4-5). Earlier levels roll nothing extra, so their waves don't change.
+BERSERKERS = {4: 0.10, 6: 0.15, 8: 0.20}
+SABOTEURS = {6: (1, 2), 8: (2, 3)}
+
+
+def from_level(table, level, default):
+    """The entry of `table` for 1-based `level`: the one for the highest level not past it."""
+    return max(((n, v) for n, v in table.items() if n <= level), default=(0, default))[1]
+
+
 def wave_hp_mult(level_idx, wave_idx):
     """How much tougher than its base HP every drafted monster in a wave is. Grows across all levels."""
     d = level_idx * WAVES_PER_LEVEL + wave_idx
@@ -135,6 +147,13 @@ def make_wave(level_idx, wave_idx, rng=random):
             kinds.append("tank")
         else:
             kinds.append("basic")
+    berserkers = round(from_level(BERSERKERS, level_idx + 1, 0) * len(kinds))
+    saboteurs = from_level(SABOTEURS, level_idx + 1, (0, 0))[wave_idx >= 3]
+    if berserkers or saboteurs:
+        basics = [i for i, k in enumerate(kinds) if k == "basic"]
+        rng.shuffle(basics)
+        for i, kind in zip(basics, ["saboteur"] * saboteurs + ["berserker"] * berserkers):
+            kinds[i] = kind
     if wave_idx == WAVES_PER_LEVEL - 1:
         kinds.append(BOSS_LEVELS.get(level_idx + 1, "elite"))
     return kinds, generated_hp_mult(level_idx, wave_idx)

@@ -38,7 +38,7 @@ def win_monsters_level(game):
 
 # ---- unlocks.json ---------------------------------------------------------------------
 def test_pools():
-    assert len(UNLOCKS["monster"]) == 16 and len(UNLOCKS["tower"]) == 10
+    assert len(UNLOCKS["monster"]) == 23 and len(UNLOCKS["tower"]) == 10
     assert {c["effect"] for c in UNLOCKS["monster"].values()} == {"type", "ability", "buff", "budget"}
     assert all(c["max"] >= 1 for pool in UNLOCKS.values() for c in pool.values())
 

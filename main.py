@@ -53,8 +53,8 @@ from achievements import UNLOCKED_BY, AchievementTracker
 from attack import DEFENDER_LIVES, AttackMixin
 from attack_view import AttackView
 from balance_log import LevelLog, LogSession
-from effects import CastWarning, Popup, Ring, Shards
-from entities import Enemy, Tower, cast_ability, heal_auras
+from effects import CastWarning, GoldBurst, GooSpray, Popup, Ring, Shards, Sparks
+from entities import Enemy, Tower, cast_ability, heal_auras, sabotage, speed_auras
 from graphics import BAD, GOLD, MAP_H, MAP_W, SCALES, TILE, GameView, mouse_pos, set_scale, to_logical, window_size
 from levels import (BOSS_LEVELS, COLS, ENEMY_TYPES, LEVELS, ROWS, START_GOLD, START_LIVES, WAVES_PER_LEVEL,
                     build_path_cells, make_wave, tile_center, wave_value)
@@ -748,7 +748,9 @@ class Game(AttackMixin, AttackView, UnlockView, GameView):
         for e in self.enemies:
             e.update(dt)
         heal_auras(self.enemies, dt)
+        speed_auras(self.enemies)
         self.summon_minions(dt)
+        self.cast_decoys(dt)
         for t in self.towers.values():
             t.update(dt, self.enemies, self.projectiles, self.effects)
         for p in self.projectiles:
@@ -760,6 +762,9 @@ class Game(AttackMixin, AttackView, UnlockView, GameView):
         for e in self.enemies:
             if e.alive:
                 continue
+            if e.illusion:  # popped or faded: nothing to win or lose
+                self.effects.append(Sparks(e.pos, e.spec["color"], 6, 16))
+                continue
             splits += [(child, e.kind) for child in e.split()]
             e.end_t = self.clock
             if self.side == "towers":
@@ -770,11 +775,15 @@ class Game(AttackMixin, AttackView, UnlockView, GameView):
                     lost = max(0, min(lost, self.lives_in_reach))
                 self.lives -= lost
                 self.effects.append(Ring(e.pos, 30, BAD, 0.4))
+                if "loot" in e.spec:
+                    self.loot(e, wave_log)
                 if wave_log:
                     wave_log["leaks"] += 1
                     wave_log["lives_lost"] += lost
             else:
                 self.effects.append(Shards(e.pos, e.spec["color"], e.spec["size"], e.spin))
+                if "sabotage" in e.spec:
+                    sabotage(e, self.towers.values(), self.effects)
                 if self.side == "towers":
                     reward = e.spec["cost"]  # a monster is worth what it costs to draft
                     self.gold += reward
@@ -787,8 +796,12 @@ class Game(AttackMixin, AttackView, UnlockView, GameView):
         self.enemies = [e for e in self.enemies if e.alive]
         for child, parent in splits:
             self.register_enemy(child, f"split:{parent}")
+        if not self.spawn_queue and self.enemies and all(e.illusion for e in self.enemies):
+            for e in self.enemies:  # their Mirages are gone: so are they
+                self.effects.append(Sparks(e.pos, e.spec["color"], 6, 16))
+            self.enemies = []
         if self.side == "towers":
-            self.tracker.tick(self.towers.values(), self.enemies, self.state == "wave")
+            self.tracker.tick(self.towers.values(), [e for e in self.enemies if not e.illusion], self.state == "wave")
 
         if self.side == "monsters":
             if self.lives <= 0:
@@ -845,13 +858,48 @@ class Game(AttackMixin, AttackView, UnlockView, GameView):
             boss.summon_timer -= dt
             if boss.summon_timer > 0:
                 continue
-            kind, count, interval = boss.spec["summon"]
+            kind, count, interval, *offsets = boss.spec["summon"]
             boss.summon_timer = interval
-            for _ in range(count):
+            for i in range(count):
                 minion = Enemy(kind, self.path_pts, boss.hp_mult, boss.mods)
-                minion.follow(boss)
+                if offsets:  # shot out to its own spot along the path (the Brood Mother)
+                    minion.advance(max(0.0, boss.travelled + offsets[0][i]))
+                    self.effects.append(GooSpray(boss.pos, minion.pos, boss.spec["inner"][2]))
+                else:
+                    minion.follow(boss)
                 self.register_enemy(minion, f"summon:{boss.kind}")
-            self.effects.append(Ring(boss.pos, boss.spec["size"] + 30, boss.spec["color"], 0.5))
+            self.effects.append(Ring(boss.pos, boss.spec["size"] + (8 if offsets else 30), boss.spec["color"], 0.5))
+
+    def loot(self, looter, wave_log):
+        """A Looter got through: it steals a share of the tower player's gold, or, on the Monsters side,
+        brings a multiple of its cost back into the budget."""
+        share, budget = looter.spec["loot"]
+        pos = pygame.Vector2(looter.pos.x, min(looter.pos.y, MAP_H - 30))
+        if self.side == "towers":
+            stolen = int(self.gold * share)
+            self.gold -= stolen
+            self.popups.append(Popup(pos, f"-{stolen} gold!", BAD))
+            if self.log:
+                self.log.spent["stolen"] += stolen
+                wave_log["gold_stolen"] += stolen
+        else:
+            gain = round(looter.spec["cost"] * budget)
+            self.budget += gain
+            self.popups.append(Popup(pos, f"+{gain} budget", GOLD))
+        self.effects.append(GoldBurst(pygame.Vector2(min(max(looter.pos.x, 10), MAP_W - 10),
+                                                     min(max(looter.pos.y, 10), MAP_H - 10))))
+
+    def cast_decoys(self, dt):
+        """Mirages cast illusions of themselves ahead on the path (not counted as monsters, or logged)."""
+        for caster in [e for e in self.enemies if e.alive and "decoy" in e.spec]:
+            caster.decoy_timer -= dt
+            if caster.decoy_timer > 0:
+                continue
+            caster.decoy_timer = caster.spec["decoy"][0]
+            fake = caster.cast_illusion()
+            fake.spawn_t = self.clock
+            self.enemies.append(fake)
+            self.effects.append(Ring(fake.pos, caster.spec["size"] + 6, caster.spec["color"], 0.3))
 
     # ---- input ------------------------------------------------------------
     def handle_event(self, event):

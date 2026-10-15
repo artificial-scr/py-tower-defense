@@ -36,7 +36,7 @@ DAMAGE_SOURCES = ("direct", "splash", "chain", "burn")
 
 
 def new_kind_stats():
-    return {"wave_seconds": 0.0, "shots": 0, "hits": 0, "kills": 0, "damage": 0.0, "overkill": 0.0,
+    return {"wave_seconds": 0.0, "shots": 0, "hits": 0, "kills": 0, "warded": 0, "decoyed": 0, "damage": 0.0, "overkill": 0.0,
             "vs_slowed_bonus": 0.0, "by_source": defaultdict(float), "vs_enemy": defaultdict(float)}
 
 
@@ -103,7 +103,8 @@ class LevelLog:
             counts[k] += 1
         self.waves.append({"wave": number, "hp_mult": r(hp_mult, 3), "composition": dict(counts),
                            "t_start": r(t, 2), "lives_start": lives, "gold_start": gold,
-                           "kills": 0, "leaks": 0, "lives_lost": 0, "kill_gold": 0, "summoned": 0})
+                           "kills": 0, "leaks": 0, "lives_lost": 0, "kill_gold": 0, "summoned": 0,
+                           "gold_stolen": 0})
 
     def current_wave(self):
         return self.waves[-1] if self.waves else None
@@ -153,7 +154,7 @@ class LevelLog:
             for kind, s in tw.stats.items():
                 a = agg.setdefault(kind, {"instances": 0, **new_kind_stats()})
                 a["instances"] += 1
-                for f in ("wave_seconds", "shots", "hits", "kills", "damage", "overkill", "vs_slowed_bonus"):
+                for f in ("wave_seconds", "shots", "hits", "kills", "warded", "decoyed", "damage", "overkill", "vs_slowed_bonus"):
                     a[f] += s[f]
                 for src, v in s["by_source"].items():
                     a["by_source"][src] += v
@@ -168,7 +169,8 @@ class LevelLog:
                 "damage_share_pct": r(100 * a["damage"] / total),
                 "wave_seconds": r(a["wave_seconds"]),
                 "dps_per_tower": r(a["damage"] / a["wave_seconds"]) if a["wave_seconds"] else None,
-                "shots": a["shots"], "hits": a["hits"], "kills": a["kills"],
+                "shots": a["shots"], "hits": a["hits"], "kills": a["kills"], "warded": a["warded"],
+                "decoyed": a["decoyed"],
                 "overkill": r(a["overkill"]),
                 "overkill_pct": r(100 * a["overkill"] / dealt) if dealt else 0.0,
                 "vs_slowed_bonus": r(a["vs_slowed_bonus"]),
