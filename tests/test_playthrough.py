@@ -1,10 +1,9 @@
 """Long simulations with a simple bot player. Skip them with: uv run pytest -m "not slow".
 
-These double as balance checks. The bot clears every regular level, but the bosses beat it
-about half the time (3 wins out of seeds 0-5), so only the regular levels are asserted on
-several seeds, and a full win on one seed known to win. On the Monsters side, scripted drafts
-against the bot's own tower records check that the first levels stay winnable, and that how the
-budget is spent matters.
+These double as balance checks. Since the early waves got their hp boost (levels.EARLY_HP) the bot
+no longer wins: with its mixed buys (Gun, Cannon, Frost) it clears level 1 and falls on levels 2-4, and
+buying only Guns, the strongest early line, takes it furthest (level 3-7, seeds 0-5). On the Monsters
+side, scripted drafts against the bot's own tower records check that the first levels stay winnable.
 """
 
 import random
@@ -19,17 +18,19 @@ pytestmark = pytest.mark.slow
 
 
 @pytest.mark.parametrize("seed", range(3))
-def test_bot_clears_levels_before_first_boss(game, seed):
+def test_mixed_bot_clears_level_1_then_falls(game, seed):
+    """If it gets past level 4 the early game got easier; if it loses level 1, much harder."""
     random.seed(seed)
     bot_play(game, until_level=10)
-    assert game.level_idx == 9 and game.state == "build" and game.lives == 20
+    assert game.state == "game_over" and 1 <= game.level_idx <= 3
 
 
-def test_game_can_be_won(game):
-    """Seed 1 is a known winning run; if it starts losing, the game got harder (or the bot worse)."""
+def test_gun_bot_goes_furthest(game):
+    """Seed 1 buying only Guns reaches level 7; if it falls before level 6, the game got harder (or the bot
+    worse)."""
     random.seed(1)
-    bot_play(game)
-    assert game.state == "victory" and game.level_idx == len(main.LEVELS) - 1
+    bot_play(game, buy=("gun",))
+    assert game.state == "game_over" and game.level_idx >= 5
 
 
 def test_stress_at_10x(game):
@@ -68,14 +69,14 @@ def test_monsters_level_1_falls_to_both_plans(records, screen, save_for_last, ou
     assert g.state == outcome
 
 
-@pytest.mark.parametrize("save_for_last, wins", [(True, False), (False, True)])
-def test_monsters_level_2_is_won_by_pacing(records, screen, save_for_last, wins):
-    """Level 2's record ends on Dragon + Absolute Zero, which melts one big push (not a single life taken)
-    but not steady waves."""
+@pytest.mark.parametrize("save_for_last", [True, False])
+def test_monsters_level_2_falls_to_both_plans(records, screen, save_for_last):
+    """Level 2's record ends on Railgun + Blizzard (990 gold: the harder Towers side leaves the bot less to
+    spend), which falls to one big push and to steady waves alike."""
     g = main.Game(screen, log_dir=None, side="monsters")
     g.monster_wins = 1  # as after winning level 1
     g.load_level(1)
-    assert scripted_attack(g, ["tank", "basic", "elite"], save_for_last) == wins
+    assert scripted_attack(g, ["tank", "basic", "elite"], save_for_last)
 
 
 def test_a_full_loop_towers_monsters_towers(records, screen):

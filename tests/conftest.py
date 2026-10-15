@@ -15,6 +15,7 @@ import pytest  # noqa: E402
 
 import graphics  # noqa: E402
 import main  # noqa: E402
+from towers import TOWERS  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -30,7 +31,9 @@ def isolated(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "SAVE_FILE", str(tmp_path / "savegame.json"))
     monkeypatch.setattr(main, "PROFILE_FILE", str(tmp_path / "profile.json"))
     # The Monsters side's one-time starter cards would cover every Monsters-side test; tests of them remove this.
-    (tmp_path / "profile.json").write_text(json.dumps({"version": 1, "milestones": {"starter_pack": True}}))
+    # Every tower is unlocked, so tests play the whole tree; tests of tower unlocks use the `locked` fixture.
+    (tmp_path / "profile.json").write_text(json.dumps({"version": 1, "milestones": {"starter_pack": True},
+                                                       "towers_unlocked": list(TOWERS)}))
     yield
     graphics.set_scale(1.0)
     graphics.set_offset((0, 0))
@@ -52,6 +55,13 @@ def screen():
 @pytest.fixture
 def game(screen):
     """A game at level 1 with logging off."""
+    return main.Game(screen, log_dir=None)
+
+
+@pytest.fixture
+def locked(screen, tmp_path):
+    """A game at level 1 with logging off and a profile that owns only the start towers."""
+    (tmp_path / "profile.json").write_text(json.dumps({"version": 1, "milestones": {"starter_pack": True}}))
     return main.Game(screen, log_dir=None)
 
 

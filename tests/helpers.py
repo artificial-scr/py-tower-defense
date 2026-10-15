@@ -80,13 +80,13 @@ def ranked_spots(game):
     return [t for _, t in res]
 
 
-def bot_play(game, until_level=None, max_frames=3_000_000, move_and_sell=False):
-    """A simple player: buy towers on the best spots, fuse whatever can fuse, pick branches at random.
+def bot_play(game, until_level=None, max_frames=3_000_000, move_and_sell=False, buy=("gun", "cannon", "frost", "gun")):
+    """A simple player: buy towers on the best spots (cycling through `buy`), fuse whatever can fuse, pick
+    branches at random.
 
     Stops when the game is won or lost, or when level `until_level` (1-based) is reached.
     With move_and_sell, it also moves one tower mid-wave and sells one per level.
     """
-    buy = ["gun", "cannon", "frost", "gun"]
     bought, spots, sold = 0, None, False
     for frame in range(max_frames):
         if game.state in ("game_over", "victory"):

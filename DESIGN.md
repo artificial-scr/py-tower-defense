@@ -309,7 +309,26 @@ one push wins level 1 every time, and evenly paced waves still lose. That's the 
 | Level 1 | wins | loses |
 | Level 2 (record ends on Dragon + Absolute Zero) | loses: Zero slows the whole column, Dragon burns it | wins |
 
-Juggernauts (immune to slows) beat that level 2 record outright. Both rows are pinned by slow tests.
+Juggernauts (immune to slows) beat that level 2 record outright. Both rows were pinned by slow tests,
+until the early hp boost below: the bot's level 2 record now ends on Railgun + Blizzard (990 gold),
+which falls to both plans.
+
+**The early waves were too easy (2026-10-15).** A first playthrough held 1,250 gold by level 3: 3–6
+towers cleared levels 1–2 without a leak, and income (about 500 gold of kills and 175 of wave bonuses
+a level) piled up. A bot that only buys after a leak, starting from the Gun, ended level 3 with about
+1,050 gold banked. Kill gold doesn't scale with hp, so generated waves now get +1.5 hp multiplier per
+wave over the first 15 waves (`EARLY_HP`, `EARLY_WAVES` in `levels.py`; the late game keeps the
++22.5, about +20% at level 10). The same bot now banks 150–290 by level 3. It's deliberately harsh:
+
+| Bot (seeds 0–5) | Before | After |
+|---|---|---|
+| Buys Gun, Cannon, Frost in turn | Clears levels 1–9 with 20 lives | Falls on levels 2–4 |
+| Buys Guns only | | Falls on levels 3–7 |
+
+Weaker comps have to be fixed by the player now. `+1.0` was the edge where the mixed bot still
+reached level 10 (with 1–9 lives), and `+0.75` lost it few lives but left 600–1,000 gold banked by level
+3. The Monsters side keeps the plain curve (`wave_hp_mult`) for its drafts, so a monster record
+replayed on levels 1–3 is weaker than the generated wave it replaces.
 
 **Lives carried over (the current rule).** Against the tower records from a real run (levels
 1–10, 410 to 5,920 gold), with lives lasting the pass and no cap per level:
@@ -369,3 +388,117 @@ needed to tune from real games.
   finale (section 3) makes the next Towers pass end on that wave with the Warden added.
   A record the Towers side can't beat is kept forever, so it could block every later Towers pass at
   that level.
+
+## 11. Tower unlocks
+
+Status: **built** (2026-10-15), not yet playtested.
+
+A new profile starts with **the Gun only**. Every other tower, in every tier, is unlocked for good
+by an achievement or a discovery. The unlocks pace the fusion tree: each one should arrive just as
+the player runs into the problem it solves, so the unlock also teaches the tower.
+
+Only the Towers side has achievements, and only towers are unlocked. The Monsters side is
+unchanged (its starter pack and monster cards stay), and its defender is a tower record, which
+only ever holds towers the player owned.
+
+### How unlocks happen
+
+| Tiers | How | Why |
+|---|---|---|
+| 1–3 | **Achievements** that show the need for the tower, or reward mastering the one before | Teaching: the goal shows the problem the tower solves |
+| 4, the first two | **Discovery**: fusing two tier 3 towers from different lines makes the tier 4 tower and unlocks it, for the first two tier 4 towers ever made | Rewards experimenting; the first finals feel found, not given |
+| 4, the other ten | **Hard achievements**: long-term or skill feats (beat the game, hoard gold, kill the Warden fast) | Late goals for players who know the game |
+
+- **Two paths for the early unlocks.** Each tier 1–3 achievement has a skill path *or* a slow
+  path (e.g. "let a Fast through" or "kill 40 Fasts"), so a struggling player can't get stuck with
+  the Gun only, losing the same level run after run.
+- **Parents first.** A tower's achievement is hidden, and counts nothing, until the player owns
+  every tower it's fused from (the one before it in its line, or a final's two tier 3 parents).
+  Until then the tree shows "Unlock the X first", and the HUD only pins achievements that can be
+  worked on. A tower unlocked by an event doesn't let its children count that same event.
+- **Discovery** works on any recipe until two have been discovered. After that a locked recipe
+  can't be fused: the drag preview shows the lock and the achievement it needs. Each tier 4 tower
+  has its own achievement; one that was discovered just never needs it.
+- **The tier 3 branch screen** shows a locked branch greyed out with its achievement. If both
+  branches are locked, the two tier 2 towers can't be fused.
+
+### When an unlock arrives
+
+- Progress is counted live, during waves and between them.
+- An unlock earned during a wave becomes usable at the **next build phase**. At the start of that
+  build phase a **pop-up** shows each new tower (its picture, what it's good at, the achievement
+  that earned it), in the style of the card screen. Several unlocks queue up, one card each.
+- An unlock earned during the build phase (a discovery, or a goal about towers on the map) shows
+  its pop-up at once and is usable straight away.
+- In the build panel a new tower has a "NEW" badge until it's been placed once.
+
+### Showing what's locked
+
+- **The evolution tree (`T`)** shows locked towers as silhouettes, with the achievement and a
+  progress bar ("Cannon: 9 / 15 monsters in range"). Tier 4 towers not yet discovered show `???`
+  and their two parents while discovery is still open.
+- **The HUD** pins the closest unfinished achievement in a corner during the Towers side.
+
+### Achievements (first draft; every number goes in the data file)
+
+**Tiers 1–3**
+
+| Unlocks | Achievement | Teaches |
+|---|---|---|
+| Rifle | Have 3 Guns on the map at once | Two of the same fuse into one |
+| Cannon | Have 15 monsters inside one tower's range at once | Crowds need splash |
+| Frost | Let a Fast monster through, **or** kill 40 Fasts | Fast monsters need slowing |
+| Mortar | Have 2 Cannons on the map at once | |
+| Chiller | Have 2 Frosts on the map at once | |
+| Minigun | One Rifle kills 60 monsters in a level | Rapid fire is about volume |
+| Sniper | A Rifle lands the killing shot on a Tank or an Elite | Big hits are about precision |
+| Bombard | One Mortar shot kills 4 monsters | Burst splash |
+| Incinerator | Mortars hit 200 monsters in a level | Spread damage over time |
+| Blizzard | Keep 10 monsters slowed at once | Area control |
+| Shatter | Kill 30 slowed monsters in a level | Punishing slowed foes |
+
+**Tier 4** (the two discovered ones skip theirs)
+
+| Unlocks | Achievement |
+|---|---|
+| Solar Lance | Beat Towers level 10 for the first time |
+| Railgun | Kill the Warden within 20 s of it spawning |
+| Thermal Shock | Hold 1,000 gold at the end of the last wave of Towers level 10 |
+| Avalanche | Win the finale Towers pass (after a Monsters pass) |
+| Flak Battery | Kill 300 monsters in one level |
+| Dragon | Burns kill 500 monsters (over all runs) |
+| Hailstorm | Clear a level without losing a life, from level 5 on |
+| Tesla Coil | Kill 25 monsters within 2 s |
+| Absolute Zero | Clear a level with only Frost-line towers |
+| Frost Lance | Snipers kill 10 Elites (over all runs) |
+| Glacier Breaker | Survive a wave with 60 or more monsters in it |
+| Obsidian | Win 3 Towers passes |
+
+Some of these need towers that may still be locked (Absolute Zero needs the Frost line to the
+top, Dragon needs Incinerators). That's intended: the late goals build on the early unlocks.
+
+### Effects on the rest of the game
+
+- **Tower cards:** a card for a line with no unlocked tower (Sharpened Cannons before the Cannon)
+  is left out of the pool.
+- **Rebuild (`B`)** only rebuilds towers that are unlocked, which they always are, since unlocks
+  are never lost.
+- **Balance:** reaching the Monsters side (Towers level 10) takes longer while tier 4 towers are
+  locked. That's welcome: the Towers side was too easy. The Monsters budget (section 9) stays as
+  it is; balance gets revisited after playtesting.
+- **Existing profiles:** see TODO.md. Until profile validation lands, a profile without
+  `towers_unlocked` starts with the Gun only.
+- **Peaks are sampled.** "Monsters in one tower's range" and "monsters slowed at once" are checked
+  every 6 updates during a wave, not every update. "One Mortar kills 4 at once" counts the kills
+  one tower made in a single update (burns left out), which is one shot.
+
+### Code
+
+| Piece | Change |
+|---|---|
+| `achievements.json` | Each achievement: id, name, condition type, target, scope (`level`, `wave`, `run`, `ever`), the tower it unlocks, and an optional second (slow) path. Checked at startup like `unlocks.json` |
+| `progress.py` | `Profile.towers_unlocked`, `Profile.achievements` (id → progress for `ever` counters), `Profile.discoveries_left` (starts at 2) |
+| New `achievements.py` | Loader, plus a tracker fed the same events `balance_log.py` gets (kills by tower kind, leaks by enemy kind, fusions, gold, wave and level ends), with per-level and per-wave counters it resets |
+| `main.py` | The build panel and hotkeys only offer unlocked tier 1 towers; fusion and the branch screen check the result; pending unlocks pop up at the start of the build phase |
+| `graphics.py` | The unlock pop-up, the NEW badge, the locked fusion preview, locked silhouettes and progress bars in the tree, the pinned HUD goal |
+| `tests/` | A fixture that unlocks every tower for the existing bot and slow tests; one test per condition type; discovery stops after two; pop-up timing |

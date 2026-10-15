@@ -22,6 +22,9 @@ need be) when the last one goes. Records, unlock cards and milestones are perman
 (progress.Profile, in profile.json); the run in progress is saved to
 savegame.json at the start of every level.
 
+A new profile owns only the Gun: the other towers are unlocked by Towers-side achievements
+(achievements.py) or, for the first two tier 4 towers made, by fusing them.
+
 The controls for both sides are listed in README.md (Controls).
 
 Moving to the next level refunds every tower; Rebuild then buys them back as they were
@@ -46,6 +49,7 @@ import sys
 import pygame
 
 import graphics
+from achievements import UNLOCKED_BY, AchievementTracker
 from attack import DEFENDER_LIVES, AttackMixin
 from attack_view import AttackView
 from balance_log import LevelLog, LogSession
@@ -57,6 +61,7 @@ from levels import (BOSS_LEVELS, COLS, ENEMY_TYPES, LEVELS, ROWS, START_GOLD, ST
 from monsters import ABILITIES, REWARDS, UPGRADES
 from progress import UNLOCKS, Profile, comp_snapshot, stronger
 from towers import TOWER_ORDER, TOWERS, fusion_options
+from unlock_view import UnlockView
 
 # --------------------------------------------------------------------------
 # Rules (the rest are in levels.py and towers.py, the screen layout in graphics.py)
@@ -168,7 +173,7 @@ def spec_snapshot():
                         for k, s in ENEMY_TYPES.items()}}
 
 
-class Game(AttackMixin, AttackView, GameView):
+class Game(AttackMixin, AttackView, UnlockView, GameView):
     def __init__(self, screen, log_dir=LOG_DIR, side="towers"):
         """`side` is who the player plays: "towers" (build and defend) or "monsters" (attack.py)."""
         self.screen = screen
@@ -184,6 +189,8 @@ class Game(AttackMixin, AttackView, GameView):
         self.profile = Profile.load(PROFILE_FILE)
         self.picking_side = False  # the new-run screen: choose Towers or Monsters
         self.side_chosen = False  # this launch already chose how to start (side pick or Continue)
+        self.pending_unlocks = []  # towers just unlocked, shown one card each at the next build phase
+        self.tracker = AchievementTracker(self.profile, self.tower_unlocked)
         self.build_view()
         self.build_panel_buttons()
         self.reset()
@@ -320,6 +327,8 @@ class Game(AttackMixin, AttackView, GameView):
         self.aiming, self.queue, self.budget, self.cooldowns = None, [], 0, {}  # Monsters side (attack.py)
         self.lives_at_start = self.lives
         self.pace_bonus = 0.0  # Monsters side: set by setup_attack_level
+        self.wave_monsters = 0  # monsters spawned in the current wave, splits and summons included
+        self.tracker.start_level()
         if self.log_session:
             path_length = sum(a.distance_to(b) for a, b in zip(self.path_pts, self.path_pts[1:]))
             self.log = LevelLog(self.log_session, idx + 1, self.theme.name, self.is_boss_level, path_length,
@@ -363,7 +372,9 @@ class Game(AttackMixin, AttackView, GameView):
             self.log.add_tower(tower)
 
     def finish_log(self, outcome):
-        """Write the current level's log (once). A level quit before any wave isn't worth a file."""
+        """Write the current level's log (once). A level quit before any wave isn't worth a file.
+        Achievement progress is written to the profile too."""
+        self.tracker.flush()
         if not self.log or self.log.written or (outcome in ("quit", "abandoned") and not self.log.waves):
             return None
         for t in self.towers.values():
@@ -396,6 +407,7 @@ class Game(AttackMixin, AttackView, GameView):
         enemy.wave = self.wave_idx
         enemy.spawn_t = self.clock
         self.enemies.append(enemy)
+        self.wave_monsters += 1
         if self.log:
             self.log.enemies.append(enemy)
             if origin != "wave":
@@ -445,7 +457,7 @@ class Game(AttackMixin, AttackView, GameView):
     @property
     def overlay(self):
         """The screen shown over the map, if any: it takes the input (the tree only partly) and stops the game.
-        One of quit, settings, side_pick, rewards, choice, tree, or None."""
+        One of quit, settings, side_pick, rewards, choice, unlock, tree, or None."""
         if self.confirm_quit:
             return "quit"
         if self.show_settings:
@@ -456,6 +468,8 @@ class Game(AttackMixin, AttackView, GameView):
             return "rewards"
         if self.choice is not None:
             return "choice"
+        if self.pending_unlocks and self.state == "build" and self.side == "towers":
+            return "unlock"
         if self.show_tree:
             return "tree"
         return None
@@ -463,6 +477,24 @@ class Game(AttackMixin, AttackView, GameView):
     @property
     def frozen(self):
         return self.paused or self.overlay is not None
+
+    # ---- tower unlocks (achievements.py) ------------------------------------------
+    def tower_unlocked(self, kind, how="achievement"):
+        """A tower was unlocked for good: its card shows at the next build phase (straight away in one)."""
+        self.pending_unlocks.append({"kind": kind, "how": how})
+        self.log_event("tower_unlock", kind=kind, how=how,
+                       achievement=UNLOCKED_BY[kind] if how == "achievement" else None)
+
+    def dismiss_unlock(self):
+        self.pending_unlocks.pop(0)
+
+    def can_make(self, kind):
+        """Whether the player can have this tower: they own it, or it's a tier 4 tower and discoveries are left."""
+        return self.profile.has_tower(kind) or (TOWERS[kind]["tier"] == 4 and self.profile.discoveries_left > 0)
+
+    def can_fuse(self, a, b):
+        """Whether kinds a and b fuse into something the player can have (any branch of a choice)."""
+        return any(self.can_make(k) for k in fusion_options(a, b))
 
     # ---- unlock cards -------------------------------------------------------
     def offer_rewards(self, side_won, tier="normal"):
@@ -559,6 +591,7 @@ class Game(AttackMixin, AttackView, GameView):
             self.spawn_queue = [k for k in self.spawn_queue if "boss" not in ENEMY_TYPES[k]] + [FINALE_BOSS]
         self.wave_mods["armor"] = self.card_mods["armor"]
         self.wave_idx += 1
+        self.wave_monsters = 0
         self.spawn_timer = 0.0
         self.wave_started_at = self.clock
         self.state = "wave"
@@ -575,12 +608,13 @@ class Game(AttackMixin, AttackView, GameView):
             return False
         other = self.towers.get(tile)
         if other:
-            return bool(fusion_options(self.build_kind, other.kind))
+            return self.can_fuse(self.build_kind, other.kind)
         return self.is_free(tile)
 
     def place_tower(self, tile):
         tower = Tower(self.build_kind, tile)
         tower.mods = self.card_mods
+        self.profile.seen_tower(tower.kind)
         self.gold -= tower.spent
         other = self.towers.get(tile)
         self.note(tower, "bought", kind=tower.kind)
@@ -596,7 +630,8 @@ class Game(AttackMixin, AttackView, GameView):
             self.build_kind = None
 
     def fuse(self, tower, target):
-        """Merge `tower` into `target`, which keeps its spot. Branching fusions ask the player to choose."""
+        """Merge `tower` into `target`, which keeps its spot. Branching fusions ask the player to choose
+        (a locked branch shows, but can't be picked). Callers check can_fuse first."""
         options = tower.fusion_options(target)
         if self.towers.get(tower.tile) is tower:
             del self.towers[tower.tile]
@@ -615,6 +650,10 @@ class Game(AttackMixin, AttackView, GameView):
             self.build_kind = None
 
     def evolve(self, tower, kind):
+        if not self.profile.has_tower(kind):  # a tier 4 tower fused while discoveries were left
+            self.profile.discover(kind)
+            self.tower_unlocked(kind, "discovery")
+        self.profile.seen_tower(kind)
         self.note(tower, "evolved", **{"from": tower.kind, "to": kind})
         self.log_event("evolve", tower=tower.uid, frm=tower.kind, to=kind, tier=TOWERS[kind]["tier"])
         tower.kind = kind
@@ -624,6 +663,8 @@ class Game(AttackMixin, AttackView, GameView):
 
     def choose(self, index):
         tower, options = self.choice
+        if not self.can_make(options[index]):
+            return
         self.choice = None
         self.log_event("branch_choice", tower=tower.uid, options=options, chosen=options[index])
         self.evolve(tower, options[index])
@@ -638,7 +679,7 @@ class Game(AttackMixin, AttackView, GameView):
         if other is t:
             return
         if other:
-            if t.fusion_options(other):
+            if t is not other and self.can_fuse(t.kind, other.kind):
                 self.fuse(t, other)
         elif self.is_free(tile):
             self.log_event("move", tower=t.uid, kind=t.kind, frm=list(t.tile), to=list(tile),
@@ -721,6 +762,8 @@ class Game(AttackMixin, AttackView, GameView):
                 continue
             splits += [(child, e.kind) for child in e.split()]
             e.end_t = self.clock
+            if self.side == "towers":
+                self.tracker.on_death(e, self.clock)
             if e.escaped:
                 lost = self.lives if e.spec.get("fatal") else e.spec["damage"]
                 if self.side == "monsters":
@@ -744,6 +787,8 @@ class Game(AttackMixin, AttackView, GameView):
         self.enemies = [e for e in self.enemies if e.alive]
         for child, parent in splits:
             self.register_enemy(child, f"split:{parent}")
+        if self.side == "towers":
+            self.tracker.tick(self.towers.values(), self.enemies, self.state == "wave")
 
         if self.side == "monsters":
             if self.lives <= 0:
@@ -762,10 +807,14 @@ class Game(AttackMixin, AttackView, GameView):
             self.popups.append(Popup((MAP_W / 2, MAP_H / 2), f"Wave cleared! +{bonus}", GOLD))
             self.projectiles.clear()
             self.check_comp("wave_end")  # closes this wave's window
+            self.tracker.on_wave_cleared(self.wave_monsters)
             if self.wave_idx < self.level_waves:
                 self.state = "build"
             else:
                 self.state = "level_complete" if self.level_idx < self.last_level_idx else "victory"
+                self.tracker.on_level_cleared(self.level_idx + 1)
+                if self.state == "victory":
+                    self.tracker.on_pass_won(self.finale_on, self.gold)
                 self.profile.record_towers(self.level_idx + 1, self.comps_by_wave, self.card_mods)
                 if self.state == "victory":
                     self.profile.reach("monsters_side")
@@ -812,7 +861,7 @@ class Game(AttackMixin, AttackView, GameView):
             return self.toggle_fullscreen()  # anywhere, whatever is on screen
         handler = {"quit": self.handle_quit_event, "settings": self.handle_settings_event,
                    "side_pick": self.handle_side_pick_event, "rewards": self.handle_reward_event,
-                   "choice": self.handle_choice_event}.get(self.overlay)
+                   "choice": self.handle_choice_event, "unlock": self.handle_unlock_event}.get(self.overlay)
         if handler:
             handler(event)
         elif event.type == pygame.KEYDOWN:
@@ -838,6 +887,11 @@ class Game(AttackMixin, AttackView, GameView):
             for i, rect in enumerate(self.choice_cards()):
                 if rect.collidepoint(event.pos):
                     self.choose(i)
+
+    def handle_unlock_event(self, event):
+        """Any key or click puts the unlock card away (the next one shows, if any)."""
+        if event.type == pygame.KEYDOWN or (event.type == pygame.MOUSEBUTTONDOWN and event.button == 1):
+            self.dismiss_unlock()
 
     def handle_side_pick_event(self, event):
         if event.type == pygame.KEYDOWN and event.key in (pygame.K_1, pygame.K_2):
@@ -972,7 +1026,7 @@ class Game(AttackMixin, AttackView, GameView):
     def pick_tower(self, kind):
         if self.build_kind == kind:
             self.build_kind = None
-        elif self.gold >= TOWERS[kind]["cost"]:
+        elif self.gold >= TOWERS[kind]["cost"] and self.profile.has_tower(kind):
             self.build_kind = kind
             self.selected = None
 

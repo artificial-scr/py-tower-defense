@@ -550,7 +550,8 @@ class GameView:
             self.draw_state_message()  # level complete, game over...: stays under the screens above
         if overlay:
             {"settings": self.draw_settings, "quit": self.draw_quit_prompt, "side_pick": self.draw_side_pick,
-             "rewards": self.draw_rewards, "choice": self.draw_choice, "tree": self.draw_tree}[overlay]()
+             "rewards": self.draw_rewards, "choice": self.draw_choice, "unlock": self.draw_unlock,
+             "tree": self.draw_tree}[overlay]()
         screen.set_clip(None)
         self.draw_panel()
 
@@ -578,7 +579,7 @@ class GameView:
         if not t:
             return
         for other in self.towers.values():
-            if t.fusion_options(other):
+            if other is not t and self.can_fuse(t.kind, other.kind):
                 sdraw.rect(fx, (*GOLD, 220), (other.tile[0] * TILE, other.tile[1] * TILE, TILE, TILE),
                            3, border_radius=6)
         sdraw.rect(fx, (255, 255, 255, 90), (t.tile[0] * TILE, t.tile[1] * TILE, TILE, TILE),
@@ -591,7 +592,7 @@ class GameView:
         radius = t.range
         if other is t:
             color = (255, 255, 255)
-        elif other and t.fusion_options(other):
+        elif other and self.can_fuse(t.kind, other.kind):
             color = GOLD
             radius = max(TOWERS[k]["range"] for k in t.fusion_options(other))
         elif not other and self.is_free(tile):
@@ -607,10 +608,14 @@ class GameView:
         if not fusion:
             return
         _, _, options = fusion
-        if options:
-            label, color = "-> " + " / ".join(TOWERS[k]["name"] for k in options), GOLD
-        else:
+        if not options:
             label, color = "Can't fuse", BAD
+        elif any(self.can_make(k) for k in options):
+            names = [TOWERS[k]["name"] if self.profile.has_tower(k) else "??? (discovery!)" if self.can_make(k)
+                     else TOWERS[k]["name"] + " (locked)" for k in options]
+            label, color = "-> " + " / ".join(names), GOLD
+        else:
+            label, color = "Locked: " + " / ".join(TOWERS[k]["name"] for k in options) + " - see the tree (T)", BAD
         mx, my = mouse_pos()
         rect = pygame.Rect(0, 0, self.font_s.size(label)[0] / SCALE + 14, cap_height(self.font_s) / SCALE + 12)
         rect.bottomleft = (mx + 14, my - 10)
@@ -770,6 +775,17 @@ class GameView:
         mouse = mouse_pos()
         for i, (rect, kind) in enumerate(zip(self.choice_cards(), options)):
             spec = TOWERS[kind]
+            if not self.can_make(kind):  # a branch the player hasn't unlocked: shown, can't be picked
+                sdraw.rect(self.screen, CARD, rect, border_radius=10)
+                sdraw.rect(self.screen, PANEL_LINE, rect, 2, border_radius=10)
+                self.draw_locked_shape(self.screen, kind, pygame.Vector2(rect.centerx, rect.top + 38))
+                self.text(self.font_l, spec["name"], TEXT_DIM, (rect.centerx, rect.top + 66), "midtop")
+                y = rect.top + 100
+                for line in wrap(self.how_to_unlock(kind), 34)[:4]:
+                    self.text(self.font_s, line, TEXT_DIM, (rect.centerx, y), "midtop")
+                    y += 18
+                self.text(self.font, "LOCKED", BAD, (rect.centerx, rect.bottom - 12), "midbottom")
+                continue
             hover = rect.collidepoint(mouse)
             sdraw.rect(self.screen, CARD_HOVER if hover else CARD, rect, border_radius=10)
             sdraw.rect(self.screen, spec["color"], rect, 3, border_radius=10)
@@ -839,6 +855,7 @@ class GameView:
         self.text(self.font_s, "Fuse two identical towers to evolve them. Tier 2 -> 3 lets you pick a branch.",
                   TEXT_DIM, (MAP_W / 2, 46), "midtop")
         cols = (40, 230, 440)
+        self.tree_hint = None  # how to unlock the locked tower under the mouse
         for row, (t1, t2, branches) in enumerate(LINES.values()):
             y = 100 + row * 92
             self.tree_node(t1, cols[0], y)
@@ -848,6 +865,7 @@ class GameView:
             self.tree_node(branches[0], cols[2], y - 22)
             self.tree_node(branches[1], cols[2], y + 22)
         top = 368
+        discovery = self.profile.discoveries_left > 0  # locked finals can still be found by fusing them
         self.text(self.font, "FINAL FORMS: fuse two tier 3 towers from different lines", GOLD, (MAP_W / 2, top),
                   "midtop")
         for i, (pair, kind) in enumerate(CROSS.items()):
@@ -855,17 +873,45 @@ class GameView:
             y = top + 44 + (i % 6) * 38
             a, b = sorted(pair, key=list(TOWERS).index)
             spec = TOWERS[kind]
-            draw_tower_shape(self.screen, spec, pygame.Vector2(x + 16, y))
-            r = self.text(self.font, spec["name"], spec["color"], (x + 42, y - 14))
-            self.text(self.font_s, f"{TOWERS[a]['name']} + {TOWERS[b]['name']}", TEXT,
-                      (r.right / SCALE + 10, r.bottom / SCALE), "bottomleft")
-            self.text(self.font_s, spec["desc"], TEXT_DIM, (x + 42, y + 3))
+            parents = f"{TOWERS[a]['name']} + {TOWERS[b]['name']}"
+            if self.profile.has_tower(kind):
+                draw_tower_shape(self.screen, spec, pygame.Vector2(x + 16, y))
+                r = self.text(self.font, spec["name"], spec["color"], (x + 42, y - 14))
+                self.text(self.font_s, parents, TEXT, (r.right / SCALE + 10, r.bottom / SCALE), "bottomleft")
+                self.text(self.font_s, spec["desc"], TEXT_DIM, (x + 42, y + 3))
+                continue
+            self.draw_locked_shape(self.screen, kind, pygame.Vector2(x + 16, y))
+            r = self.text(self.font, "???" if discovery else spec["name"], TEXT_DIM, (x + 42, y - 14))
+            self.text(self.font_s, parents, TEXT, (r.right / SCALE + 10, r.bottom / SCALE), "bottomleft")
+            goal, progress = self.unlock_goals(kind)[0]
+            line = self.needs_first(kind) or ("Fuse them to discover it" if discovery
+                                              else self.goal_text(goal, progress))
+            self.text(self.fit_font(line, 340, self.font_s), line, TEXT_DIM, (x + 42, y + 3))
+            if pygame.Rect(x, y - 18, 380, 36).collidepoint(mouse_pos()):
+                self.tree_hint = (kind, self.how_to_unlock(kind))
+        if self.tree_hint:
+            kind, hint = self.tree_hint
+            name = "???" if TOWERS[kind]["tier"] == 4 and discovery else TOWERS[kind]["name"]
+            label = f"{name}: {hint}"
+            self.text(self.fit_font(label, MAP_W - 32, self.font_s), label, GOLD, (MAP_W / 2, 326), "midtop")
+        elif len(self.profile.towers_unlocked) < len(TOWERS):
+            self.text(self.font_s, "Point at a locked tower to see how to unlock it", TEXT_DIM, (MAP_W / 2, 326),
+                      "midtop")
         self.text(self.font_s, "Press T or click to close", TEXT_DIM, (MAP_W - 10, MAP_H - 8), "bottomright")
 
     def tree_node(self, kind, x, y):
         spec = TOWERS[kind]
-        draw_tower_shape(self.screen, spec, pygame.Vector2(x + 16, y))
-        self.text(self.font, spec["name"], spec["color"], (x + 42, y), "midleft")
+        if self.profile.has_tower(kind):
+            draw_tower_shape(self.screen, spec, pygame.Vector2(x + 16, y))
+            self.text(self.font, spec["name"], spec["color"], (x + 42, y), "midleft")
+            return
+        self.draw_locked_shape(self.screen, kind, pygame.Vector2(x + 16, y))
+        self.text(self.font, spec["name"], TEXT_DIM, (x + 42, y), "midleft")
+        goal, progress = self.unlock_goals(kind)[0]
+        if goal["target"] > 1 and self.tracker.available(kind):  # under the name, clear of the arrows and branch
+            self.text(self.font_s, f"{min(int(progress), goal['target'])}/{goal['target']}", GOLD, (x + 42, y + 9))
+        if pygame.Rect(x, y - 18, 180, 36).collidepoint(mouse_pos()):
+            self.tree_hint = (kind, self.how_to_unlock(kind))
 
     def scale_buttons(self):
         w = 90
@@ -967,6 +1013,15 @@ class GameView:
 
         for i, (kind, b) in enumerate(self.tower_buttons.items()):
             spec = TOWERS[kind]
+            if not self.profile.has_tower(kind):
+                sdraw.rect(screen, BUTTON_OFF, b.rect, border_radius=6)
+                sdraw.rect(screen, PANEL_LINE, b.rect, 1, border_radius=6)
+                self.draw_locked_shape(screen, kind, pygame.Vector2(b.rect.left + 28, b.rect.centery))
+                self.text(self.font, f"{spec['name']} [{i + 1}]", TEXT_DIM, (b.rect.left + 56, b.rect.centery - 8),
+                          "midleft")
+                self.text(self.font_s, "Locked - press T", TEXT_DIM, (b.rect.left + 56, b.rect.centery + 10),
+                          "midleft")
+                continue
             affordable = self.gold >= spec["cost"]
             active = self.build_kind == kind
             bg = BUTTON if b.rect.collidepoint(mouse_pos()) else BUTTON_QUIET
@@ -978,6 +1033,8 @@ class GameView:
                       (b.rect.left + 56, b.rect.centery - 8), "midleft")
             self.text(self.font_s, f"{spec['cost']}g - {spec['desc']}", GOLD if affordable else TEXT_DIM,
                       (b.rect.left + 56, b.rect.centery + 10), "midleft")
+            if kind in self.profile.new_towers:
+                self.text(self.font_s, "NEW", GOLD, (b.rect.right - 6, b.rect.top + 5), "topright")
 
         if self.selected:
             t = self.selected
@@ -990,6 +1047,8 @@ class GameView:
                       TEXT_DIM, (x, 419))
             self.text(self.font_s, self.evolve_hint(t), GOLD, (x, 441))
             self.draw_button(self.sell_button, f"Sell {t.sell_value}g  [S]", True)
+        elif self.draw_next_goal(x, 374):
+            pass  # a tower still to unlock: its goal takes the hints' place
         else:
             self.text(self.font_s, "Drag towers to move them", TEXT_DIM, (x, 380))
             self.text(self.font_s, "Drop two matching towers", TEXT_DIM, (x, 398))

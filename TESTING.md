@@ -34,6 +34,7 @@ uv run pytest --durations=10             # list the slowest tests
 | `test_monsters.py` | Loading `monsters.json` and its error messages; monster mechanics (armor, healing, splitting, phasing, buffs) and abilities |
 | `test_attack.py` | The Monsters side: the defender from a record, budget and share, drafting, abilities, lives that last the pass (clearing, winning and losing), stat upgrades and escorts, the starter pack, drawing |
 | `test_unlocks.py` | `unlocks.json`, drawing and picking cards after wins (record tiers, sure rares), milestones, and what each tower card does |
+| `test_tower_unlocks.py` | `achievements.json`, the owned towers in the profile, locked buying, fusing and branches, discoveries, each achievement condition, the unlock card |
 | `test_balance_log.py` | The per-level balance logs: file names, uniqueness, and cross-checks that their numbers add up |
 | `test_rendering.py` | Drawing: every screen at every display scale, text staying inside the map and panel, map decoration, tower sprites, every creature's animation frames, shots and hit effects, ambient particles, the portal and gate, plus pixel snapshots |
 | `test_playthrough.py` | Long simulations with bot players, on both sides (marked `slow`) |
@@ -53,10 +54,13 @@ your machine:
 - **Starter pack already taken**: the temporary `profile.json` starts with the Monsters side's
   one-time starter cards marked as picked, so they don't cover every Monsters-side test. Tests of
   the starter pack overwrite the profile.
+- **Every tower unlocked**: the same profile owns every tower, so tests play the whole evolution
+  tree. Tests of tower unlocks use the `locked` fixture, whose profile owns only the Gun.
 - **Reset state**: the display scale goes back to 100% and the random seed is fixed before each
   test, so runs are repeatable.
 
-Useful fixtures: `game` (a fresh game at level 1, logging off), `logged_game` (writes balance
+Useful fixtures: `game` (a fresh game at level 1, logging off), `locked` (the same with only the
+Gun unlocked), `logged_game` (writes balance
 logs to the temporary directory), `screen`, and `mouse` (set the mouse position with
 `mouse[:] = x, y`, in screen pixels). For the Monsters side, build a game with
 `main.Game(screen, log_dir=None, side="monsters")`, or use the `attack` fixture in `test_attack.py`
@@ -80,8 +84,12 @@ the current balance:
   takes all 20, which wins the whole pass (there's no cap on lives per level). This matters more
   than it looks: monster cards only come from Monsters wins, so an unwinnable first level would be
   a dead end.
-- **How you spend matters**: level 2 (whose record ends on Dragon + Absolute Zero) holds against one
-  big push but not against evenly paced waves.
+- **Level 2 falls to both plans.** Its record ends on Railgun + Blizzard (990 gold). It used to hold
+  against one big push, until the early hp boost (`EARLY_HP` in `levels.py`) left the bot less gold
+  to spend; see DESIGN.md section 9.
+
+On the Towers side the bot no longer wins: its mixed buys clear level 1 and fall on levels 2-4, and
+buying only Guns (seed 1) reaches level 7. Those are pinned too.
 
 If a change to `monsters.json` or `towers.json` breaks these, look at the budget rules in
 `monsters.json` first.

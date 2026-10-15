@@ -1,0 +1,86 @@
+{
+  "_comment": [
+    "Tower unlocks, loaded when the game starts (see DESIGN.md section 11). A new profile owns the `start` towers;",
+    "every other tower is unlocked for good by its achievement. The first `discoveries` tier 4 towers ever fused",
+    "are unlocked by the fusion itself, so their achievements are never needed. Only the Towers side counts.",
+    "Each achievement: name, the tower it unlocks, and goals (one, or two when either one will do). Each goal:",
+    "desc (what the player reads), condition, target, plus what the condition needs:",
+    "  towers_on_map    kind: that many towers of `kind` on the map at once",
+    "  in_range         that many monsters inside one tower's range at once",
+    "  slowed_at_once   that many monsters slowed at once",
+    "  multi_kill       by: one tower of kind `by` kills that many monsters at once (in the same instant)",
+    "  burst            seconds: that many kills within `seconds`",
+    "  kills            optional by (tower kinds), enemy (monster kinds), how (direct, splash, chain or burn),",
+    "                   slowed (true: only monsters slowed when they died); scope: level (in one level) or ever",
+    "  leaks            optional enemy (monster kinds); scope: level or ever",
+    "  boss_kill        boss, seconds: kill that boss within `seconds` of it spawning",
+    "  wave_cleared     min_monsters: clear a wave in which at least that many monsters spawned (splits included)",
+    "  level_cleared    optional min_level (1-based), no_leaks (true), only_line (a line from evolution.json);",
+    "                   counts levels cleared that way, over all runs",
+    "  pass_won         optional finale (true: a pass that ended on a finale), min_gold (gold held at the end);",
+    "                   counts Towers passes won that way, over all runs"
+  ],
+  "start": ["gun"],
+  "discoveries": 2,
+  "achievements": {
+    "rifle": {"name": "Firing Line", "unlocks": "rifle", "goals": [
+      {"desc": "Have 4 Guns on the map at once", "condition": "towers_on_map", "kind": "gun", "target": 4}]},
+    "cannon": {"name": "Crowd Trouble", "unlocks": "cannon", "goals": [
+      {"desc": "Have 15 monsters inside one tower's range at once", "condition": "in_range", "target": 15}]},
+    "frost": {"name": "Too Fast", "unlocks": "frost", "goals": [
+      {"desc": "Let a Fast monster through", "condition": "leaks", "enemy": ["fast"], "scope": "ever", "target": 1},
+      {"desc": "Kill 40 Fast monsters", "condition": "kills", "enemy": ["fast"], "scope": "ever", "target": 40}]},
+
+    "mortar": {"name": "Heavy Artillery", "unlocks": "mortar", "goals": [
+      {"desc": "Have 3 Cannons on the map at once", "condition": "towers_on_map", "kind": "cannon", "target": 3}]},
+    "chiller": {"name": "Cold Front", "unlocks": "chiller", "goals": [
+      {"desc": "Have 3 Frosts on the map at once", "condition": "towers_on_map", "kind": "frost", "target": 3}]},
+
+    "minigun": {"name": "Volume of Fire", "unlocks": "minigun", "goals": [
+      {"desc": "Rifles kill 100 monsters in one level", "condition": "kills", "by": ["rifle"], "scope": "level",
+       "target": 100}]},
+    "sniper": {"name": "Big Game", "unlocks": "sniper", "goals": [
+      {"desc": "A Rifle kills a Tank or an Elite", "condition": "kills", "by": ["rifle"],
+       "enemy": ["tank", "elite"], "scope": "ever", "target": 1}]},
+    "bombard": {"name": "Direct Hit", "unlocks": "bombard", "goals": [
+      {"desc": "One Mortar kills 4 monsters at once", "condition": "multi_kill", "by": "mortar", "target": 4}]},
+    "incinerator": {"name": "Scorched Earth", "unlocks": "incinerator", "goals": [
+      {"desc": "Mortars kill 50 monsters in one level", "condition": "kills", "by": ["mortar"], "scope": "level",
+       "target": 50}]},
+    "blizzard": {"name": "Whiteout", "unlocks": "blizzard", "goals": [
+      {"desc": "Keep 10 monsters slowed at once", "condition": "slowed_at_once", "target": 10}]},
+    "shatter": {"name": "Brittle", "unlocks": "shatter", "goals": [
+      {"desc": "Kill 30 slowed monsters in one level", "condition": "kills", "slowed": true, "scope": "level",
+       "target": 30}]},
+
+    "solar": {"name": "Defender", "unlocks": "solar", "goals": [
+      {"desc": "Win a Towers pass", "condition": "pass_won", "target": 1}]},
+    "railgun": {"name": "Wardenbreaker", "unlocks": "railgun", "goals": [
+      {"desc": "Kill the Warden within 20 s of it spawning", "condition": "boss_kill", "boss": "warden",
+       "seconds": 20, "target": 1}]},
+    "thermal": {"name": "Dragon's Hoard", "unlocks": "thermal", "goals": [
+      {"desc": "Win a Towers pass holding 1,000 gold", "condition": "pass_won", "min_gold": 1000, "target": 1}]},
+    "avalanche": {"name": "Full Circle", "unlocks": "avalanche", "goals": [
+      {"desc": "Win a finale Towers pass", "condition": "pass_won", "finale": true, "target": 1}]},
+    "flak": {"name": "Meat Grinder", "unlocks": "flak", "goals": [
+      {"desc": "Kill 300 monsters in one level", "condition": "kills", "scope": "level", "target": 300}]},
+    "dragon": {"name": "Pyromaniac", "unlocks": "dragon", "goals": [
+      {"desc": "Burns kill 500 monsters", "condition": "kills", "how": "burn", "scope": "ever", "target": 500}]},
+    "hailstorm": {"name": "Flawless", "unlocks": "hailstorm", "goals": [
+      {"desc": "Clear a level from level 5 on without losing a life", "condition": "level_cleared",
+       "min_level": 5, "no_leaks": true, "target": 1}]},
+    "tesla": {"name": "Chain Reaction", "unlocks": "tesla", "goals": [
+      {"desc": "Kill 25 monsters within 2 s", "condition": "burst", "seconds": 2, "target": 25}]},
+    "zero": {"name": "Deep Freeze", "unlocks": "zero", "goals": [
+      {"desc": "Clear a level with only Frost-line towers", "condition": "level_cleared", "only_line": "frost",
+       "target": 1}]},
+    "lance": {"name": "Elite Hunter", "unlocks": "lance", "goals": [
+      {"desc": "Snipers kill 10 Elites", "condition": "kills", "by": ["sniper"], "enemy": ["elite"],
+       "scope": "ever", "target": 10}]},
+    "breaker": {"name": "Hold the Line", "unlocks": "breaker", "goals": [
+      {"desc": "Clear a wave of 60 or more monsters", "condition": "wave_cleared", "min_monsters": 60,
+       "target": 1}]},
+    "obsidian": {"name": "Veteran", "unlocks": "obsidian", "goals": [
+      {"desc": "Win 3 Towers passes", "condition": "pass_won", "target": 3}]}
+  }
+}

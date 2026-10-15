@@ -104,10 +104,23 @@ def build_path_cells(waypoints):
     return cells
 
 
+# Generated waves get EARLY_HP more hp multiplier per wave over the first EARLY_WAVES waves, on top of the
+# curve (later waves keep the full boost), so the early levels need building on: without it 3 towers cleared
+# levels 1-2 and gold piled up. The Monsters side's drafted waves use the plain curve.
+EARLY_HP = 1.5
+EARLY_WAVES = 3 * WAVES_PER_LEVEL
+
+
 def wave_hp_mult(level_idx, wave_idx):
-    """How much tougher than its base HP every monster in a wave is. Grows across all levels."""
+    """How much tougher than its base HP every drafted monster in a wave is. Grows across all levels."""
     d = level_idx * WAVES_PER_LEVEL + wave_idx
     return 1 + 0.5 * d + 0.04 * d * d
+
+
+def generated_hp_mult(level_idx, wave_idx):
+    """wave_hp_mult with the early boost: what a generated Towers-side wave uses."""
+    d = level_idx * WAVES_PER_LEVEL + wave_idx
+    return wave_hp_mult(level_idx, wave_idx) + EARLY_HP * min(d, EARLY_WAVES)
 
 
 def make_wave(level_idx, wave_idx, rng=random):
@@ -124,7 +137,7 @@ def make_wave(level_idx, wave_idx, rng=random):
             kinds.append("basic")
     if wave_idx == WAVES_PER_LEVEL - 1:
         kinds.append(BOSS_LEVELS.get(level_idx + 1, "elite"))
-    return kinds, wave_hp_mult(level_idx, wave_idx)
+    return kinds, generated_hp_mult(level_idx, wave_idx)
 
 
 def wave_value(level_idx, wave_idx):

@@ -11,8 +11,9 @@ import json
 import os
 from collections import defaultdict
 
+from achievements import DISCOVERIES, START_TOWERS
 from monsters import ABILITIES, ENEMY_TYPES
-from towers import LINES, NO_TOWER_MODS, read_json
+from towers import LINES, NO_TOWER_MODS, TOWERS, read_json
 
 PROFILE_VERSION = 1
 UNLOCKS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "unlocks.json")
@@ -104,6 +105,14 @@ class Profile:
         self.milestones = {"monsters_side": False, "tower_cards": False, "starter_pack": False,
                            **data.get("milestones", {})}
         self.best_run = data.get("best_run", 0)  # most levels won in one run
+        # Tower unlocks (achievements.py): the towers owned, in towers.json order; the ones not placed since
+        # they were unlocked (the NEW badge); progress toward achievements (goal key -> best or total so far);
+        # and how many tier 4 towers can still be unlocked by fusing them. See TODO.md for older profiles.
+        owned = set(START_TOWERS) | set(data.get("towers_unlocked", ()))
+        self.towers_unlocked = [k for k in TOWERS if k in owned]
+        self.new_towers = [k for k in data.get("new_towers", ()) if k in self.towers_unlocked]
+        self.achievements = dict(data.get("achievements", {}))
+        self.discoveries_left = int(data.get("discoveries_left", DISCOVERIES))
 
     @classmethod
     def load(cls, path):
@@ -121,7 +130,9 @@ class Profile:
 
     def to_dict(self):
         return {"version": PROFILE_VERSION, "milestones": self.milestones, "best_run": self.best_run,
-                "unlocks": self.unlocks, "tower_records": self.tower_records, "monster_records": self.monster_records}
+                "unlocks": self.unlocks, "towers_unlocked": self.towers_unlocked, "new_towers": self.new_towers,
+                "achievements": self.achievements, "discoveries_left": self.discoveries_left,
+                "tower_records": self.tower_records, "monster_records": self.monster_records}
 
     def reach(self, milestone):
         if not self.milestones[milestone]:
@@ -139,10 +150,42 @@ class Profile:
             return None
         return "monster" if side_won == "monsters" else "tower"
 
+    # ---- tower unlocks -----------------------------------------------------------
+    def has_tower(self, kind):
+        return kind in self.towers_unlocked
+
+    def unlock_tower(self, kind):
+        """Own a tower from now on. Returns whether it's new."""
+        if self.has_tower(kind):
+            return False
+        self.towers_unlocked = [k for k in TOWERS if k == kind or k in self.towers_unlocked]
+        self.new_towers.append(kind)
+        self.save()
+        return True
+
+    def discover(self, kind):
+        """A tier 4 tower made by fusing it while discoveries were left."""
+        if self.unlock_tower(kind):
+            self.discoveries_left -= 1
+            self.save()
+
+    def seen_tower(self, kind):
+        """The tower was placed or made: it loses its NEW badge."""
+        if kind in self.new_towers:
+            self.new_towers.remove(kind)
+            self.save()
+
+    def has_line(self, line):
+        """Whether the player owns a line's tier 1 tower (cards for a line they can't build are left out)."""
+        return self.has_tower(LINES[line][0])
+
+    # ---- unlock cards ---------------------------------------------------------------
     def draw_cards(self, pool, rng, n=3, rare=False):
-        """Up to n different card ids from a pool, weighted, leaving out cards already at max rank. With
-        `rare`, the first is a rare card (if any are left)."""
-        open_cards = {k: c for k, c in UNLOCKS[pool].items() if self.rank(pool, k) < c["max"]}
+        """Up to n different card ids from a pool, weighted, leaving out cards already at max rank and
+        damage cards for a tower line the player can't build. With `rare`, the first is a rare card
+        (if any are left)."""
+        open_cards = {k: c for k, c in UNLOCKS[pool].items() if self.rank(pool, k) < c["max"]
+                      and (c.get("line") is None or self.has_line(c["line"]))}
         cards = []
         rares = [k for k, c in open_cards.items() if c["rare"]]
         if rare and rares and n:

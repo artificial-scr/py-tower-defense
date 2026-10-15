@@ -4,3 +4,4 @@ logs/
 settings.json
 savegame.json
 profile.json
+*.bak

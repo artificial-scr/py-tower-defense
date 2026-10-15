@@ -169,6 +169,24 @@ Tier 4   12 cross-type towers (see below)
 Press **T** in game to see the whole tree. While you drag a tower over another one, the game shows
 what the fusion would produce.
 
+### Unlocking towers
+
+A new profile owns only the **Gun**. Every other tower is unlocked for good by an achievement on the
+Towers side, for example "Have 3 Guns on the map at once" for the Rifle, or "Have 15 monsters inside
+one tower's range at once" for the Cannon. The first two tier 4 towers you ever make are unlocked by
+fusing them: a **discovery**. The other ten need harder achievements, like winning a Towers pass,
+holding 1,000 gold at the end of one, or killing the Warden within 20 s.
+
+- A tower's achievement only shows, and only counts, once you own the towers it's fused from
+  (the Sniper's once you have the Rifle, a final's once you have both its tier 3 parents).
+- A locked tower can't be bought, and a fusion into it is refused. A locked tier 3 branch shows on
+  the branch screen, but can't be picked.
+- The evolution tree (**T**) shows each locked tower's progress. Point at one to see how to unlock it.
+  The panel pins the locked tower closest to unlocking.
+- A tower unlocked during a wave is announced, and can be used, at the start of the next build phase.
+  One unlocked while building is announced at once. Any key or click puts the card away.
+- Tower cards for a line you can't build yet (Sharpened Cannons before the Cannon) aren't offered.
+
 ## Controls
 
 | Input | Towers side | Monsters side |
@@ -202,8 +220,8 @@ click it.
 
 There are two files, both git-ignored:
 
-- **`profile.json`** is kept forever: your unlocks, the records for every level and wave, your
-  milestones and your best run.
+- **`profile.json`** is kept forever: your unlocks, the towers you own and your progress toward
+  the others, the records for every level and wave, your milestones and your best run.
 - **`savegame.json`** is the run in progress, saved at the start of every level (on the Monsters side
   with the defender's lives, your upgrades and any escort still to send). On the start screen,
   press **C** to continue it from the start of that level. Losing a level ends the run and deletes it.
@@ -223,6 +241,9 @@ the game stops with a message that says what's wrong.
   `pace_per_life`, `pace_max`, `pace_min`) and the reward tiers (`rewards`).
 - **`unlocks.json`**: both card pools, with each card's effect, numbers per rank, max rank, weight and
   rarity.
+- **`achievements.json`**: the towers a new profile starts with, how many tier 4 towers can be
+  discovered by fusing, and the achievement that unlocks each other tower (its goals, their
+  conditions and targets).
 
 Levels and wave generation are in `levels.py`. It holds 20 levels, but only the first `LEVEL_COUNT`
 (10) are played; levels 11–20 and their boss, the Overlord, are kept as a backup.
@@ -250,7 +271,8 @@ These logs are meant for tuning the data files. Pass `--no-log` to turn them off
 |---|---|
 | `main.py` | The `Game` state machine (waves, fusing, runs and passes, rewards, input, logging hooks) and `main()` |
 | `attack.py` | The Monsters side: the defender from a record, drafting, abilities, winning and losing |
-| `progress.py` | The permanent profile (records, unlocks, milestones) and the card pools |
+| `progress.py` | The permanent profile (records, unlocks, owned towers, milestones) and the card pools |
+| `achievements.py` | Loads and validates `achievements.json`; the tracker that counts achievements and unlocks towers |
 | `towers.py` | Loads and validates `towers.json` and `evolution.json` |
 | `monsters.py` | Loads and validates `monsters.json` |
 | `levels.py` | Level themes and paths, wave generation and wave values |
@@ -261,6 +283,7 @@ These logs are meant for tuning the data files. Pass `--no-log` to turn them off
 | `terrain.py` | The level maps, drawn once per level: textured ground, a path styled for each theme, shaded props |
 | `ambience.py` | What moves on the map without affecting the game: particles for each theme, glowing cracks and crystals that pulse, the spawn portal and exit gate |
 | `attack_view.py` | Drawing for the Monsters side |
+| `unlock_view.py` | Drawing for tower unlocks: the unlock card, the pinned next unlock, locks over towers |
 | `balance_log.py` | Per-level balance logs |
 | `assets/fonts/` | The game font, Orbitron (Medium and Bold), and its license |
 | `tests/` | The pytest suite |
