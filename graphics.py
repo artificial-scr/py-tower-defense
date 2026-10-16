@@ -2,8 +2,9 @@
 effects, and GameView, the drawing half of main.Game.
 
 The game runs in fixed logical units (the WIDTH x HEIGHT layout below); only drawing and
-mouse input go through SCALE. Everything is drawn natively at the chosen size, so there is
-no per-frame image scaling: changing the scale re-renders the map and fonts once.
+mouse input go through SCALE. The window is WINDOW_SCALE times the layout, and fullscreen is as large
+as the screen allows. Everything is drawn natively at that size, so there is no per-frame image
+scaling: switching re-renders the map and fonts once.
 
 This module doesn't import main (that would load the game twice when it's run as a
 script); GameView reads the game state through `self`.
@@ -30,8 +31,8 @@ MAP_W, MAP_H = COLS * TILE, ROWS * TILE
 PANEL_W = 220
 WIDTH, HEIGHT = MAP_W + PANEL_W, MAP_H
 
-# Display scales on offer. All of them keep TILE * scale a whole number of pixels.
-SCALES = (0.75, 1.0, 1.25, 1.5, 1.75, 2.0)
+# The window's size: twice the layout (2040 x 1280), or as large as fits on a smaller desktop.
+WINDOW_SCALE = 2.0
 
 # Orbitron (SIL Open Font License, see assets/fonts/OFL.txt): the Medium and Bold files from
 # github.com/theleagueof/orbitron (pygame can't pick a weight from the variable font).
@@ -110,9 +111,8 @@ def set_scale(scale):
     SCALE = scale
 
 
-def window_size(scale=None):
-    k = SCALE if scale is None else scale
-    return round(WIDTH * k), round(HEIGHT * k)
+def window_size():
+    return round(WIDTH * SCALE), round(HEIGHT * SCALE)
 
 
 def sp(pos):
@@ -520,10 +520,6 @@ class GameView:
         self.map_surface, accents = terrain.map_layers(self.theme, self.waypoints, SCALE)
         self.scenery = ambience.Scenery(self.theme, terrain.PATH_STYLES[self.theme.name], self.waypoints, accents)
 
-    def apply_scale(self, scale):
-        if scale != SCALE:
-            self.set_display(scale, self.fullscreen)
-
     def set_display(self, scale, fullscreen):
         """Draw at `scale`, in a window that size, or fullscreen (scale ignored): at the desktop's own
         resolution, the game drawn natively as large as the screen allows, centered (bars only where the
@@ -545,21 +541,15 @@ class GameView:
             set_offset((0, 0))
         self.build_view()
 
-    def fits(self, scale):
-        """Whether a window at this scale can be picked (none in fullscreen: it fills the screen)."""
-        return not self.fullscreen and self.scale_fits(scale)
-
     @staticmethod
-    def scale_fits(scale):
-        """Whether a window at this scale fits on the desktop (leaving room for title bar and taskbar)."""
-        if scale <= 1.0:
-            return True
+    def window_scale():
+        """The window's scale: WINDOW_SCALE, or as large as fits on the desktop (leaving room for title bar
+        and taskbar)."""
         try:
             desk_w, desk_h = pygame.display.get_desktop_sizes()[0]
         except (pygame.error, IndexError):
-            return True
-        w, h = window_size(scale)
-        return w <= desk_w and h <= desk_h - 80
+            return WINDOW_SCALE
+        return min(WINDOW_SCALE, math.floor(min(desk_w / WIDTH, (desk_h - 80) / HEIGHT) * 1000) / 1000)
 
     @staticmethod
     def fit_font(s, width, *fonts):
@@ -991,60 +981,46 @@ class GameView:
         if pygame.Rect(x, y - 18, 180, 36).collidepoint(mouse_pos()):
             self.tree_hint = (kind, self.how_to_unlock(kind))
 
-    def scale_buttons(self):
-        w = 90
-        x0 = MAP_W / 2 - (len(SCALES) * (w + 10) - 10) / 2
-        return [(k, pygame.Rect(x0 + i * (w + 10), 250, w, 50)) for i, k in enumerate(SCALES)]
-
     @staticmethod
     def ambient_button():
-        return pygame.Rect(MAP_W / 2 - 385, 402, 250, 40)
+        return pygame.Rect(MAP_W / 2 - 385, 300, 185, 40)
 
     @staticmethod
     def fullscreen_button():
-        return pygame.Rect(MAP_W / 2 - 125, 402, 250, 40)
+        return pygame.Rect(MAP_W / 2 - 190, 300, 185, 40)
 
     @staticmethod
     def music_button():
-        return pygame.Rect(MAP_W / 2 + 135, 402, 250, 40)
+        return pygame.Rect(MAP_W / 2 + 5, 300, 185, 40)
+
+    @staticmethod
+    def sfx_button():
+        return pygame.Rect(MAP_W / 2 + 200, 300, 185, 40)
 
     @staticmethod
     def settings_close_button():
-        return pygame.Rect(MAP_W / 2 - 110, 470, 220, 50)
+        return pygame.Rect(MAP_W / 2 - 110, 380, 220, 50)
 
     @staticmethod
     def settings_continue_button():
-        return pygame.Rect(MAP_W / 2 - 150, 532, 300, 50)
+        return pygame.Rect(MAP_W / 2 - 150, 442, 300, 50)
 
     def draw_settings(self):
         self.shade_map(225)
-        self.text(self.font_xl, "SETTINGS", GOLD, (MAP_W / 2, 90), "midtop")
-        self.text(self.font_l, "Display scale", TEXT, (MAP_W / 2, 200), "midtop")
+        self.text(self.font_xl, "SETTINGS", GOLD, (MAP_W / 2, 150), "midtop")
         mouse = mouse_pos()
-        for scale, rect in self.scale_buttons():
-            fits = self.fits(scale)
-            current = scale == SCALE
-            bg = BUTTON_HOVER if fits and rect.collidepoint(mouse) else CARD_HOVER if fits else (32, 32, 40)
-            sdraw.rect(self.screen, bg, rect, border_radius=8)
-            sdraw.rect(self.screen, GOLD if current else PANEL_LINE, rect, 3 if current else 1, border_radius=8)
-            self.text(self.font, f"{scale * 100:.0f}%", (TEXT if fits else TEXT_DIM) if not current else GOLD,
-                      rect.center, "center")
         w, h = window_size()
         size = f"Window {w} x {h}"
         if self.fullscreen:
             size = "Fullscreen {} x {}, game {} x {}".format(*pygame.display.get_surface().get_size(), w, h)
-        self.text(self.font, size, TEXT, (MAP_W / 2, 320), "midtop")
-        hint = ("Fullscreen fits the game to your screen; leave it (F11) to pick a window size." if self.fullscreen
-                else "Left / Right or click to change. Greyed-out sizes don't fit your screen.")
-        self.text(self.font_s, hint, TEXT_DIM, (MAP_W / 2, 350), "midtop")
-        self.text(self.font_s, "The game is drawn natively at the chosen size; changing it costs one re-render.",
-                  TEXT_DIM, (MAP_W / 2, 370), "midtop")
+        self.text(self.font, size, TEXT, (MAP_W / 2, 255), "midtop")
         on_off = lambda on: "On" if on else "Off"  # noqa: E731
+        percent = lambda v: f"{v}%" if v else "Off"  # noqa: E731
         for rect, on, label in (
-                (self.ambient_button(), self.ambient, f"Ambient effects: {on_off(self.ambient)}  [A]"),
+                (self.ambient_button(), self.ambient, f"Ambient: {on_off(self.ambient)}  [A]"),
                 (self.fullscreen_button(), self.fullscreen, f"Fullscreen: {on_off(self.fullscreen)}  [F11]"),
-                (self.music_button(), self.music_volume > 0,
-                 f"Music: {self.music_volume}%  [M]" if self.music_volume else "Music: Off  [M]")):
+                (self.music_button(), self.music_volume > 0, f"Music: {percent(self.music_volume)}  [M]"),
+                (self.sfx_button(), self.sfx_volume > 0, f"Sound: {percent(self.sfx_volume)}  [N]")):
             sdraw.rect(self.screen, BUTTON_HOVER if rect.collidepoint(mouse) else CARD_HOVER, rect, border_radius=8)
             sdraw.rect(self.screen, GOLD if on else PANEL_LINE, rect, 2 if on else 1, border_radius=8)
             self.text(self.font, label, TEXT if on else TEXT_DIM, rect.center, "center")
@@ -1052,7 +1028,7 @@ class GameView:
         sdraw.rect(self.screen, BUTTON_HOVER if b.collidepoint(mouse) else BUTTON, b, border_radius=8)
         sdraw.rect(self.screen, self.theme.accent, b, 3, border_radius=8)
         label = "Play  [Enter]" if self.untouched else "Resume  [Enter]"
-        hint_y = 550
+        hint_y = 460
         if self.can_continue:
             label = "New game  [Enter]"
             c = self.settings_continue_button()
@@ -1061,7 +1037,7 @@ class GameView:
             sdraw.rect(self.screen, theme.accent, c, 3, border_radius=8)
             self.text(self.font, f"Continue: level {self.save['level'] + 1}, {theme.name}  [C]", TEXT, c.center,
                       "center")
-            hint_y = 610
+            hint_y = 520
         self.text(self.font, label, TEXT, b.center, "center")
         self.text(self.font_s, "Press O in game to come back here. The choice is saved for next time.",
                   TEXT_DIM, (MAP_W / 2, hint_y), "midtop")

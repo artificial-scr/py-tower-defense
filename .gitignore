@@ -7,3 +7,4 @@ savegame.json
 profile.json
 *.bak
 tools/sync_music.py
+tools/sync_sfx.py

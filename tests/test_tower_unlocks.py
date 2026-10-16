@@ -140,9 +140,9 @@ def test_the_first_two_finals_are_discovered_by_fusing_them(locked):
 
 
 # ---- the unlock card ----------------------------------------------------------------------------
-def test_three_guns_unlock_the_rifle_and_its_card_shows_at_once(locked):
+def test_four_guns_unlock_the_rifle_and_its_card_shows_at_once(locked):
     locked.gold = 1000
-    for tile in free_tiles(locked)[:3]:
+    for tile in free_tiles(locked)[:4]:
         locked.build_kind = "gun"
         locked.handle_event(mouse_down(px(tile)))
         locked.update(1 / 60)
@@ -220,15 +220,16 @@ def test_kills_over_all_time_add_up_across_levels_and_save(tracked):
 
 
 def test_level_kills_restart_each_level(tracked):
-    own_parents(tracked.profile, "minigun")
-    for _ in range(99):
-        tracked.tracker.on_death(dead(by="rifle"), 0)
+    own_parents(tracked.profile, "incinerator")
+    for _ in range(49):
+        tracked.tracker.on_death(dead(by="mortar"), 0)
     tracked.tracker.start_level()
-    tracked.tracker.on_death(dead(by="rifle"), 0)
-    assert "minigun" not in tracked.unlocked and tracked.profile.achievements["minigun/0"] == 99, "the best is kept"
-    for _ in range(99):
-        tracked.tracker.on_death(dead(by="rifle"), 0)
-    assert "minigun" in tracked.unlocked
+    tracked.tracker.on_death(dead(by="mortar"), 0)
+    assert "incinerator" not in tracked.unlocked
+    assert tracked.profile.achievements["incinerator/0"] == 49, "the best is kept"
+    for _ in range(49):
+        tracked.tracker.on_death(dead(by="mortar"), 0)
+    assert "incinerator" in tracked.unlocked
 
 
 def test_kill_filters(tracked):
@@ -259,18 +260,36 @@ def test_a_leak_unlocks_frost(tracked):
     assert tracked.unlocked == ["frost"]
 
 
-def test_multi_kill_counts_one_towers_kills_in_one_update(tracked):
+def test_multi_kill_counts_one_towers_kills_in_one_update(tracked, monkeypatch):
+    """One Mortar killing 2 or more at once, 20 times over all runs (once the Bombard's goal)."""
     own_parents(tracked.profile, "bombard")
+    goal = {"desc": "One Mortar kills 2 monsters at once, 20 times", "condition": "multi_kill", "by": "mortar",
+            "kills": 2, "target": 20, "scope": "ever"}
+    monkeypatch.setitem(achievements.ACHIEVEMENTS["bombard"], "goals", [goal])
     t = tracked.tracker
-    for tower in (1, 1, 1, 2):
+    for tower in (1, 1, 1, 2, 3, 3):  # tower 1: 3 kills, tower 2: 1, tower 3: 2
         t.on_death(dead(by="mortar", tower=tower), 0)
-    t.on_death(dead(by="mortar", how="burn", tower=1), 0)
+    t.on_death(dead(by="mortar", how="burn", tower=2), 0)  # burns aren't a shot
+    t.on_death(dead(by="gun", tower=4), 0)
+    t.on_death(dead(by="gun", tower=4), 0)
     t.tick([], [], True)
-    assert "bombard" not in tracked.unlocked and tracked.profile.achievements["bombard/0"] == 3
-    for _ in range(4):
-        t.on_death(dead(by="mortar", tower=3), 1)
+    assert tracked.profile.achievements["bombard/0"] == 2, "two Mortars made a multi-kill"
+    t.start_level()  # a new level (or run): the count goes on
+    for _ in range(17):
+        t.on_death(dead(by="mortar", tower=1), 0)
+        t.on_death(dead(by="mortar", tower=1), 0)
+        t.tick([], [], True)
+    assert "bombard" not in tracked.unlocked and tracked.profile.achievements["bombard/0"] == 19
+    assert t.progress("bombard/0", goal) == 19
+    t.on_death(dead(by="mortar", tower=5), 0)
+    t.on_death(dead(by="mortar", tower=5), 0)
     t.tick([], [], True)
     assert "bombard" in tracked.unlocked
+
+
+def test_multi_kill_without_kills_is_the_best_single_shot(tracked):
+    goal = {"condition": "multi_kill", "by": "mortar", "target": 4, "scope": "ever"}
+    assert achievements.is_peak(goal) and not achievements.is_peak({**goal, "kills": 2})
 
 
 def test_burst_counts_kills_within_its_window(tracked):
@@ -298,12 +317,12 @@ def test_peaks_on_the_map(tracked):
     t = tracked.tracker
     tower = SimpleNamespace(kind="gun", pos=pygame.Vector2(0, 0), range=100)
     near = [SimpleNamespace(alive=True, pos=pygame.Vector2(10, 0), slowed=i < 9 or i == 14) for i in range(15)]
-    t.tick([tower] * 2, near[:14], True)
+    t.tick([tower] * 3, near[:14], True)
     t.updates = achievements.SAMPLE_EVERY - 1
-    t.tick([tower] * 2, near[:14], True)
+    t.tick([tower] * 3, near[:14], True)
     assert not tracked.unlocked
     t.updates = achievements.SAMPLE_EVERY - 1
-    t.tick([tower] * 3, near, True)
+    t.tick([tower] * 4, near, True)
     assert set(tracked.unlocked) == {"rifle", "cannon", "blizzard"}
 
 

@@ -62,7 +62,7 @@
   "enemies": {
     "basic": {"name": "Basic", "hp": 30, "speed": 60, "cost": 5, "damage": 1, "gap": 0.8, "draft": "starter",
               "size": 11, "color": [230, 70, 70], "sides": 0},
-    "fast": {"name": "Fast", "hp": 18, "speed": 115, "cost": 6, "damage": 1, "gap": 0.45, "draft": "starter",
+    "fast": {"name": "Fast", "hp": 30, "speed": 115, "cost": 6, "damage": 1, "gap": 0.45, "draft": "starter",
              "size": 11, "color": [250, 215, 60], "sides": 3},
     "tank": {"name": "Tank", "hp": 110, "speed": 38, "cost": 12, "damage": 2, "gap": 1.1, "draft": "starter",
              "size": 13, "color": [70, 130, 235], "sides": 4},
@@ -104,7 +104,7 @@
                "loot": [0.15, 2.0]},
     "bearer": {"name": "Banner Bearer", "hp": 70, "speed": 55, "cost": 15, "damage": 1, "gap": 1.0,
                "draft": "unlock", "size": 13, "color": [200, 145, 75], "sides": 0,
-               "inner": ["triangle", 6, [220, 45, 60]], "speed_aura": [80, 0.25]},
+               "inner": ["triangle", 6, [220, 45, 60]], "speed_aura": [80, 0.3]},
 
     "spiderling": {"name": "Spiderling", "hp": 8, "speed": 95, "cost": 2, "damage": 1, "gap": 0.15, "draft": "never",
                    "size": 7, "color": [80, 115, 60], "sides": 0, "inner": ["circle", 3, [225, 235, 170]]},

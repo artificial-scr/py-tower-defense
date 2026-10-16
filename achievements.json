@@ -8,7 +8,8 @@
     "  towers_on_map    kind: that many towers of `kind` on the map at once",
     "  in_range         that many monsters inside one tower's range at once",
     "  slowed_at_once   that many monsters slowed at once",
-    "  multi_kill       by: one tower of kind `by` kills that many monsters at once (in the same instant)",
+    "  multi_kill       by: one tower of kind `by` kills that many monsters at once (in the same instant); or, with",
+  "                   kills, it kills at least `kills` at once that many times; scope: level or ever",
     "  burst            seconds: that many kills within `seconds`",
     "  kills            optional by (tower kinds), enemy (monster kinds), how (direct, splash, chain or burn),",
     "                   slowed (true: only monsters slowed when they died); scope: level (in one level) or ever",
@@ -37,13 +38,13 @@
       {"desc": "Have 3 Frosts on the map at once", "condition": "towers_on_map", "kind": "frost", "target": 3}]},
 
     "minigun": {"name": "Volume of Fire", "unlocks": "minigun", "goals": [
-      {"desc": "Rifles kill 100 monsters in one level", "condition": "kills", "by": ["rifle"], "scope": "level",
-       "target": 100}]},
+      {"desc": "Kill 100 monsters", "condition": "kills", "scope": "ever", "target": 100}]},
     "sniper": {"name": "Big Game", "unlocks": "sniper", "goals": [
       {"desc": "A Rifle kills a Tank or an Elite", "condition": "kills", "by": ["rifle"],
        "enemy": ["tank", "elite"], "scope": "ever", "target": 1}]},
     "bombard": {"name": "Direct Hit", "unlocks": "bombard", "goals": [
-      {"desc": "One Mortar kills 2 monsters at once", "condition": "multi_kill", "by": "mortar", "target": 20}]},
+      {"desc": "Kill 25 monsters with splash damage", "condition": "kills", "how": "splash", "scope": "ever",
+       "target": 25}]},
     "incinerator": {"name": "Scorched Earth", "unlocks": "incinerator", "goals": [
       {"desc": "Mortars kill 50 monsters in one level", "condition": "kills", "by": ["mortar"], "scope": "level",
        "target": 50}]},

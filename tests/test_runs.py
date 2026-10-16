@@ -6,8 +6,7 @@ import pytest
 
 import graphics
 import main
-from graphics import SCALES
-from helpers import key, mouse_down, put, run_wave, scaled
+from helpers import SCALES, key, mouse_down, put, run_wave, scaled
 from progress import Profile
 
 LAST = len(main.LEVELS) - 1  # index of the last level of a pass

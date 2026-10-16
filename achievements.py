@@ -22,7 +22,7 @@ CONDITIONS = {
     "towers_on_map": (("kind",), ()),
     "in_range": ((), ()),
     "slowed_at_once": ((), ()),
-    "multi_kill": (("by",), ()),
+    "multi_kill": (("by",), ("kills", "scope")),
     "burst": (("seconds",), ()),
     "kills": ((), ("by", "enemy", "how", "slowed", "scope")),
     "leaks": ((), ("enemy", "scope")),
@@ -31,7 +31,8 @@ CONDITIONS = {
     "level_cleared": ((), ("min_level", "no_leaks", "only_line")),
     "pass_won": ((), ("finale", "min_gold")),
 }
-# Conditions measured as a peak (the best seen counts) rather than added up over time.
+# Conditions measured as a peak (the best seen counts) rather than added up over time. A multi_kill goal with
+# `kills` is added up instead (see is_peak).
 PEAKS = ("towers_on_map", "in_range", "slowed_at_once", "multi_kill", "burst")
 GOAL_FIELDS = ("desc", "condition", "target")
 SCOPES = ("level", "ever")
@@ -84,6 +85,8 @@ def load_achievements(path):
                     bad(f"goal {i + 1}: {k!r} isn't a monster")
             if goal.get("how", "direct") not in DAMAGE_SOURCES:
                 bad(f"goal {i + 1}: how must be one of {DAMAGE_SOURCES}")
+            if "kills" in goal and not (isinstance(goal["kills"], int) and goal["kills"] >= 2):
+                bad(f"goal {i + 1}: kills must be a whole number, at least 2")
             if goal.get("scope", "ever") not in SCOPES:
                 bad(f"goal {i + 1}: scope must be one of {SCOPES}")
             if goal.get("only_line", next(iter(LINES))) not in LINES:
@@ -106,6 +109,11 @@ for _parent, _options in EVOLVE.items():
         PREREQUISITES[_kind] = (_parent,)
 for _parents, _final in CROSS.items():
     PREREQUISITES[_final] = tuple(sorted(_parents, key=list(TOWERS).index))
+
+
+def is_peak(goal):
+    """Whether a goal's progress is the best seen (PEAKS) rather than a count added up."""
+    return goal["condition"] in PEAKS and "kills" not in goal
 
 
 def goal_key(achievement, index):
@@ -171,7 +179,7 @@ class AchievementTracker:
 
     def progress(self, key, goal):
         """What to show for a goal: this level's count for level goals, else the best or total so far."""
-        if goal["scope"] == "level" and goal["condition"] not in PEAKS:
+        if goal["scope"] == "level" and not is_peak(goal):
             return self.level_counts.get(key, 0)
         return self.profile.achievements.get(key, 0)
 
@@ -228,10 +236,16 @@ class AchievementTracker:
             self.lines_used.update(TOWER_LINES[t.kind])
         for key, goal in self.open_goals("towers_on_map"):
             self.reach(key, goal, counts[goal["kind"]])
-        # the kills one tower made in a single update (burns left out) all came from one shot
+        # the kills one tower made in a single update (burns left out) all came from one shot. With `kills`,
+        # every such shot of at least that many counts once; without, the most kills in one shot is the peak.
         for key, goal in self.open_goals("multi_kill"):
-            self.reach(key, goal, max((n for (_, kind), n in self.frame_kills.items() if kind == goal["by"]),
-                                      default=0))
+            shots = [n for (_, kind), n in self.frame_kills.items() if kind == goal["by"]]
+            if "kills" in goal:
+                hits = sum(1 for n in shots if n >= goal["kills"])
+                if hits:
+                    self.add(key, goal, hits)
+            else:
+                self.reach(key, goal, max(shots, default=0))
         self.frame_kills.clear()
         self.updates += 1
         if not in_wave or self.updates % SAMPLE_EVERY:

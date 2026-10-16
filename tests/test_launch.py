@@ -11,13 +11,15 @@ import pytest
 import graphics
 import main
 import music
+import sfx
 from helpers import key
 
 
 @pytest.fixture(autouse=True)
 def no_stems(monkeypatch, tmp_path):
-    """main() plays the soundtrack from an empty folder: the real player, nothing to decode."""
+    """main() plays the soundtrack and sound effects from empty folders: the real players, nothing to decode."""
     monkeypatch.setattr(main.music, "Music", functools.partial(music.Music, folder=str(tmp_path / "music")))
+    monkeypatch.setattr(main.sfx, "Sfx", functools.partial(sfx.Sfx, folder=str(tmp_path / "sfx")))
 
 
 def run_main(monkeypatch, events, argv=("main.py", "--no-log")):
@@ -47,28 +49,25 @@ def saved_settings():
         return json.load(f)
 
 
-# saved settings file, keys pressed on the settings screen -> start scale, scale after, settings file after
+# saved settings file, desktop size -> window scale
 LAUNCHES = {
-    "first launch": (None, [], 1.0, 1.0, None),
-    "pick and save": (None, [pygame.K_RIGHT, pygame.K_RETURN], 1.0, 1.25, {"scale": 1.25}),
-    "remembered": ('{"scale": 1.25}', [], 1.25, 1.25, {"scale": 1.25}),
-    "too big for the screen": ('{"scale": 2.0}', [], 1.75, 1.75, {"scale": 2.0}),
-    "not an offered size": ('{"scale": 1.3}', [], 1.25, 1.25, {"scale": 1.3}),
-    "junk value": ('{"scale": "big"}', [], 1.0, 1.0, {"scale": "big"}),
-    "corrupt file": ("not json", [pygame.K_LEFT, pygame.K_o], 1.0, 0.75, {"scale": 0.75}),
-    "largest fitting": ('{"scale": 1.75}', [pygame.K_RIGHT, pygame.K_RETURN], 1.75, 1.75, {"scale": 1.75}),
+    "first launch": (None, (2560, 1440), 2.0),
+    "a scale saved by an older version is ignored": ('{"scale": 1.25}', (2560, 1440), 2.0),
+    "corrupt file": ("not json", (2560, 1440), 2.0),
+    "small desktop": (None, (1366, 768), 1.075),
 }
 
 
-@pytest.mark.parametrize("saved, keys, start, end, after", LAUNCHES.values(), ids=LAUNCHES.keys())
-def test_launch_scale(monkeypatch, saved, keys, start, end, after):
-    monkeypatch.setattr(main.Game, "scale_fits", staticmethod(lambda k: k <= 1.75))
+@pytest.mark.parametrize("saved, desk, scale", LAUNCHES.values(), ids=LAUNCHES.keys())
+def test_launch_scale(monkeypatch, saved, desk, scale):
+    monkeypatch.setattr(pygame.display, "get_desktop_sizes", lambda: [desk])
     if saved is not None:
         with open(main.SETTINGS_FILE, "w", encoding="utf-8") as f:
             f.write(saved)
-    assert run_main(monkeypatch, [key(k) for k in keys]) == start
-    assert graphics.SCALE == end
-    assert saved_settings() == after
+    assert run_main(monkeypatch, [key(pygame.K_RIGHT), key(pygame.K_RETURN)]) == scale
+    assert graphics.SCALE == scale, "arrow keys don't resize"
+    if saved is None:
+        assert saved_settings() is None, "no scale saved"
 
 
 def test_starts_on_settings_screen(monkeypatch):
@@ -102,7 +101,7 @@ def test_no_log_flag(monkeypatch):
 
 def test_launches_fullscreen_if_saved(monkeypatch):
     with open(main.SETTINGS_FILE, "w", encoding="utf-8") as f:
-        f.write('{"scale": 1.0, "fullscreen": true}')
+        f.write('{"fullscreen": true}')
     seen = []
     monkeypatch.setattr(main.Game, "draw", lambda self: seen.append(self.fullscreen) or pygame.event.post(
         pygame.event.Event(pygame.QUIT)))

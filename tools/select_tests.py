@@ -49,12 +49,13 @@ RULES = [
     (("unlock_view.py",), ("tower_unlocks", "unlocks", "rendering")),
     (("attack_view.py",), ("attack", "rendering")),
     (("tests/snapshots.json",), ("rendering",)),
-    # the soundtrack
+    # the soundtrack and sound effects
     (("music.py", "music.json", "assets/music/*"), ("music", "launch")),
+    (("sfx.py", "sfx.json", "assets/sfx/*"), ("sfx", "launch")),
     # this script
     (("tools/select_tests.py",), ("select_tests",)),
     # nothing to test
-    (("*.md", ".gitignore", ".gitattributes", ".serena/*", "logs/*", "tools/sync_music.py", "reset_profile.py"), ()),
+    (("*.md", ".gitignore", ".gitattributes", ".serena/*", "logs/*", "tools/sync_music.py", "tools/sync_sfx.py","reset_profile.py"), ()),
 ]
 
 

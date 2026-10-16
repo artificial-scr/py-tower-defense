@@ -17,13 +17,15 @@ uv sync              # create .venv and install pygame-ce (plus pytest for devel
 uv run main.py       # play
 ```
 
-The game opens on the settings screen, where you can choose a display scale or fullscreen, turn the
-ambient effects (drifting particles, glowing maps) on or off, and set the music volume. Press Enter to start.
+The game opens in a window at 200% (2040 x 1280, or as large as fits on a smaller screen), on the
+settings screen, where you can switch to fullscreen, turn the ambient effects (drifting particles,
+glowing maps) on or off, and set the music and sound effects volumes. Press Enter to start.
 
 | Option | Effect |
 |---|---|
 | `--no-log` | Don't write balance logs (see [Balance logs](#balance-logs)) |
 | `--no-music` | No soundtrack (see [Music](#music)) |
+| `--no-sound` | No sound effects (see [Sound effects](#sound-effects)) |
 | `--monsters` | Debug shortcut: start straight on the Monsters side |
 
 ## The run
@@ -101,7 +103,7 @@ The towers on the map are your **tower record** for the level, and you have to g
 | Monster | Traits | Unlock |
 |---|---|---|
 | Basic | Average speed and HP | Always |
-| Fast | Quick and fragile | Always |
+| Fast | Quick, with a Basic's HP | Always |
 | Tank | Slow and tough, costs 2 lives if it gets through | Always |
 | Elite | Very tough, costs 5 lives | Always |
 | Swarmling | Tiny, cheap, fast; comes in crowds | Card |
@@ -116,7 +118,7 @@ The towers on the map are your **tower record** for the level, and you have to g
 | Thawling | Sprints +80% for 2 s whenever a slow wears off | Card |
 | Saboteur | When killed, towers within 1.5 tiles stop firing for 2 s | Card |
 | Looter | Takes no lives: steals 15% of the tower player's gold, or brings back 2× its cost as budget | Card |
-| Banner Bearer | Monsters around it move 25% faster | Card |
+| Banner Bearer | Monsters around it move 30% faster | Card |
 | **The Warden** | Boss of level 10: summons Fast monsters and resists slows | Boss level, last wave; a Towers pass's finale wave |
 | **The Brood Mother** | Boss: every 2.5 s shoots out 3 Spiderlings (1 behind, 2 in front); resists slows | No level yet |
 
@@ -217,9 +219,10 @@ Both sides:
 | `T` | Show the evolution tree |
 | `F` / `Shift+F` | Change game speed during waves: 1×, 2×, 4×, 10× (building always runs at 1×) |
 | `P` | Pause |
-| `O` | Settings (display scale, from 75% to 200%; ambient effects on or off with `A`) |
+| `O` | Settings (fullscreen, ambient effects on or off with `A`, music and sound volumes) |
 | `F11` | Fullscreen on or off (the game is scaled up to fill the screen) |
 | `M` | Music volume: 25%, 50%, 75%, 100%, off (anywhere, settings screen included) |
+| `N` | Sound effects volume: 25%, 50%, 75%, 100%, off (anywhere, settings screen included) |
 | `R` | Start a new run after the run is over |
 | `Esc` (nothing to cancel) | Ask to quit. Press `Esc` again to quit |
 
@@ -296,12 +299,14 @@ These logs are meant for tuning the data files. Pass `--no-log` to turn them off
 | `unlock_view.py` | Drawing for tower unlocks: the unlock card, the pinned next unlock, locks over towers |
 | `balance_log.py` | Per-level balance logs |
 | `music.py`, `music.json` | The soundtrack: which seed each level plays, and the player that layers its stems |
+| `sfx.py`, `sfx.json` | The sound effects: every sound the game needs, and the player that plays them |
 | `assets/fonts/` | The game font, Orbitron (Medium and Bold), and its license |
 | `assets/music/` | The soundtrack stems, `<area>/<cue>/<stem>.ogg` |
+| `assets/sfx/` | The sound effects, `<name>.ogg` or `<name>.wav` (names from `sfx.json`) |
 | `tests/` | The pytest suite |
 | `tools/select_tests.py` | Picks the tests that cover what changed (see [TESTING.md](TESTING.md)) |
 
-Your display scale, fullscreen, the ambient effects and the music volume are saved in `settings.json`. That file,
+Fullscreen, the ambient effects and the music and sound volumes are saved in `settings.json`. That file,
 `profile.json`, `savegame.json` and `logs/` are git-ignored.
 
 ## Music
@@ -324,6 +329,23 @@ run-over and pass-won screens. The thresholds and fade times are constants at th
 
 `music.json` picks a seed per level and cue. To change one, edit it and copy the stems in again with
 `uv run tools/sync_music.py [path to soundtrack-maker/stems]` (a local script, kept out of git).
+
+## Sound effects
+
+`sfx.json` lists every sound effect the game needs, grouped (towers, hits, monsters, bosses, abilities,
+building, draft, progress, ui), each with a description of what it should sound like. The `core`
+ones are the set to make first. The game plays a sound when its file is in `assets/sfx` as
+`<name>.ogg` (or `.wav`) and stays silent for the others, so sounds can be added one at a time.
+
+Each tower plays the firing sound `towers` gives it, and a killed monster plays a small, medium or
+large death by its size. A sound's `gap` (real-time seconds between two plays) and `max` (copies at
+once) stop a fast game or a crowd from piling it up, and its `volume` is multiplied by the Sound
+setting. Sounds marked `"hooked": false` are listed but not played yet: they need hooks inside
+`entities.py` (hits, burns, wards...) or the views (button clicks).
+
+The sounds are generated by the soundtrack-maker project, four seeds each. A sound uses seed 1 unless
+its `sfx.json` entry has a `seed`. To change one, edit it and copy the sounds in again with
+`uv run tools/sync_sfx.py [path to soundtrack-maker/sounds]` (a local script, kept out of git).
 
 ## Credits
 

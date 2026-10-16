@@ -35,7 +35,7 @@
                  "type": "saboteur", "weight": 3},
     "looter": {"name": "Looter", "desc": "Takes no lives: steals 15% of the defender's gold, or brings back 2x its cost",
                "effect": "type", "type": "looter", "weight": 3},
-    "bearer": {"name": "Banner Bearer", "desc": "Monsters around it move 25% faster", "effect": "type",
+    "bearer": {"name": "Banner Bearer", "desc": "Monsters around it move 30% faster", "effect": "type",
                "type": "bearer", "weight": 3},
     "juggernaut": {"name": "Juggernaut", "desc": "Huge and immune to slows", "effect": "type",
                    "type": "juggernaut", "weight": 1, "rare": true},

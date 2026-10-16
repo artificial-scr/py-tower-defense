@@ -133,10 +133,12 @@ class AttackMixin:
                 return
             self.queue.append(kind)
             self.budget -= ENEMY_TYPES[kind]["cost"]
+            self.sound("draft_add")
 
     def undraft(self, index=-1):
         if self.state == "build" and self.queue:
             self.budget += ENEMY_TYPES[self.queue.pop(index)]["cost"]
+            self.sound("draft_remove")
 
     # ---- stat upgrades ----------------------------------------------------------
     def upgrade_price(self, key):
@@ -156,6 +158,7 @@ class AttackMixin:
         self.upgrades[key] += 1
         self.escort += price // ENEMY_TYPES[ESCORT_KIND]["cost"]
         self.bought.append((key, price))
+        self.sound("upgrade_buy")
         self.log_event("upgrade", upgrade=key, rank=self.upgrades[key], price=price)
 
     def sell_upgrade(self, key):
@@ -166,6 +169,7 @@ class AttackMixin:
                 self.budget += price
                 self.upgrades[key] -= 1
                 self.escort -= price // ENEMY_TYPES[ESCORT_KIND]["cost"]
+                self.sound("upgrade_sell")
                 self.log_event("upgrade_sold", upgrade=key, rank=self.upgrades[key], price=price)
                 return
 
@@ -204,6 +208,7 @@ class AttackMixin:
         self.spawn_timer = 0.0
         self.wave_started_at = self.clock
         self.state = "wave"
+        self.sound("wave_start")
         if self.log:
             self.log.start_wave(self.clock, self.wave_idx, self.hp_mult, self.spawn_queue, self.lives, self.budget)
 
@@ -219,6 +224,7 @@ class AttackMixin:
         self.aiming = None
         cast_ability(spec, pos, self.towers.values(), self.enemies, self.effects, self.defender_mods["grounding"])
         self.cooldowns[ability] = self.ability_cooldowns[ability]
+        self.sound(f"ability_{ability}")
         where = [round(pos[0]), round(pos[1])] if pos is not None else None
         self.sent_waves[self.wave_idx]["casts"].append(
             {"ability": ability, "t": round(self.clock - self.wave_started_at, 2), "pos": where})
@@ -226,7 +232,10 @@ class AttackMixin:
 
     def tick_cooldowns(self, dt):
         for k in self.cooldowns:
-            self.cooldowns[k] = max(0.0, self.cooldowns[k] - dt)
+            was = self.cooldowns[k]
+            self.cooldowns[k] = max(0.0, was - dt)
+            if was > 0 >= self.cooldowns[k]:
+                self.sound("ability_ready")
 
     # ---- winning and losing ------------------------------------------------------
     @property
@@ -269,6 +278,7 @@ class AttackMixin:
             self.projectiles = []
         self.profile.record_monsters(self.level_idx + 1, self.sent_waves)
         self.state = "victory" if pass_won else "level_complete"
+        self.sound("pass_won" if pass_won else "level_complete")
         if pass_won:
             self.profile.reach("tower_cards")
             self.finale = (self.level_idx + 1, self.wave_idx)  # where the next Towers pass ends

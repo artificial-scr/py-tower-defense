@@ -1,14 +1,14 @@
 """Keyboard and mouse controls: speed, Esc / quit prompt, settings overlay, input at every scale."""
 
 import json
+import os
 
 import pygame
 import pytest
 
 import graphics
 import main
-from graphics import SCALES
-from helpers import key, mouse_down, mouse_up, put, scaled
+from helpers import SCALES, key, mouse_down, mouse_up, put, scaled
 from levels import tile_center
 
 
@@ -91,38 +91,25 @@ def test_quit_prompt_while_paused(game):
 
 
 # ---- settings overlay ---------------------------------------------------------------
-def test_settings_keys_change_scale_and_save(game, monkeypatch):
-    monkeypatch.setattr(main.Game, "scale_fits", staticmethod(lambda k: True))
+def desktop(monkeypatch, w, h):
+    monkeypatch.setattr(pygame.display, "get_desktop_sizes", lambda: [(w, h)])
+
+
+def test_the_window_is_200_percent_or_as_large_as_fits(monkeypatch):
+    desktop(monkeypatch, 2560, 1440)
+    assert main.Game.window_scale() == graphics.WINDOW_SCALE == 2.0
+    desktop(monkeypatch, 1920, 1080)
+    assert main.Game.window_scale() == 1.562, "1000 px of height left under the title bar and taskbar"
+    assert round(graphics.HEIGHT * 1.562) <= 1080 - 80
+
+
+def test_settings_keys_no_longer_resize(game):
     game.show_settings = True
-    game.handle_event(key(pygame.K_RIGHT))
-    assert graphics.SCALE == 1.25 and game.screen.get_size() == (1275, 800)
-    game.handle_event(key(pygame.K_LEFT))
-    game.handle_event(key(pygame.K_LEFT))
-    assert graphics.SCALE == 0.75
-    game.handle_event(key(pygame.K_LEFT))
-    assert graphics.SCALE == 0.75, "stops at the smallest"
-    game.handle_event(key(pygame.K_RETURN))
-    assert not game.show_settings
-    with open(main.SETTINGS_FILE, encoding="utf-8") as f:
-        assert json.load(f) == {"scale": 0.75}
-
-
-def test_settings_skip_sizes_that_dont_fit(game, monkeypatch):
-    monkeypatch.setattr(main.Game, "scale_fits", staticmethod(lambda k: k <= 1.25))
-    game.show_settings = True
-    for _ in range(5):
-        game.handle_event(key(pygame.K_RIGHT))
-    assert graphics.SCALE == 1.25
-
-
-def test_settings_click(game, monkeypatch):
-    monkeypatch.setattr(main.Game, "scale_fits", staticmethod(lambda k: True))
-    game.show_settings = True
-    scale, rect = game.scale_buttons()[-1]
-    game.handle_event(mouse_down(rect.center))
-    assert graphics.SCALE == scale == 2.0
-    game.handle_event(mouse_down(scaled(game.settings_close_button().center, 2.0)))
-    assert not game.show_settings
+    for k in (pygame.K_RIGHT, pygame.K_LEFT, pygame.K_MINUS, pygame.K_EQUALS):
+        game.handle_event(key(k))
+    assert graphics.SCALE == 1.0 and game.show_settings
+    game.handle_event(mouse_down(game.settings_close_button().center))
+    assert not game.show_settings and not os.path.exists(main.SETTINGS_FILE), "no scale to save"
 
 
 def test_ambient_effects_toggle_is_saved(game, screen):
@@ -147,7 +134,6 @@ def test_fullscreen_centers_the_game_and_clicks_still_land(game):
     assert game.fullscreen and game.screen.get_parent() is display
     (w, h), (display_w, display_h) = game.screen.get_size(), display.get_size()
     assert w <= display_w and h <= display_h and (display_w - w <= 2 or display_h - h <= 2), "fills one way"
-    assert not any(game.fits(k) for k in SCALES), "no window sizes to pick"
     area = game.screen.get_abs_offset()
     assert area == graphics.OFFSET
     assert abs(area[0] * 2 + w - display_w) <= 1 and abs(area[1] * 2 + h - display_h) <= 1  # centered
@@ -163,24 +149,16 @@ def test_fullscreen_centers_the_game_and_clicks_still_land(game):
     assert pygame.display.get_surface().get_size() == graphics.window_size() == game.screen.get_size()
 
 
-def test_fullscreen_button_and_scale_choice(game, monkeypatch):
-    """The settings button toggles it too; leaving fullscreen goes back to the window's scale, and
-    fullscreen's scale (which can't be changed there) isn't saved as the window's."""
-    monkeypatch.setattr(main.Game, "scale_fits", staticmethod(lambda k: True))
+def test_fullscreen_button_and_back_to_the_window(game, monkeypatch):
+    """The settings button toggles it too; leaving fullscreen goes back to the 200% window (or as large
+    as fits)."""
+    desktop(monkeypatch, 4000, 3000)
     game.show_settings = True
-    game.apply_scale(0.75)
-    game.handle_event(mouse_down(scaled(game.fullscreen_button().center, 0.75)))
-    assert game.fullscreen and graphics.SCALE >= 1.0
-    full = graphics.SCALE
-    game.handle_event(key(pygame.K_LEFT))
-    assert graphics.SCALE == full
-    game.handle_event(key(pygame.K_RETURN))
-    with open(main.SETTINGS_FILE, encoding="utf-8") as f:
-        assert "scale" not in json.load(f)
-    game.show_settings = True
+    game.handle_event(mouse_down(game.fullscreen_button().center))
+    assert game.fullscreen
     at = pygame.Vector2(game.fullscreen_button().center) * graphics.SCALE + pygame.Vector2(graphics.OFFSET)
     game.handle_event(mouse_down(at))
-    assert not game.fullscreen and graphics.SCALE == 0.75
+    assert not game.fullscreen and graphics.SCALE == 2.0 and game.screen.get_size() == (2040, 1280)
 
 
 def test_o_opens_settings(game):
@@ -207,7 +185,7 @@ def test_rescale_mid_game_keeps_state(game):
     for _ in range(300):
         game.update(1 / 60)
     state = (len(game.enemies), game.gold, game.lives, list(game.towers))
-    game.apply_scale(0.75)
+    game.set_display(0.75, False)
     assert game.screen.get_size() == (765, 480)
     assert game.map_surface.get_size() == (600, 480)
     assert (len(game.enemies), game.gold, game.lives, list(game.towers)) == state

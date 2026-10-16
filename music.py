@@ -44,6 +44,8 @@ FADE_IN = {"build": 2.0, "wave": 0.3, "boss": 1.0}  # the cue coming in
 FADE_OUT = 2.0  # the cue going out (to silence too)
 DUCK = 0.4  # volume under a pause or a panel over the map
 DUCK_FADE = 0.3
+SLOTS = 3  # cues sounding at once: the one playing and up to two fading out
+CHANNELS = SLOTS * len(STEMS)  # reserved for the soundtrack; sound effects (sfx.py) get the rest
 
 
 @dataclass(frozen=True)
@@ -150,7 +152,7 @@ class Music:
     """The soundtrack player. `volume` is the Music setting (0-100). Build one per launch, then call
     update() every frame, paused or not."""
 
-    SLOTS = 3  # cues sounding at once: the one playing and up to two fading out
+    SLOTS = SLOTS
 
     def __init__(self, volume=DEFAULT_VOLUME, folder=MUSIC_DIR):
         self.volume = volume
@@ -163,9 +165,9 @@ class Music:
         try:
             if not pygame.mixer.get_init():
                 pygame.mixer.init(FREQUENCY)
-            pygame.mixer.set_num_channels(max(pygame.mixer.get_num_channels(), self.SLOTS * len(STEMS) + 8))
-            pygame.mixer.set_reserved(self.SLOTS * len(STEMS))  # sound effects never take these
-            self.free = [pygame.mixer.Channel(i) for i in range(self.SLOTS * len(STEMS))]
+            pygame.mixer.set_num_channels(max(pygame.mixer.get_num_channels(), CHANNELS + 8))
+            pygame.mixer.set_reserved(CHANNELS)  # sound effects never take these
+            self.free = [pygame.mixer.Channel(i) for i in range(CHANNELS)]
             self.on = True
         except pygame.error as err:
             print(f"No music: {err}")

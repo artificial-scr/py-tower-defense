@@ -10,8 +10,7 @@ import graphics
 import main
 from attack import DEFENDER_LIVES, QUEUE_MAX
 from entities import Enemy
-from graphics import SCALES
-from helpers import key, mouse_down, scaled
+from helpers import SCALES, key, mouse_down, scaled
 from levels import LEVELS, WAVES_PER_LEVEL, wave_value
 from monsters import BUDGET, ENEMY_TYPES, REWARDS, UPGRADES
 from progress import UNLOCKS

@@ -1,1 +1,2 @@
 assets/music/** filter=lfs diff=lfs merge=lfs -text
+assets/sfx/** filter=lfs diff=lfs merge=lfs -text

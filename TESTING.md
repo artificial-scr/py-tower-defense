@@ -47,7 +47,7 @@ uv run pytest --durations=10             # list the slowest tests
 |---|---|
 | `test_data.py` | Loading `towers.json` and `evolution.json`, the error messages for broken files, the level paths and wave generation |
 | `test_fusion.py`, `test_combat.py` | Game rules: buying, fusing, moving and selling towers; tower mechanics; enemies and bosses |
-| `test_controls.py`, `test_launch.py` | Input and the game loop: keys, clicks at every display scale, the settings screen (scale, fullscreen, ambient effects), game speed only in waves, saved settings, quitting |
+| `test_controls.py`, `test_launch.py` | Input and the game loop: keys, clicks at every display scale, the settings screen (the window's size, fullscreen, ambient effects), game speed only in waves, saved settings, quitting |
 | `test_progress.py` | Moving between levels: the wave lock after a level change, Rebuild, the saved checkpoint and Continue |
 | `test_runs.py` | Runs: passes that switch sides after the last level, finales (a Towers pass ending on the wave the Monsters pass was won, with the Warden), the run ending on a loss, picking a side, saving and continuing a run |
 | `test_records.py` | Comps per wave, tower records (only stronger slots replace), the profile file, and the Towers side playing monster records (replayed abilities included) |
@@ -58,6 +58,7 @@ uv run pytest --durations=10             # list the slowest tests
 | `test_balance_log.py` | The per-level balance logs: file names, uniqueness, and cross-checks that their numbers add up |
 | `test_rendering.py` | Drawing: every screen at every display scale, text staying inside the map and panel, map decoration, tower sprites, every creature's animation frames, shots and hit effects, ambient particles, the portal and gate, plus pixel snapshots |
 | `test_music.py` | The soundtrack: which cue plays in each state, the intensity rules, the player's fades and crossfades (on tiny generated stems), the Music setting, and that every level's stems are in `assets/music` |
+| `test_sfx.py` | Sound effects: the player's gaps, limits and volumes (on tiny generated files), the game playing them as things happen, the Sound setting, and `sfx.json` listing every sound the code plays and a firing sound for every tower |
 | `test_select_tests.py` | `tools/select_tests.py`: which tests a change picks, and that every file has a rule |
 | `test_playthrough.py` | Long simulations with bot players, on both sides (marked `slow`) |
 
@@ -73,8 +74,9 @@ your machine:
   run without a display (over SSH, in CI).
 - **No writes to the repo**: `settings.json`, `savegame.json`, `profile.json` and the `logs/`
   folder are redirected to a temporary directory per test.
-- **No music**: a `Game` built in a test has no soundtrack (`main()` makes one). `test_launch.py`
-  runs `main()` with the real player on an empty music folder, so nothing is decoded.
+- **No music or sound effects**: a `Game` built in a test has no soundtrack or sound effects player
+  (`main()` makes them). `test_launch.py` runs `main()` with the real players on empty folders, so
+  nothing is decoded.
 - **Starter pack already taken**: the temporary `profile.json` starts with the Monsters side's
   one-time starter cards marked as picked, so they don't cover every Monsters-side test. Tests of
   the starter pack overwrite the profile.

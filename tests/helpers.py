@@ -9,6 +9,9 @@ from levels import COLS, ROWS, tile_center
 from towers import TOWER_ORDER, TOWERS
 
 E = pygame.event.Event
+# Scales the game is drawn at in tests: the window is 200%, or smaller on a small desktop, and fullscreen
+# lands anywhere.
+SCALES = (0.75, 1.0, 1.25, 1.5, 1.75, 2.0)
 
 
 def px(tile):

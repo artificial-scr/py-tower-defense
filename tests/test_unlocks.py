@@ -10,8 +10,7 @@ import graphics
 import main
 import progress
 from entities import Enemy, Tower
-from graphics import SCALES
-from helpers import key, mouse_down, put, run_wave, scaled
+from helpers import SCALES, key, mouse_down, put, run_wave, scaled
 from monsters import REWARDS
 from progress import UNLOCKS, Profile, load_unlocks
 from towers import NO_TOWER_MODS

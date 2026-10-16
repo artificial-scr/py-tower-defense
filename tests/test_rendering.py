@@ -22,8 +22,8 @@ import main
 import sprites
 import terrain
 from entities import Projectile
-from graphics import HEIGHT, MAP_H, MAP_W, PANEL_W, SCALES, TILE
-from helpers import dummy_enemy, free_tiles, put, scaled
+from graphics import HEIGHT, MAP_H, MAP_W, PANEL_W, TILE
+from helpers import SCALES, dummy_enemy, free_tiles, put, scaled
 from levels import tile_center
 from monsters import ENEMY_TYPES
 from towers import CROSS, EVOLVE, TOWERS
@@ -33,7 +33,6 @@ SNAPSHOTS = os.path.join(os.path.dirname(__file__), "snapshots.json")
 
 def scenes(scale, mouse, monkeypatch):
     """Put a fresh game through every screen; yields (name, game) for each one to draw."""
-    monkeypatch.setattr(main.Game, "scale_fits", staticmethod(lambda k: k <= 1.5))
     graphics.set_scale(scale)
     g = main.Game(pygame.display.set_mode(graphics.window_size()), log_dir=None)
     g.show_settings = True
@@ -100,7 +99,7 @@ def scenes(scale, mouse, monkeypatch):
 def test_every_screen_draws(scale, mouse, monkeypatch):
     for name, g in scenes(scale, mouse, monkeypatch):
         g.draw()
-        assert g.screen.get_size() == graphics.window_size(scale), name
+        assert g.screen.get_size() == (round(graphics.WIDTH * scale), round(HEIGHT * scale)), name
     # the panel's level header is drawn in the level's accent color
     assert g.screen.get_at(scaled((graphics.MAP_W + 20, 20), scale))[:3] == g.theme.accent
 
@@ -164,7 +163,7 @@ def test_sprites_are_drawn_once_per_scale(screen):
     assert sprites.angle_step(-90) == sprites.angle_step(270) == 54
     g = main.Game(screen, log_dir=None)
     sprites.tower_turret(spec, 5, 1.0)
-    g.apply_scale(1.5)
+    g.set_display(1.5, False)
     assert ("turret", spec["name"], 5, 1.0) not in sprites._cache, "a scale change forgets the old pictures"
 
 

@@ -36,8 +36,8 @@ without touching the code.
 
 Every level writes a balance log (damage per tower, damage taken per enemy, waves,
 economy, fusions...) to logs/<session>/ as JSON; see balance_log.py. Run with
---no-log to turn this off, with --no-music for no soundtrack (music.py), and with --monsters to start
-on the Monsters side.
+--no-log to turn this off, with --no-music for no soundtrack (music.py), --no-sound for no sound effects
+(sfx.py), and with --monsters to start on the Monsters side.
 
 README.md (Project layout) says what each module holds.
 """
@@ -49,15 +49,15 @@ import sys
 
 import pygame
 
-import graphics
 import music
+import sfx
 from achievements import UNLOCKED_BY, AchievementTracker
 from attack import DEFENDER_LIVES, AttackMixin
 from attack_view import AttackView
 from balance_log import LevelLog, LogSession
 from effects import CastWarning, GoldBurst, GooSpray, Popup, Ring, Shards, Sparks
 from entities import Enemy, Tower, cast_ability, heal_auras, sabotage, speed_auras
-from graphics import BAD, GOLD, MAP_H, MAP_W, SCALES, TILE, GameView, mouse_pos, set_scale, to_logical, window_size
+from graphics import BAD, GOLD, MAP_H, MAP_W, TILE, GameView, mouse_pos, set_scale, to_logical, window_size
 from levels import (BOSS_LEVELS, COLS, ENEMY_TYPES, LEVELS, ROWS, START_GOLD, START_LIVES, WAVES_PER_LEVEL,
                     build_path_cells, make_wave, tile_center, wave_value)
 from monsters import ABILITIES, REWARDS, UPGRADES
@@ -72,7 +72,6 @@ FPS = 60
 SPEEDS = (1, 2, 4, 10)  # game steps per frame
 CAST_WARNING = 1.0  # seconds a replayed ability is shown before it lands
 WAVE_LOCK = 1.0  # seconds after a level change before Space can send a wave (stops double presses)
-SCALE_KEYS = (pygame.K_LEFT, pygame.K_RIGHT, pygame.K_MINUS, pygame.K_EQUALS, pygame.K_PLUS)  # settings: resize
 FINALE_BOSS = "warden"  # joins the last wave of a Towers pass that ends early (see Game.finale)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -176,11 +175,13 @@ def spec_snapshot():
 
 
 class Game(AttackMixin, AttackView, UnlockView, GameView):
-    def __init__(self, screen, log_dir=LOG_DIR, side="towers", soundtrack=None):
+    def __init__(self, screen, log_dir=LOG_DIR, side="towers", soundtrack=None, sounds=None):
         """`side` is who the player plays: "towers" (build and defend) or "monsters" (attack.py). `soundtrack`
-        is the music.Music that plays the levels' music; None (as in tests) plays none."""
+        is the music.Music that plays the levels' music, `sounds` the sfx.Sfx that plays the sound effects;
+        None (as in tests) plays none."""
         self.screen = screen
         self.soundtrack = soundtrack
+        self.sounds = sounds
         self.side = side
         self.log_session = LogSession(log_dir) if log_dir else None
         self.log = None
@@ -192,8 +193,12 @@ class Game(AttackMixin, AttackView, UnlockView, GameView):
             self.music_volume = music.DEFAULT_VOLUME
         if soundtrack:
             soundtrack.volume = self.music_volume
+        self.sfx_volume = load_settings().get("sfx_volume", sfx.DEFAULT_VOLUME)  # the Sound setting, in %
+        if self.sfx_volume not in sfx.VOLUMES:
+            self.sfx_volume = sfx.DEFAULT_VOLUME
+        if sounds:
+            sounds.volume = self.sfx_volume
         self.fullscreen = False  # main() turns it on at launch if it was saved on
-        self.windowed_scale = graphics.SCALE  # the window's scale, to go back to after fullscreen
         self.save = load_save()
         self.profile = Profile.load(PROFILE_FILE)
         self.picking_side = False  # the new-run screen: choose Towers or Monsters
@@ -267,6 +272,7 @@ class Game(AttackMixin, AttackView, UnlockView, GameView):
         """A level was lost: the run ends. The save goes; the profile (records, unlocks) stays."""
         self.state = "game_over"
         self.aiming = None
+        self.sound("game_over")
         self.finish_log("lost")
         self.profile.note_run(self.levels_won)
         self.save = None
@@ -491,6 +497,7 @@ class Game(AttackMixin, AttackView, UnlockView, GameView):
     def tower_unlocked(self, kind, how="achievement"):
         """A tower was unlocked for good: its card shows at the next build phase (straight away in one)."""
         self.pending_unlocks.append({"kind": kind, "how": how})
+        self.sound("unlock")
         self.log_event("tower_unlock", kind=kind, how=how,
                        achievement=UNLOCKED_BY[kind] if how == "achievement" else None)
 
@@ -518,6 +525,7 @@ class Game(AttackMixin, AttackView, UnlockView, GameView):
     def pick_reward(self, index):
         card = self.reward_cards[index]
         self.profile.unlock(self.reward_pool, card)
+        self.sound("card_pick")
         self.log_event("unlock", pool=self.reward_pool, card=card, rank=self.profile.rank(self.reward_pool, card),
                        offered=self.reward_cards, tier=self.reward_tier)
         self.popups.append(Popup((MAP_W / 2, MAP_H / 2 + 120), f"Unlocked: {UNLOCKS[self.reward_pool][card]['name']}",
@@ -575,6 +583,7 @@ class Game(AttackMixin, AttackView, UnlockView, GameView):
             placed += 1
         self.rebuild_layout = left
         if placed:
+            self.sound("place")
             self.popups.append(Popup((MAP_W / 2, MAP_H / 2), f"Rebuilt {placed} tower{'s' * (placed > 1)}", GOLD))
 
     def start_wave(self):
@@ -604,6 +613,7 @@ class Game(AttackMixin, AttackView, UnlockView, GameView):
         self.spawn_timer = 0.0
         self.wave_started_at = self.clock
         self.state = "wave"
+        self.sound("wave_start")
         if self.log:
             self.log.start_wave(self.clock, self.wave_idx, self.hp_mult, self.spawn_queue, self.lives, self.gold)
 
@@ -635,6 +645,7 @@ class Game(AttackMixin, AttackView, UnlockView, GameView):
             self.fuse(tower, other)
         else:
             self.towers[tile] = tower
+            self.sound("place")
         if self.gold < TOWERS[self.build_kind]["cost"]:
             self.build_kind = None
 
@@ -647,6 +658,7 @@ class Game(AttackMixin, AttackView, UnlockView, GameView):
         target.spent += tower.spent
         self.selected = target
         tower.status = f"fused_into:{target.uid}"
+        self.sound("fuse")
         self.note(tower, "fused_into", tower=target.uid)
         if self.log:
             self.log.add_tower(target)
@@ -675,6 +687,7 @@ class Game(AttackMixin, AttackView, UnlockView, GameView):
         if not self.can_make(options[index]):
             return
         self.choice = None
+        self.sound("evolve")
         self.log_event("branch_choice", tower=tower.uid, options=options, chosen=options[index])
         self.evolve(tower, options[index])
 
@@ -707,6 +720,7 @@ class Game(AttackMixin, AttackView, UnlockView, GameView):
             if self.log:
                 self.log.earned["sells"] += t.sell_value
             self.gold += t.sell_value
+            self.sound("sell")
             self.popups.append(Popup(t.pos, f"+{t.sell_value}", GOLD))
             del self.towers[t.tile]
             self.selected = None
@@ -749,8 +763,10 @@ class Game(AttackMixin, AttackView, UnlockView, GameView):
                 kind = self.spawn_queue.pop(0)
                 self.register_enemy(Enemy(kind, self.path_pts, self.hp_mult, self.wave_mods), "wave")
                 self.spawn_timer = ENEMY_TYPES[kind]["gap"]
+                self.sound("spawn")
                 if "boss" in ENEMY_TYPES[kind]:
                     self.boss_alert = 3.0
+                    self.sound("boss_arrive")
                 elif self.spawn_queue and "boss" in ENEMY_TYPES[self.spawn_queue[0]]:
                     self.spawn_timer = 4.0  # a breather before the boss walks in
 
@@ -761,7 +777,10 @@ class Game(AttackMixin, AttackView, UnlockView, GameView):
         self.summon_minions(dt)
         self.cast_decoys(dt)
         for t in self.towers.values():
+            ready = t.cooldown
             t.update(dt, self.enemies, self.projectiles, self.effects)
+            if t.cooldown > ready:  # it fired: the cooldown started over
+                self.sound(sfx.fire_sound(t.kind))
         for p in self.projectiles:
             p.update(dt, self.enemies, self.effects)
         self.projectiles = [p for p in self.projectiles if not p.done]
@@ -773,8 +792,12 @@ class Game(AttackMixin, AttackView, UnlockView, GameView):
                 continue
             if e.illusion:  # popped or faded: nothing to win or lose
                 self.effects.append(Sparks(e.pos, e.spec["color"], 6, 16))
+                self.sound("decoy_pop")
                 continue
-            splits += [(child, e.kind) for child in e.split()]
+            children = e.split()
+            if children:
+                self.sound("split")
+            splits += [(child, e.kind) for child in children]
             e.end_t = self.clock
             if self.side == "towers":
                 self.tracker.on_death(e, self.clock)
@@ -783,6 +806,7 @@ class Game(AttackMixin, AttackView, UnlockView, GameView):
                 if self.side == "monsters":
                     lost = max(0, min(lost, self.lives_in_reach))
                 self.lives -= lost
+                self.sound("boss_leak" if e.spec.get("fatal") else "leak")
                 self.effects.append(Ring(e.pos, 30, BAD, 0.4))
                 if "loot" in e.spec:
                     self.loot(e, wave_log)
@@ -791,11 +815,14 @@ class Game(AttackMixin, AttackView, UnlockView, GameView):
                     wave_log["lives_lost"] += lost
             else:
                 self.effects.append(Shards(e.pos, e.spec["color"], e.spec["size"], e.spin))
+                self.sound(sfx.death_sound(e.spec))
                 if "sabotage" in e.spec:
                     sabotage(e, self.towers.values(), self.effects)
+                    self.sound("sabotage")
                 if self.side == "towers":
                     reward = e.spec["cost"]  # a monster is worth what it costs to draft
                     self.gold += reward
+                    self.sound("gold")
                     self.popups.append(Popup(e.pos, f"+{reward}", GOLD))
                     self.effects.append(Ring(e.pos, e.spec["size"] + 8, e.spec["color"], 0.3))
                     if wave_log:
@@ -832,8 +859,10 @@ class Game(AttackMixin, AttackView, UnlockView, GameView):
             self.tracker.on_wave_cleared(self.wave_monsters)
             if self.wave_idx < self.level_waves:
                 self.state = "build"
+                self.sound("wave_cleared")
             else:
                 self.state = "level_complete" if self.level_idx < self.last_level_idx else "victory"
+                self.sound("level_complete" if self.state == "level_complete" else "pass_won")
                 self.tracker.on_level_cleared(self.level_idx + 1)
                 if self.state == "victory":
                     self.tracker.on_pass_won(self.finale_on, self.gold)
@@ -853,12 +882,14 @@ class Game(AttackMixin, AttackView, UnlockView, GameView):
             pos = pygame.Vector2(c["pos"]) if c["pos"] else None
             if not c["warned"] and t >= c["t"] - CAST_WARNING:
                 c["warned"] = True
+                self.sound("cast_warning")
                 if pos is not None:
                     self.effects.append(CastWarning(pos, spec["radius"], spec["color"], CAST_WARNING))
                 else:
                     self.popups.append(Popup((MAP_W / 2, 80), f"{spec['name']} incoming!", spec["color"]))
             if t >= c["t"]:
                 cast_ability(spec, pos, self.towers.values(), self.enemies, self.effects, self.card_mods["grounding"])
+                self.sound(f"ability_{c['ability']}")
                 self.log_event("ability", ability=c["ability"], wave=self.wave_idx, pos=c["pos"], replayed=True)
         self.replay = [c for c in self.replay if t < c["t"]]
 
@@ -878,11 +909,13 @@ class Game(AttackMixin, AttackView, UnlockView, GameView):
                     minion.follow(boss)
                 self.register_enemy(minion, f"summon:{boss.kind}")
             self.effects.append(Ring(boss.pos, boss.spec["size"] + (8 if offsets else 30), boss.spec["color"], 0.5))
+            self.sound("boss_summon")
 
     def loot(self, looter, wave_log):
         """A Looter got through: it steals a share of the tower player's gold, or, on the Monsters side,
         brings a multiple of its cost back into the budget."""
         share, budget = looter.spec["loot"]
+        self.sound("loot")
         pos = pygame.Vector2(looter.pos.x, min(looter.pos.y, MAP_H - 30))
         if self.side == "towers":
             stolen = int(self.gold * share)
@@ -909,6 +942,7 @@ class Game(AttackMixin, AttackView, UnlockView, GameView):
             fake.spawn_t = self.clock
             self.enemies.append(fake)
             self.effects.append(Ring(fake.pos, caster.spec["size"] + 6, caster.spec["color"], 0.3))
+            self.sound("decoy")
 
     # ---- input ------------------------------------------------------------
     def handle_event(self, event):
@@ -918,6 +952,8 @@ class Game(AttackMixin, AttackView, UnlockView, GameView):
             return self.toggle_fullscreen()  # anywhere, whatever is on screen
         if event.type == pygame.KEYDOWN and event.key == pygame.K_m:
             return self.cycle_music_volume()  # anywhere too
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_n:
+            return self.cycle_sfx_volume()  # and the sound effects
         handler = {"quit": self.handle_quit_event, "settings": self.handle_settings_event,
                    "side_pick": self.handle_side_pick_event, "rewards": self.handle_reward_event,
                    "choice": self.handle_choice_event, "unlock": self.handle_unlock_event}.get(self.overlay)
@@ -982,14 +1018,7 @@ class Game(AttackMixin, AttackView, UnlockView, GameView):
 
     def handle_settings_event(self, event):
         if event.type == pygame.KEYDOWN:
-            if event.key in SCALE_KEYS:
-                if self.fullscreen:
-                    return  # fullscreen sets its own scale
-                step = -1 if event.key in (pygame.K_LEFT, pygame.K_MINUS) else 1
-                fitting = [k for k in SCALES if self.fits(k)]
-                i = fitting.index(graphics.SCALE) if graphics.SCALE in fitting else 0
-                self.apply_scale(fitting[max(0, min(len(fitting) - 1, i + step))])
-            elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE, pygame.K_ESCAPE, pygame.K_o):
+            if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE, pygame.K_ESCAPE, pygame.K_o):
                 self.close_settings()
             elif event.key == pygame.K_c and self.can_continue:
                 self.continue_game()  # first, so closing the settings doesn't ask for a side
@@ -997,13 +1026,12 @@ class Game(AttackMixin, AttackView, UnlockView, GameView):
             elif event.key == pygame.K_a:
                 self.toggle_ambient()
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            for scale, rect in self.scale_buttons():
-                if rect.collidepoint(event.pos) and self.fits(scale):
-                    self.apply_scale(scale)
             if self.ambient_button().collidepoint(event.pos):
                 self.toggle_ambient()
             elif self.music_button().collidepoint(event.pos):
                 self.cycle_music_volume()
+            elif self.sfx_button().collidepoint(event.pos):
+                self.cycle_sfx_volume()
             elif self.fullscreen_button().collidepoint(event.pos):
                 self.toggle_fullscreen()
             if self.settings_close_button().collidepoint(event.pos):
@@ -1024,6 +1052,19 @@ class Game(AttackMixin, AttackView, UnlockView, GameView):
         if self.soundtrack:
             self.soundtrack.volume = self.music_volume
 
+    def cycle_sfx_volume(self):
+        """N or the settings button: the Sound setting's next volume, Off after 100%. Saved straight away."""
+        self.sfx_volume = sfx.VOLUMES[(sfx.VOLUMES.index(self.sfx_volume) + 1) % len(sfx.VOLUMES)]
+        update_setting("sfx_volume", self.sfx_volume)
+        if self.sounds:
+            self.sounds.volume = self.sfx_volume
+            self.sound("click")  # a sample of the new volume
+
+    def sound(self, name):
+        """Play a sound effect (sfx.json); nothing without a player, as in tests."""
+        if self.sounds and name:
+            self.sounds.play(name)
+
     def update_music(self, dt):
         """Every frame, paused or not: fade the soundtrack toward what's on screen (music.plan)."""
         if self.soundtrack:
@@ -1031,25 +1072,23 @@ class Game(AttackMixin, AttackView, UnlockView, GameView):
 
     def toggle_fullscreen(self):
         """F11 or the settings button: fullscreen, the game as large as the screen allows, or back to the
-        window at its scale. Saved straight away."""
+        window. Saved straight away."""
         if self.fullscreen:
-            fitting = [k for k in SCALES if k <= self.windowed_scale and self.scale_fits(k)]
-            self.set_display(max(fitting or [1.0]), False)
+            self.set_display(self.window_scale(), False)
         else:
-            self.windowed_scale = graphics.SCALE
             self.set_display(None, True)
         update_setting("fullscreen", self.fullscreen)
 
     def close_settings(self):
         self.show_settings = False
+        self.sound("menu_close")
         if self.untouched and not self.side_chosen and self.profile.milestones["monsters_side"]:
             self.picking_side = True  # a new run, and the Monsters side is open: pick one
-        if not self.fullscreen:  # fullscreen picks its own
-            update_setting("scale", graphics.SCALE)
 
     def handle_key(self, key):
         if key == pygame.K_o:
             self.show_settings = True
+            self.sound("menu_open")
         elif key == pygame.K_t:
             self.show_tree = not self.show_tree
         elif self.show_tree:
@@ -1069,11 +1108,13 @@ class Game(AttackMixin, AttackView, UnlockView, GameView):
             self.advance()
         elif key == pygame.K_p:
             self.paused = not self.paused
+            self.sound("pause")
         elif key == pygame.K_f:
             self.cycle_speed(-1 if pygame.key.get_mods() & pygame.KMOD_SHIFT else 1)
         elif key == pygame.K_ESCAPE:
             if not (self.build_kind or self.selected or self.dragging):
                 self.confirm_quit = True
+                self.sound("menu_open")
             self.build_kind = None
             self.selected = None
             self.dragging = None
@@ -1084,6 +1125,7 @@ class Game(AttackMixin, AttackView, UnlockView, GameView):
 
     def cycle_speed(self, step):
         self.speed = SPEEDS[(SPEEDS.index(self.speed) + step) % len(SPEEDS)]
+        self.sound("speed")
 
     def advance(self):
         if self.state == "build":
@@ -1102,6 +1144,8 @@ class Game(AttackMixin, AttackView, UnlockView, GameView):
         elif self.gold >= TOWERS[kind]["cost"] and self.profile.has_tower(kind):
             self.build_kind = kind
             self.selected = None
+        elif self.profile.has_tower(kind):
+            self.sound("no_gold")
 
     def handle_click(self, pos):
         if pos[0] < MAP_W:
@@ -1112,6 +1156,8 @@ class Game(AttackMixin, AttackView, UnlockView, GameView):
             if self.build_kind:
                 if self.can_place(tile):
                     self.place_tower(tile)
+                else:
+                    self.sound("denied")
             else:
                 self.selected = self.dragging = self.towers.get(tile)
             return
@@ -1128,6 +1174,7 @@ class Game(AttackMixin, AttackView, UnlockView, GameView):
             self.cycle_speed(1)
         elif self.pause_button.rect.collidepoint(pos):
             self.paused = not self.paused
+            self.sound("pause")
         elif self.tree_button.rect.collidepoint(pos):
             self.show_tree = True
 
@@ -1150,16 +1197,15 @@ class Game(AttackMixin, AttackView, UnlockView, GameView):
 def main():
     pygame.mixer.pre_init(music.FREQUENCY)  # the stems' rate, so nothing is resampled
     pygame.init()
-    # The saved scale, or the largest one below it that fits this screen.
-    saved = load_settings().get("scale", 1.0)
-    saved = saved if isinstance(saved, (int, float)) else 1.0
-    set_scale(max([k for k in SCALES if k <= saved and Game.scale_fits(k)] or [1.0]))
+    set_scale(Game.window_scale())
     screen = pygame.display.set_mode(window_size())
     pygame.display.set_caption("Tower Defense")
     clock = pygame.time.Clock()
     side = "monsters" if "--monsters" in sys.argv else "towers"  # a debug shortcut until run flow lands
     soundtrack = None if "--no-music" in sys.argv else music.Music()
-    game = Game(screen, log_dir=None if "--no-log" in sys.argv else LOG_DIR, side=side, soundtrack=soundtrack)
+    sounds = None if "--no-sound" in sys.argv else sfx.Sfx()  # after the soundtrack: see sfx.Sfx
+    game = Game(screen, log_dir=None if "--no-log" in sys.argv else LOG_DIR, side=side, soundtrack=soundtrack,
+                sounds=sounds)
     if load_settings().get("fullscreen") is True:
         game.toggle_fullscreen()
     game.show_settings = True  # start on the settings screen; Enter to play
