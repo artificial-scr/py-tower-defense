@@ -36,7 +36,8 @@ without touching the code.
 
 Every level writes a balance log (damage per tower, damage taken per enemy, waves,
 economy, fusions...) to logs/<session>/ as JSON; see balance_log.py. Run with
---no-log to turn this off, and with --monsters to start on the Monsters side.
+--no-log to turn this off, with --no-music for no soundtrack (music.py), and with --monsters to start
+on the Monsters side.
 
 README.md (Project layout) says what each module holds.
 """
@@ -49,6 +50,7 @@ import sys
 import pygame
 
 import graphics
+import music
 from achievements import UNLOCKED_BY, AchievementTracker
 from attack import DEFENDER_LIVES, AttackMixin
 from attack_view import AttackView
@@ -174,15 +176,22 @@ def spec_snapshot():
 
 
 class Game(AttackMixin, AttackView, UnlockView, GameView):
-    def __init__(self, screen, log_dir=LOG_DIR, side="towers"):
-        """`side` is who the player plays: "towers" (build and defend) or "monsters" (attack.py)."""
+    def __init__(self, screen, log_dir=LOG_DIR, side="towers", soundtrack=None):
+        """`side` is who the player plays: "towers" (build and defend) or "monsters" (attack.py). `soundtrack`
+        is the music.Music that plays the levels' music; None (as in tests) plays none."""
         self.screen = screen
+        self.soundtrack = soundtrack
         self.side = side
         self.log_session = LogSession(log_dir) if log_dir else None
         self.log = None
         self.show_settings = False
         self.confirm_quit = False
         self.ambient = load_settings().get("ambient", True) is not False  # the Ambient effects setting
+        self.music_volume = load_settings().get("music_volume", music.DEFAULT_VOLUME)  # the Music setting, in %
+        if self.music_volume not in music.VOLUMES:
+            self.music_volume = music.DEFAULT_VOLUME
+        if soundtrack:
+            soundtrack.volume = self.music_volume
         self.fullscreen = False  # main() turns it on at launch if it was saved on
         self.windowed_scale = graphics.SCALE  # the window's scale, to go back to after fullscreen
         self.save = load_save()
@@ -907,6 +916,8 @@ class Game(AttackMixin, AttackView, UnlockView, GameView):
             event = pygame.event.Event(event.type, {**event.dict, "pos": to_logical(event.pos)})
         if event.type == pygame.KEYDOWN and event.key == pygame.K_F11:
             return self.toggle_fullscreen()  # anywhere, whatever is on screen
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_m:
+            return self.cycle_music_volume()  # anywhere too
         handler = {"quit": self.handle_quit_event, "settings": self.handle_settings_event,
                    "side_pick": self.handle_side_pick_event, "rewards": self.handle_reward_event,
                    "choice": self.handle_choice_event, "unlock": self.handle_unlock_event}.get(self.overlay)
@@ -991,6 +1002,8 @@ class Game(AttackMixin, AttackView, UnlockView, GameView):
                     self.apply_scale(scale)
             if self.ambient_button().collidepoint(event.pos):
                 self.toggle_ambient()
+            elif self.music_button().collidepoint(event.pos):
+                self.cycle_music_volume()
             elif self.fullscreen_button().collidepoint(event.pos):
                 self.toggle_fullscreen()
             if self.settings_close_button().collidepoint(event.pos):
@@ -1003,6 +1016,18 @@ class Game(AttackMixin, AttackView, UnlockView, GameView):
         """The Ambient effects setting: drifting particles and the glow's pulse. Saved straight away."""
         self.ambient = not self.ambient
         update_setting("ambient", self.ambient)
+
+    def cycle_music_volume(self):
+        """M or the settings button: the Music setting's next volume, Off after 100%. Saved straight away."""
+        self.music_volume = music.VOLUMES[(music.VOLUMES.index(self.music_volume) + 1) % len(music.VOLUMES)]
+        update_setting("music_volume", self.music_volume)
+        if self.soundtrack:
+            self.soundtrack.volume = self.music_volume
+
+    def update_music(self, dt):
+        """Every frame, paused or not: fade the soundtrack toward what's on screen (music.plan)."""
+        if self.soundtrack:
+            self.soundtrack.update(dt, music.plan(self))
 
     def toggle_fullscreen(self):
         """F11 or the settings button: fullscreen, the game as large as the screen allows, or back to the
@@ -1123,6 +1148,7 @@ class Game(AttackMixin, AttackView, UnlockView, GameView):
 
 
 def main():
+    pygame.mixer.pre_init(music.FREQUENCY)  # the stems' rate, so nothing is resampled
     pygame.init()
     # The saved scale, or the largest one below it that fits this screen.
     saved = load_settings().get("scale", 1.0)
@@ -1132,7 +1158,8 @@ def main():
     pygame.display.set_caption("Tower Defense")
     clock = pygame.time.Clock()
     side = "monsters" if "--monsters" in sys.argv else "towers"  # a debug shortcut until run flow lands
-    game = Game(screen, log_dir=None if "--no-log" in sys.argv else LOG_DIR, side=side)
+    soundtrack = None if "--no-music" in sys.argv else music.Music()
+    game = Game(screen, log_dir=None if "--no-log" in sys.argv else LOG_DIR, side=side, soundtrack=soundtrack)
     if load_settings().get("fullscreen") is True:
         game.toggle_fullscreen()
     game.show_settings = True  # start on the settings screen; Enter to play
@@ -1146,6 +1173,7 @@ def main():
             game.handle_event(event)
         if not game.frozen:
             game.tick(dt)
+        game.update_music(dt)
         game.draw()
         pygame.display.flip()
 

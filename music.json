@@ -1,0 +1,16 @@
+{
+ "_doc": "Which generated soundtrack seed each level plays (stems from soundtrack-maker, copied into assets/music by tools/sync_music.py). Change a seed, then re-run the sync.",
+ "levels": {
+  "Meadow": {"area": "meadow", "build": 4, "wave": 7},
+  "Desert": {"area": "desert", "build": 6, "wave": 6},
+  "Tundra": {"area": "tundra", "build": 1, "wave": 6},
+  "Volcano": {"area": "volcano", "build": 5, "wave": 8},
+  "Void": {"area": "void", "build": 4, "wave": 7},
+  "Swamp": {"area": "swamp", "build": 8, "wave": 3},
+  "Coral Reef": {"area": "reef", "build": 6, "wave": 2},
+  "Autumn": {"area": "autumn", "build": 1, "wave": 2},
+  "Crystal Caves": {"area": "crystal", "build": 8, "wave": 2},
+  "Crimson Keep": {"area": "keep", "build": 3, "wave": 8}
+ },
+ "boss": {"area": "keep", "seed": 7}
+}

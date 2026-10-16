@@ -1,7 +1,7 @@
 {
  "pygame": "2.5.8",
  "frames": {
-  "1x settings": "9a3b88513a96c3e7",
+  "1x settings": "6792bc0ad88cbd2b",
   "1x banner": "52351a3020666680",
   "1x battle": "a46526b61ada7ef9",
   "1x selected": "2939238811a6b764",
@@ -19,7 +19,7 @@
   "1x boss": "18058e2f3f129837",
   "1x boss_no_alert": "553003a70eec70e9",
   "1x last_level_banner": "29c565a82bb2126d",
-  "1.5x settings": "97e7c80352ef274c",
+  "1.5x settings": "fa81de458feea5e9",
   "1.5x banner": "a056a88ea399b2af",
   "1.5x battle": "5d214731f8d3a46f",
   "1.5x selected": "7e3efe0f5a5b38b7",

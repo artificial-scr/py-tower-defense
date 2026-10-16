@@ -998,11 +998,15 @@ class GameView:
 
     @staticmethod
     def ambient_button():
-        return pygame.Rect(MAP_W / 2 - 265, 402, 260, 40)
+        return pygame.Rect(MAP_W / 2 - 385, 402, 250, 40)
 
     @staticmethod
     def fullscreen_button():
-        return pygame.Rect(MAP_W / 2 + 5, 402, 260, 40)
+        return pygame.Rect(MAP_W / 2 - 125, 402, 250, 40)
+
+    @staticmethod
+    def music_button():
+        return pygame.Rect(MAP_W / 2 + 135, 402, 250, 40)
 
     @staticmethod
     def settings_close_button():
@@ -1035,11 +1039,15 @@ class GameView:
         self.text(self.font_s, hint, TEXT_DIM, (MAP_W / 2, 350), "midtop")
         self.text(self.font_s, "The game is drawn natively at the chosen size; changing it costs one re-render.",
                   TEXT_DIM, (MAP_W / 2, 370), "midtop")
-        for rect, on, label in ((self.ambient_button(), self.ambient, "Ambient effects: {}  [A]"),
-                                (self.fullscreen_button(), self.fullscreen, "Fullscreen: {}  [F11]")):
+        on_off = lambda on: "On" if on else "Off"  # noqa: E731
+        for rect, on, label in (
+                (self.ambient_button(), self.ambient, f"Ambient effects: {on_off(self.ambient)}  [A]"),
+                (self.fullscreen_button(), self.fullscreen, f"Fullscreen: {on_off(self.fullscreen)}  [F11]"),
+                (self.music_button(), self.music_volume > 0,
+                 f"Music: {self.music_volume}%  [M]" if self.music_volume else "Music: Off  [M]")):
             sdraw.rect(self.screen, BUTTON_HOVER if rect.collidepoint(mouse) else CARD_HOVER, rect, border_radius=8)
             sdraw.rect(self.screen, GOLD if on else PANEL_LINE, rect, 2 if on else 1, border_radius=8)
-            self.text(self.font, label.format("On" if on else "Off"), TEXT if on else TEXT_DIM, rect.center, "center")
+            self.text(self.font, label, TEXT if on else TEXT_DIM, rect.center, "center")
         b = self.settings_close_button()
         sdraw.rect(self.screen, BUTTON_HOVER if b.collidepoint(mouse) else BUTTON, b, border_radius=8)
         sdraw.rect(self.screen, self.theme.accent, b, 3, border_radius=8)

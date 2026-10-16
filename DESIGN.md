@@ -258,6 +258,7 @@ There are two files, both git-ignored:
 | `main.py` | `Game` keeps the shared loop and the Towers side, picks the side per pass, runs passes and run flow |
 | `graphics.py`, `attack_view.py` | Shared drawing / Monsters-side panel, queue strip, ability bar, card screen, run-over and side-pick screens |
 | `balance_log.py` | Logs record `side` and `pass`. Monsters-side logs add the draft and ability events |
+| `music.py`, `music.json` | The soundtrack. `plan(game)` says which cue should play, how intense and whether ducked; `Music` (built in `main()`, never in tests) fades toward that every frame in real time. Stems are decoded on a thread when a level loads |
 
 ## 8. Build plan
 

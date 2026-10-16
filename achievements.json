@@ -43,7 +43,7 @@
       {"desc": "A Rifle kills a Tank or an Elite", "condition": "kills", "by": ["rifle"],
        "enemy": ["tank", "elite"], "scope": "ever", "target": 1}]},
     "bombard": {"name": "Direct Hit", "unlocks": "bombard", "goals": [
-      {"desc": "One Mortar kills 4 monsters at once", "condition": "multi_kill", "by": "mortar", "target": 4}]},
+      {"desc": "One Mortar kills 2 monsters at once", "condition": "multi_kill", "by": "mortar", "target": 20}]},
     "incinerator": {"name": "Scorched Earth", "unlocks": "incinerator", "goals": [
       {"desc": "Mortars kill 50 monsters in one level", "condition": "kills", "by": ["mortar"], "scope": "level",
        "target": 50}]},

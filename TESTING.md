@@ -9,6 +9,26 @@ uv run pytest
 
 Plain `python3 -m pytest` only works if pytest and pygame-ce are installed in that interpreter.
 
+## Running only what a change touches
+
+`tools/select_tests.py` looks at what changed (with git) and picks the test files that cover it, so a
+soundtrack change doesn't rerun the rendering snapshots or the long balance playthroughs:
+
+```bash
+uv run tools/select_tests.py                  # show the pick for what changed since the last commit
+uv run tools/select_tests.py --run            # ... and run it
+uv run tools/select_tests.py --base main --run   # include what was committed since the branch left main
+uv run tools/select_tests.py music.py --run   # pick for these files instead of asking git
+uv run tools/select_tests.py --run -- -x -q   # pytest's own options go after --
+```
+
+The map from files to tests is `RULES` at the top of the script. A changed test file runs itself; a
+file no rule covers runs every test (as do `main.py`, `tests/helpers.py`, `tests/conftest.py` and the
+project files), so the pick errs on the side of running more. The playthroughs (`slow`) only run for
+changes to the rules and balance: towers, monsters, levels, entities, the Monsters side. When you add a
+module or data file, give it a rule: `test_select_tests.py` fails until every file has one. Before a
+commit, run the whole suite anyway.
+
 ## Running a subset
 
 ```bash
@@ -37,6 +57,8 @@ uv run pytest --durations=10             # list the slowest tests
 | `test_tower_unlocks.py` | `achievements.json`, the owned towers in the profile, locked buying, fusing and branches, discoveries, each achievement condition, the unlock card |
 | `test_balance_log.py` | The per-level balance logs: file names, uniqueness, and cross-checks that their numbers add up |
 | `test_rendering.py` | Drawing: every screen at every display scale, text staying inside the map and panel, map decoration, tower sprites, every creature's animation frames, shots and hit effects, ambient particles, the portal and gate, plus pixel snapshots |
+| `test_music.py` | The soundtrack: which cue plays in each state, the intensity rules, the player's fades and crossfades (on tiny generated stems), the Music setting, and that every level's stems are in `assets/music` |
+| `test_select_tests.py` | `tools/select_tests.py`: which tests a change picks, and that every file has a rule |
 | `test_playthrough.py` | Long simulations with bot players, on both sides (marked `slow`) |
 
 Most tests drive the game the way a player would, by sending pygame events to `Game`, and the
@@ -51,6 +73,8 @@ your machine:
   run without a display (over SSH, in CI).
 - **No writes to the repo**: `settings.json`, `savegame.json`, `profile.json` and the `logs/`
   folder are redirected to a temporary directory per test.
+- **No music**: a `Game` built in a test has no soundtrack (`main()` makes one). `test_launch.py`
+  runs `main()` with the real player on an empty music folder, so nothing is decoded.
 - **Starter pack already taken**: the temporary `profile.json` starts with the Monsters side's
   one-time starter cards marked as picked, so they don't cover every Monsters-side test. Tests of
   the starter pack overwrite the profile.

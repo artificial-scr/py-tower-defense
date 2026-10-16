@@ -1,5 +1,6 @@
 """main(): the launch scale and saved settings, and quitting through the event loop."""
 
+import functools
 import glob
 import json
 import os
@@ -9,7 +10,14 @@ import pytest
 
 import graphics
 import main
+import music
 from helpers import key
+
+
+@pytest.fixture(autouse=True)
+def no_stems(monkeypatch, tmp_path):
+    """main() plays the soundtrack from an empty folder: the real player, nothing to decode."""
+    monkeypatch.setattr(main.music, "Music", functools.partial(music.Music, folder=str(tmp_path / "music")))
 
 
 def run_main(monkeypatch, events, argv=("main.py", "--no-log")):
@@ -103,3 +111,16 @@ def test_launches_fullscreen_if_saved(monkeypatch):
         main.main()
     pygame.init()
     assert seen == [True]
+
+
+@pytest.mark.parametrize("argv, plays", [(["main.py", "--no-log"], True),
+                                         (["main.py", "--no-log", "--no-music"], False)])
+def test_launch_starts_the_soundtrack_unless_told_not_to(monkeypatch, argv, plays):
+    seen = []
+    monkeypatch.setattr(main.Game, "draw", lambda self: seen.append(self.soundtrack) or pygame.event.post(
+        pygame.event.Event(pygame.QUIT)))
+    monkeypatch.setattr("sys.argv", argv)
+    with pytest.raises(SystemExit):
+        main.main()
+    pygame.init()
+    assert (seen[0] is not None) == plays
