@@ -2,9 +2,7 @@
 .serena/
 __pycache__/
 logs/
-settings.json
-savegame.json
-profile.json
+user/
 *.bak
 tools/sync_music.py
 tools/sync_sfx.py

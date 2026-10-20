@@ -19,8 +19,8 @@ tower records) then Towers again (against your own monster records), and so on.
 Losing a level ends the run. On the Monsters side the defender's lives last the
 whole pass: each level has to take at least one, and the pass is won (early, if
 need be) when the last one goes. Records, unlock cards and milestones are permanent
-(progress.Profile, in profile.json); the run in progress is saved to
-savegame.json at the start of every level.
+(progress.Profile, in user/profile.json); the run in progress is saved to
+user/savegame.json at the start of every level.
 
 A new profile owns only the Gun: the other towers are unlocked by Towers-side achievements
 (achievements.py) or, for the first two tier 4 towers made, by fusing them.
@@ -58,12 +58,13 @@ from balance_log import LevelLog, LogSession
 from effects import CastWarning, GoldBurst, GooSpray, Popup, Ring, Shards, Sparks
 from entities import Enemy, Tower, cast_ability, heal_auras, sabotage, speed_auras
 from graphics import BAD, GOLD, MAP_H, MAP_W, TILE, GameView, mouse_pos, set_scale, to_logical, window_size
-from levels import (BOSS_LEVELS, COLS, ENEMY_TYPES, LEVELS, ROWS, START_GOLD, START_LIVES, WAVES_PER_LEVEL,
-                    build_path_cells, make_wave, tile_center, wave_value)
-from monsters import ABILITIES, REWARDS, UPGRADES
+from levels import (BOSS_LEVELS, COLS, LEVELS, ROWS, START_GOLD, START_LIVES, WAVES_PER_LEVEL, build_path_cells,
+                    tile_center)
+from monsters import ABILITIES, ENEMY_TYPES, REWARDS, UPGRADES
 from progress import UNLOCKS, Profile, comp_snapshot, stronger
 from towers import TOWER_ORDER, TOWERS, fusion_options
 from unlock_view import UnlockView
+from waves import Wave, make_wave, scout, wave_value
 
 # --------------------------------------------------------------------------
 # Rules (the rest are in levels.py and towers.py, the screen layout in graphics.py)
@@ -76,9 +77,10 @@ FINALE_BOSS = "warden"  # joins the last wave of a Towers pass that ends early (
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 LOG_DIR = os.path.join(HERE, "logs")
-SETTINGS_FILE = os.path.join(HERE, "settings.json")
-SAVE_FILE = os.path.join(HERE, "savegame.json")
-PROFILE_FILE = os.path.join(HERE, "profile.json")
+USER_DIR = os.path.join(HERE, "user")  # everything the game keeps for this player (git-ignored)
+SETTINGS_FILE = os.path.join(USER_DIR, "settings.json")
+SAVE_FILE = os.path.join(USER_DIR, "savegame.json")
+PROFILE_FILE = os.path.join(USER_DIR, "profile.json")
 
 
 # --------------------------------------------------------------------------
@@ -95,6 +97,7 @@ def load_settings():
 
 def save_settings(settings):
     try:
+        os.makedirs(os.path.dirname(SETTINGS_FILE), exist_ok=True)
         with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
             json.dump(settings, f, indent=1)
     except OSError as err:
@@ -147,6 +150,7 @@ def load_save():
 
 def write_save(save):
     try:
+        os.makedirs(os.path.dirname(SAVE_FILE), exist_ok=True)
         tmp = SAVE_FILE + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump({**save, "layout": [{**e, "tile": list(e["tile"])} for e in save["layout"]]}, f, indent=1)
@@ -343,6 +347,10 @@ class Game(AttackMixin, AttackView, UnlockView, GameView):
         self.lives_at_start = self.lives
         self.pace_bonus = 0.0  # Monsters side: set by setup_attack_level
         self.wave_monsters = 0  # monsters spawned in the current wave, splits and summons included
+        self.wave_spawned = 0  # monsters out of the spawn queue in the current wave
+        self.wave_pauses = {}  # Towers side: wave_spawned -> seconds before the next spawn (between packs)
+        self.wave_counter = None  # Towers side: the current wave's counters (waves.add_counters)
+        self.scout_report = None  # Towers side: what the scouts saw after the last wave (waves.scout)
         self.tracker.start_level()
         if self.log_session:
             path_length = sum(a.distance_to(b) for a, b in zip(self.path_pts, self.path_pts[1:]))
@@ -593,29 +601,54 @@ class Game(AttackMixin, AttackView, UnlockView, GameView):
             return self.send_wave()
         if self.state != "build" or self.wave_idx >= self.level_waves:
             return
-        recorded = self.profile.monster_record(self.level_idx + 1).get(self.wave_idx + 1)
+        recorded, wave = self.next_wave()
+        self.spawn_queue, self.hp_mult, self.wave_pauses, self.wave_counter = (list(wave.kinds), wave.hp_mult,
+                                                                              dict(wave.pauses), wave.counter)
         if recorded:  # the player's own strongest wave from the Monsters side, abilities included
-            self.spawn_queue = [k for k in recorded["queue"] if k in ENEMY_TYPES]
-            self.hp_mult = recorded["hp_mult"]
             self.wave_mods = dict(recorded["mods"])
             self.replay = sorted((dict(c, warned=False) for c in recorded["casts"] if c["ability"] in ABILITIES),
                                  key=lambda c: c["t"])
             self.popups.append(Popup((MAP_W / 2, MAP_H / 2 - 40), "Your monsters' record attacks!", BAD))
         else:
-            self.spawn_queue, self.hp_mult = make_wave(self.level_idx, self.wave_idx)
             self.wave_mods, self.replay = {}, []
-        if self.is_finale_level and self.wave_idx + 1 == self.level_waves:
-            # the wave the Monsters pass was won on, and the Warden with it
-            self.spawn_queue = [k for k in self.spawn_queue if "boss" not in ENEMY_TYPES[k]] + [FINALE_BOSS]
         self.wave_mods["armor"] = self.card_mods["armor"]
         self.wave_idx += 1
         self.wave_monsters = 0
+        self.wave_spawned = 0
+        for t in self.towers.values():
+            t.wave_damage = 0.0
         self.spawn_timer = 0.0
         self.wave_started_at = self.clock
         self.state = "wave"
         self.sound("wave_start")
         if self.log:
-            self.log.start_wave(self.clock, self.wave_idx, self.hp_mult, self.spawn_queue, self.lives, self.gold)
+            self.log.start_wave(self.clock, self.wave_idx, self.hp_mult, self.spawn_queue, self.lives, self.gold,
+                                self.scout_report, self.wave_counter)
+
+    def next_wave(self):
+        """The Towers side's next wave, as the build phase previews it and Send starts it: (the monster record
+        it replays or None, the Wave). Without a record it's the generated wave, with counters to what the
+        scouts saw after the last wave."""
+        recorded = self.profile.monster_record(self.level_idx + 1).get(self.wave_idx + 1)
+        if recorded:
+            wave = Wave([k for k in recorded["queue"] if k in ENEMY_TYPES], recorded["hp_mult"])
+        else:
+            wave = make_wave(self.level_idx, self.wave_idx, self.scout_report)
+        if self.is_finale_level and self.wave_idx + 1 == self.level_waves:
+            # the wave the Monsters pass was won on, and the Warden with it
+            wave.kinds = [k for k in wave.kinds if "boss" not in ENEMY_TYPES[k]] + [FINALE_BOSS]
+        return recorded, wave
+
+    def scout_towers(self):
+        """After a wave: what the scouts report for the next one (waves.scout), and an alert if the next
+        wave counters it."""
+        towers = [(t.kind, t.spent, tuple(tile_center(*tile)), t.wave_damage) for tile, t in self.towers.items()]
+        self.scout_report = scout(towers, self.gold, [tuple(tile_center(*c)) for c in self.path_cells],
+                                  self.scout_report)
+        recorded, wave = self.next_wave()
+        if wave.counter and not recorded:
+            self.popups.append(Popup((MAP_W / 2, MAP_H / 2 + 40),
+                                     f"Scouts saw your {wave.counter['reasons'][0]}!", BAD))
 
     def is_free(self, tile):
         tx, ty = tile
@@ -762,7 +795,8 @@ class Game(AttackMixin, AttackView, UnlockView, GameView):
             if self.spawn_timer <= 0:
                 kind = self.spawn_queue.pop(0)
                 self.register_enemy(Enemy(kind, self.path_pts, self.hp_mult, self.wave_mods), "wave")
-                self.spawn_timer = ENEMY_TYPES[kind]["gap"]
+                self.wave_spawned += 1
+                self.spawn_timer = self.wave_pauses.get(self.wave_spawned, ENEMY_TYPES[kind]["gap"])
                 self.sound("spawn")
                 if "boss" in ENEMY_TYPES[kind]:
                     self.boss_alert = 3.0
@@ -860,6 +894,7 @@ class Game(AttackMixin, AttackView, UnlockView, GameView):
             if self.wave_idx < self.level_waves:
                 self.state = "build"
                 self.sound("wave_cleared")
+                self.scout_towers()
             else:
                 self.state = "level_complete" if self.level_idx < self.last_level_idx else "victory"
                 self.sound("level_complete" if self.state == "level_complete" else "pass_won")

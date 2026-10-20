@@ -19,7 +19,7 @@ ACHIEVEMENTS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ac
 
 # condition -> (fields it needs, fields it may have); see the comment at the top of achievements.json
 CONDITIONS = {
-    "towers_on_map": (("kind",), ()),
+    "towers_on_map": ((), ("kind",)),
     "in_range": ((), ()),
     "slowed_at_once": ((), ()),
     "multi_kill": (("by",), ("kills", "scope")),
@@ -235,7 +235,7 @@ class AchievementTracker:
             counts[t.kind] += 1
             self.lines_used.update(TOWER_LINES[t.kind])
         for key, goal in self.open_goals("towers_on_map"):
-            self.reach(key, goal, counts[goal["kind"]])
+            self.reach(key, goal, counts[goal["kind"]] if "kind" in goal else len(towers))
         # the kills one tower made in a single update (burns left out) all came from one shot. With `kills`,
         # every such shot of at least that many counts once; without, the most kills in one shot is the peak.
         for key, goal in self.open_goals("multi_kill"):

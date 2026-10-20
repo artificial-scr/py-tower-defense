@@ -1,12 +1,10 @@
 """Helpers for driving the game the way a player would (events, drags) or directly."""
 
-import random
-
 import pygame
 
 from entities import Enemy, Tower
 from levels import COLS, ROWS, tile_center
-from towers import TOWER_ORDER, TOWERS
+from towers import TOWER_ORDER
 
 E = pygame.event.Event
 # Scales the game is drawn at in tests: the window is 200%, or smaller on a small desktop, and fullscreen
@@ -81,59 +79,6 @@ def ranked_spots(game):
             res.append((sum(1 for p in game.path_cells if tile_center(*p).distance_to(c) <= 110), (tx, ty)))
     res.sort(reverse=True)
     return [t for _, t in res]
-
-
-def bot_play(game, until_level=None, max_frames=3_000_000, move_and_sell=False, buy=("gun", "cannon", "frost", "gun")):
-    """A simple player: buy towers on the best spots (cycling through `buy`), fuse whatever can fuse, pick
-    branches at random.
-
-    Stops when the game is won or lost, or when level `until_level` (1-based) is reached.
-    With move_and_sell, it also moves one tower mid-wave and sells one per level.
-    """
-    bought, spots, sold = 0, None, False
-    for frame in range(max_frames):
-        if game.state in ("game_over", "victory"):
-            return
-        if game.state == "level_complete":
-            game.advance()
-            bought, spots, sold = 0, None, False
-            if until_level and game.level_idx + 1 >= until_level:
-                return
-            continue
-        spots = spots or ranked_spots(game)
-        if game.choice:
-            game.choose(random.randrange(2))
-            continue
-        k = buy[bought % len(buy)]
-        if game.gold >= TOWERS[k]["cost"]:
-            free = [s for s in spots if s not in game.towers]
-            if free:
-                game.build_kind = k
-                game.handle_event(mouse_down(px(free[0])))
-                game.build_kind = None
-                bought += 1
-        if frame % 10 == 0:
-            rank = {t: i for i, t in enumerate(spots)}
-            towers = sorted(game.towers.values(), key=lambda t: rank[t.tile])
-            for i, a in enumerate(towers):
-                b = next((b for b in towers[i + 1:] if b.fusion_options(a)), None)
-                if b:
-                    game.dragging = b
-                    game.drop_dragged(px(a.tile))
-                    break
-        if move_and_sell and frame == 3000 and game.towers:
-            t = next(iter(game.towers.values()))
-            free = [s for s in spots if s not in game.towers]
-            game.dragging = t
-            game.drop_dragged(px(free[0]))
-        if move_and_sell and frame == 3500 and not sold and len(game.towers) > 1:
-            game.selected = list(game.towers.values())[-1]
-            game.sell_selected()
-            sold = True
-        if game.state == "build":
-            game.start_wave()
-        game.update(1 / 60)
-    raise AssertionError(f"bot still playing after {max_frames} frames")
 
 
 def run_wave(game, max_frames=200_000):

@@ -5,7 +5,7 @@
     "are unlocked by the fusion itself, so their achievements are never needed. Only the Towers side counts.",
     "Each achievement: name, the tower it unlocks, and goals (one, or two when either one will do). Each goal:",
     "desc (what the player reads), condition, target, plus what the condition needs:",
-    "  towers_on_map    kind: that many towers of `kind` on the map at once",
+    "  towers_on_map    optional kind: that many towers (of `kind`) on the map at once",
     "  in_range         that many monsters inside one tower's range at once",
     "  slowed_at_once   that many monsters slowed at once",
     "  multi_kill       by: one tower of kind `by` kills that many monsters at once (in the same instant); or, with",
@@ -25,15 +25,15 @@
   "discoveries": 2,
   "achievements": {
     "rifle": {"name": "Firing Line", "unlocks": "rifle", "goals": [
-      {"desc": "Have 4 Guns on the map at once", "condition": "towers_on_map", "kind": "gun", "target": 4}]},
-    "cannon": {"name": "Crowd Trouble", "unlocks": "cannon", "goals": [
-      {"desc": "Have 15 monsters inside one tower's range at once", "condition": "in_range", "target": 15}]},
+      {"desc": "Cannons kill 10 monsters", "condition": "kills", "by": ["cannon"], "scope": "ever", "target": 10}]},
+    "cannon": {"name": "First Blood", "unlocks": "cannon", "goals": [
+      {"desc": "Clear your first wave", "condition": "wave_cleared", "min_monsters": 1, "target": 1}]},
     "frost": {"name": "Too Fast", "unlocks": "frost", "goals": [
       {"desc": "Let a Fast monster through", "condition": "leaks", "enemy": ["fast"], "scope": "ever", "target": 1},
       {"desc": "Kill 40 Fast monsters", "condition": "kills", "enemy": ["fast"], "scope": "ever", "target": 40}]},
 
     "mortar": {"name": "Heavy Artillery", "unlocks": "mortar", "goals": [
-      {"desc": "Have 3 Cannons on the map at once", "condition": "towers_on_map", "kind": "cannon", "target": 3}]},
+      {"desc": "Have 7 towers on the map at once", "condition": "towers_on_map", "target": 7}]},
     "chiller": {"name": "Cold Front", "unlocks": "chiller", "goals": [
       {"desc": "Have 3 Frosts on the map at once", "condition": "towers_on_map", "kind": "frost", "target": 3}]},
 

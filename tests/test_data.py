@@ -7,7 +7,7 @@ import pytest
 
 import towers
 from levels import (ALL_BOSS_LEVELS, ALL_LEVELS, BOSS_LEVELS, COLS, LEVEL_COUNT, LEVELS, ROWS, THEMES,
-                    build_path_cells, make_wave)
+                    build_path_cells)
 from towers import CROSS, EVOLVE, LINES, TOWER_ORDER, TOWERS, fusion_options, load_evolution, load_towers
 
 
@@ -174,19 +174,3 @@ def test_level_path(n):
         for j in range(i + 2, len(segments)):
             gap = min((abs(a[0] - b[0]) + abs(a[1] - b[1]) for a in segments[i] for b in segments[j]), default=99)
             assert gap >= 2, f"{theme.name}: segments {i} and {j} touch"
-
-
-@pytest.mark.parametrize("level_idx", range(LEVEL_COUNT))
-def test_wave_composition(level_idx):
-    """Only the last wave of a level has its elite or boss, and only boss levels have bosses."""
-    for wave_idx in range(4):
-        kinds, _ = make_wave(level_idx, wave_idx)
-        assert not {"elite", "warden", "overlord"} & set(kinds)
-    kinds, _ = make_wave(level_idx, 4)
-    assert kinds[-1] == BOSS_LEVELS.get(level_idx + 1, "elite")
-    assert kinds.count("warden") + kinds.count("overlord") + kinds.count("elite") == 1
-
-
-def test_waves_get_harder():
-    mults = [make_wave(level, wave)[1] for level in range(LEVEL_COUNT) for wave in range(5)]
-    assert mults == sorted(mults) and mults[0] == 1

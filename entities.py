@@ -86,6 +86,7 @@ class Enemy:
         self.slowed_seconds = 0.0
         self.burning_seconds = 0.0
         self.overkill = 0.0
+        self.healed = 0.0  # hp healers gave back (balance log: damage dealt = damage taken + healed)
         self.damage_from = defaultdict(float)
         self.killed_by = None
 
@@ -223,6 +224,8 @@ class Enemy:
     def apply_slow(self, factor, duration):
         factor = 1 - (1 - factor) * (1 - self.mods["thaw"])
         factor = max(factor, self.spec.get("slow_floor", 0))
+        if factor >= 1:  # immune (a Juggernaut): not slowed at all, so vs_slowed bonuses don't apply either
+            return
         self.slow_factor = min(self.slow_factor, factor)
         self.slow_timer = max(self.slow_timer, duration)
         self.rebound_timer = 0.0  # a new slow ends a Thawling's sprint
@@ -249,7 +252,8 @@ class Enemy:
 
     def heal(self, amount):
         if self.alive:
-            self.hp = min(self.max_hp, self.hp + amount)
+            before, self.hp = self.hp, min(self.max_hp, self.hp + amount)
+            self.healed += self.hp - before
 
     def split(self):
         """The monsters a Splitter breaks into when it's killed, spread a little along the path."""
@@ -406,6 +410,7 @@ class Tower:
         self.spent = TOWERS[kind]["cost"] if spent is None else spent
         self.uid = next(TOWER_IDS)
         self.stats = defaultdict(new_kind_stats)  # tower kind -> stats while it was that kind
+        self.wave_damage = 0.0  # damage dealt in the current (or last) wave, for the scouts (waves.scout)
         self.status = "active"
         self.history = []
         self.disabled_timer = 0.0  # EMP: no firing while it runs
@@ -416,6 +421,7 @@ class Tower:
     def record_hit(self, kind, enemy, raw, effective, how, bonus_frac):
         s = self.stats[kind]
         s["damage"] += effective
+        self.wave_damage += effective
         s["overkill"] += raw - effective
         s["vs_slowed_bonus"] += effective * bonus_frac
         s["by_source"][how] += effective

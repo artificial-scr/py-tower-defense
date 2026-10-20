@@ -12,16 +12,17 @@ script); GameView reads the game state through `self`.
 
 import math
 import os
+from collections import Counter
 
 import pygame
 
-from levels import COLS, ENEMY_TYPES, LEVELS, ROWS, TILE, WAVES_PER_LEVEL, tile_center
-from monsters import ABILITIES, REWARDS, WARD_BREAK
+from levels import COLS, LEVELS, ROWS, TILE, WAVES_PER_LEVEL, tile_center
+from monsters import ABILITIES, ENEMY_TYPES, REWARDS, WARD_BREAK
 from progress import UNLOCKS
 import ambience
 import sprites
 import terrain
-from sprites import mix, regular_polygon, shade
+from sprites import mix, regular_polygon
 from towers import CROSS, EVOLVE, LINES, TOWER_ORDER, TOWERS
 
 # --------------------------------------------------------------------------
@@ -54,6 +55,7 @@ CARD = (38, 38, 48)  # cards and option tiles on the overlay screens
 CARD_HOVER = (55, 55, 68)
 TIER_RIM = {1: (78, 80, 94), 2: (176, 116, 64), 3: (205, 205, 220), 4: GOLD}
 TIER_COLORS = {"weak": TEXT_DIM, "normal": TEXT, "strong": GOLD}  # record tiers on the reward screen
+PREVIEW_KINDS = 4  # monster kinds the wave preview has room for (more show as a "+n")
 
 
 def wrap(text, width):
@@ -1122,11 +1124,36 @@ class GameView:
                 self.draw_button(self.rebuild_button, f"Rebuild {n} tower{'s' * (n > 1)}  [B]", affordable,
                                  active=affordable and self.state == "build" and self.wave_idx == 0)
 
-        self.text(self.font_s, "Enemies", TEXT_DIM, (x, 526), "midleft")
-        for i, kind in enumerate(k for k, s in ENEMY_TYPES.items() if s["draft"] == "starter"):
-            draw_enemy_icon(screen, kind, pygame.Vector2(x + 74 + i * 30, 526), 8)
-
+        self.draw_wave_preview(x)
         self.draw_panel_footer()
+
+    def draw_wave_preview(self, x):
+        """The next wave's monsters in the build phase (those still to come during a wave), most first, and
+        what the scouts countered."""
+        if self.state == "build":
+            _, wave = self.next_wave()
+            label, kinds, counter = "Next", wave.kinds, wave.counter
+        elif self.state == "wave":
+            label, kinds, counter = "Coming", self.spawn_queue, self.wave_counter
+        else:
+            return
+        counts = sorted(Counter(kinds).items(), key=lambda kc: -kc[1])
+        self.text(self.font_s, label, TEXT_DIM, (x, 516), "midleft")
+        left = x + self.font_s.size(label)[0] / SCALE + 14
+        shown = counts if len(counts) <= PREVIEW_KINDS else counts[:PREVIEW_KINDS - 1]
+        for i, (kind, n) in enumerate(shown):
+            cx = left + i * 38
+            draw_enemy_icon(self.screen, kind, pygame.Vector2(cx, 516), 7)
+            self.text(self.font_s, str(n), TEXT, (cx + 10, 516), "midleft")
+        if len(shown) < len(counts):
+            more = sum(n for _, n in counts[len(shown):])
+            self.text(self.font_s, f"+{more}", TEXT_DIM, (left + len(shown) * 38 - 6, 516), "midleft")
+        if counter:
+            reasons = counter["reasons"]
+            note = "Scouts: " + ", ".join(reasons)
+            if self.font_s.size(note)[0] > (PANEL_W - 24) * SCALE:
+                note = f"Scouts: {reasons[0]} +{len(reasons) - 1}"
+            self.text(self.font_s, note, BAD, (x, 533), "midleft")
 
     def draw_panel_header(self):
         """Panel background and the level header in the level's accent color."""

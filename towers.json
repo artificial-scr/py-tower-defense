@@ -253,7 +253,7 @@
     "lance": {
       "name": "Frost Lance",
       "tier": 4,
-      "desc": "Slows, then 3x damage",
+      "desc": "Slows, then 2x damage",
       "range": 220,
       "damage": 180,
       "rate": 0.8,
@@ -261,7 +261,7 @@
       "instant": true,
       "slow": 0.5,
       "slow_time": 1.5,
-      "vs_slowed": 3
+      "vs_slowed": 2
     },
     "avalanche": {
       "name": "Avalanche",

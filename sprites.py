@@ -481,7 +481,6 @@ def paint_saboteur(cv, size, color, inner, f, p):
     """Saboteur: a sneaking creature on quick feet, a hazard-striped charge strapped to its back and an
     antenna on the charge (graphics.py blinks its light)."""
     s = f.rotate(90)
-    a = f.as_polar()[1]
     _feet(cv, color, f, p, size, spread=0.8, foot=0.32, stride=0.5)
     sphere(cv, color, (0, 0), size, 1.5)
     pack = -f * size * 0.42

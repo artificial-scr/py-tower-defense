@@ -11,7 +11,6 @@ spec = importlib.util.spec_from_file_location("select_tests", os.path.join(HERE,
 select_tests = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(select_tests)
 ALL = select_tests.ALL
-RUNTIME_FILES = {"settings.json", "savegame.json", "profile.json"}  # written by the game, ignored by git
 
 
 def picked(*paths):
@@ -26,6 +25,7 @@ def test_a_soundtrack_change_runs_only_the_music_tests():
 def test_balance_changes_run_the_playthroughs_and_drawing_changes_dont():
     assert "tests/test_playthrough.py" in picked("towers.json")
     assert "tests/test_playthrough.py" in picked("monsters.json")
+    assert "tests/test_progression.py" in picked("towers.json") and "tests/test_progression.py" in picked("achievements.json")
     drawing = picked("sprites.py", "terrain.py")
     assert "tests/test_rendering.py" in drawing and "tests/test_playthrough.py" not in drawing
 
@@ -51,7 +51,7 @@ def test_every_file_of_the_game_has_a_rule():
     files = [os.path.relpath(f, HERE) for pattern in ("*.py", "*.json", "*.toml", "tests/*.py", "tests/*.json",
                                                       "tools/*.py", "assets/*/*")
              for f in glob.glob(os.path.join(HERE, pattern))]
-    missing = [f for f in files if f not in RUNTIME_FILES and not select_tests.has_rule(f)]
+    missing = [f for f in files if not select_tests.has_rule(f)]
     assert not missing, f"add these to RULES in tools/select_tests.py: {missing}"
 
 

@@ -24,9 +24,10 @@ import pygame
 from effects import Popup
 from entities import Tower, cast_ability
 from graphics import MAP_W, TILE
-from levels import BOSS_LEVELS, LEVELS, WAVES_PER_LEVEL, wave_hp_mult, wave_value
+from levels import BOSS_LEVELS, LEVELS, WAVES_PER_LEVEL, wave_hp_mult
 from monsters import ABILITIES, BUDGET, ENEMY_TYPES, REWARDS, UPGRADES
 from towers import NO_TOWER_MODS
+from waves import wave_value
 
 DEFENDER_LIVES = 20  # for the whole pass
 QUEUE_MAX = 150  # drafted monsters per wave; keeps very long waves (and frame times) in check

@@ -1,9 +1,9 @@
-"""Long simulations with a simple bot player. Skip them with: uv run pytest -m "not slow".
+"""Long simulations with the bot player (bot.py). Skip them with: uv run pytest -m "not slow".
 
-These double as balance checks. Since the early waves got their hp boost (levels.EARLY_HP) the bot
-no longer wins: with its mixed buys (Gun, Cannon, Frost) it clears level 1 and falls on levels 2-4, and
-buying only Guns, the strongest early line, takes it furthest (level 3-6, seeds 0-5). On the Monsters
-side, scripted drafts against the bot's own tower records check that the first levels stay winnable.
+These double as balance checks (2026-10-20, seeds 0-5): the planning bot (profile damage) wins the
+Towers pass on 5 seeds of 6, with Railguns and Absolute Zeros from level 2 on; the bot before the
+planner (profile cycle) and the planner kept to tiers 1-2 or to the Gun line fall on level 2. On the
+Monsters side, scripted drafts against the bot's own tower records check that the first levels stay winnable.
 """
 
 import random
@@ -11,26 +11,35 @@ import random
 import pytest
 
 import main
-from helpers import bot_play, free_tiles, put, scripted_attack
+from bot import bot_play
+from helpers import free_tiles, put, scripted_attack
 from towers import TOWERS
 
 pytestmark = pytest.mark.slow
 
 
+def test_the_planning_bot_wins_the_pass(game):
+    """Seed 0: if it stops winning, the game got harder (or the planner worse)."""
+    random.seed(0)
+    stats = bot_play(game)
+    assert game.state == "victory" and len(stats["levels"]) == len(main.LEVELS)
+
+
 @pytest.mark.parametrize("seed", range(3))
-def test_mixed_bot_clears_level_1_then_falls(game, seed):
-    """If it gets past level 4 the early game got easier; if it loses level 1, much harder."""
+def test_the_bot_before_the_planner_clears_level_1_then_falls(game, seed):
+    """Buying Gun, Cannon, Frost in turn: if it gets past level 3 the early game got easier; if it loses
+    level 1, much harder."""
     random.seed(seed)
-    bot_play(game, until_level=10)
-    assert game.state == "game_over" and 1 <= game.level_idx <= 3
+    bot_play(game, profile="cycle")
+    assert game.state == "game_over" and 1 <= game.level_idx <= 2
 
 
-def test_gun_bot_goes_furthest(game):
-    """Seed 1 buying only Guns reaches level 5 (Berserkers join the waves from level 4); if it falls before
-    level 5, the game got harder (or the bot worse)."""
-    random.seed(1)
-    bot_play(game, buy=("gun",))
-    assert game.state == "game_over" and game.level_idx >= 4
+@pytest.mark.parametrize("profile, lines", [("wide", None), ("damage", ("gun",))])
+def test_without_finals_or_with_one_line_the_planner_falls_early(game, profile, lines):
+    """Tiers 1-2 only, or the Gun line alone, isn't enough past level 2."""
+    random.seed(0)
+    bot_play(game, profile=profile, lines=lines)
+    assert game.state == "game_over" and game.level_idx <= 2
 
 
 def test_stress_at_10x(game):
@@ -53,7 +62,9 @@ def test_stress_at_10x(game):
 # ---- the Monsters side -------------------------------------------------------------------
 @pytest.fixture
 def records(game):
-    """Tower records for levels 1-2, set by the bot on a known seed (the same profile file is shared)."""
+    """Tower records for levels 1-2, set by the bot before the planner (profile cycle) on a known seed (the
+    same profile file is shared). The planner's records (Railgun and Absolute Zero by level 2) are far stronger
+    than the scripted drafts below."""
     random.seed(1)
     bot_play(game, until_level=3)
     assert game.profile.tower_record(2)
@@ -88,7 +99,7 @@ def test_a_full_loop_towers_monsters_towers(records, screen):
     assert list(push) == [5], "empty waves aren't recorded"
     towers = main.Game(screen, log_dir=None)
     towers.start_wave()
-    assert "basic" in towers.spawn_queue and len(towers.spawn_queue) == 8, "no record for wave 1: the generated one"
+    assert "basic" in towers.spawn_queue and len(towers.spawn_queue) == 10, "no record for wave 1: the generated one"
     towers.state, towers.wave_idx = "build", 4
     towers.start_wave()
     assert towers.spawn_queue == push[5]["queue"]

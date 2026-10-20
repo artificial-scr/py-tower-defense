@@ -1,6 +1,6 @@
 """Progress that outlives a level: tower compositions, and the permanent profile.
 
-The profile (profile.json) is kept forever, across runs: the records each side plays against,
+The profile (user/profile.json) is kept forever, across runs: the records each side plays against,
 unlocks, and milestones. See DESIGN.md for how the pieces fit together.
 
 Records are kept per level and per wave, and a slot is only replaced by something stronger
@@ -249,6 +249,7 @@ class Profile:
         if not self.path:
             return
         try:
+            os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
             tmp = self.path + ".tmp"
             with open(tmp, "w", encoding="utf-8") as f:
                 json.dump(self.to_dict(), f, indent=1)

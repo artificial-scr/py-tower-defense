@@ -24,7 +24,7 @@ SHOWN = 4  # changed files listed per line of the report
 # Tests that draw the game's screens: what a change to drawing code can break.
 DRAWS = ("rendering", "runs", "unlocks", "tower_unlocks", "attack")
 # The long bot playthroughs (marked slow): only for changes to the rules or the balance.
-BALANCE = ("playthrough",)
+BALANCE = ("playthrough", "progression", "bot")
 
 # (file patterns, test files without "tests/test_" and ".py", or ALL); paths are relative to the repo root
 RULES = [
@@ -32,16 +32,25 @@ RULES = [
     (("main.py", "pyproject.toml", "uv.lock", "tests/conftest.py", "tests/helpers.py"), ALL),
     # game rules and balance
     (("towers.py", "towers.json", "evolution.json"),
-     ("data", "fusion", "combat", "records", "unlocks", "tower_unlocks", "rendering") + BALANCE),
+     ("data", "fusion", "combat", "records", "unlocks", "tower_unlocks", "rendering", "analytics", "matchups", "waves")
+     + BALANCE),
     (("monsters.py", "monsters.json"),
-     ("monsters", "data", "combat", "attack", "records", "unlocks", "balance_log", "rendering") + BALANCE),
-    (("levels.py",), ("data", "progress", "runs", "attack", "monsters", "rendering") + BALANCE),
+     ("monsters", "data", "combat", "attack", "records", "unlocks", "balance_log", "rendering", "analytics", "matchups",
+      "waves") + BALANCE),
+    (("levels.py",),
+     ("data", "progress", "runs", "attack", "monsters", "rendering", "analytics", "matchups", "waves") + BALANCE),
+    (("waves.py", "waves.json"), ("waves", "attack", "runs", "records", "balance_log", "rendering") + BALANCE),
     (("entities.py",),
-     ("combat", "monsters", "fusion", "attack", "records", "tower_unlocks", "rendering") + BALANCE),
+     ("combat", "monsters", "fusion", "attack", "records", "tower_unlocks", "rendering", "analytics", "matchups") + BALANCE),
     (("attack.py",), ("attack", "runs", "records", "unlocks") + BALANCE),
-    (("progress.py", "unlocks.json"), ("unlocks", "records", "runs", "progress", "attack", "tower_unlocks")),
-    (("achievements.py", "achievements.json"), ("tower_unlocks", "unlocks")),
+    (("progress.py", "unlocks.json"), ("unlocks", "records", "runs", "progress", "attack", "tower_unlocks", "progression")),
+    (("achievements.py", "achievements.json"), ("tower_unlocks", "unlocks", "progression")),
     (("balance_log.py",), ("balance_log",)),
+    # balance analysis scripts
+    (("analytics/*",), ("analytics", "matchups", "bot")),
+    # the bot player (it scores towers with analytics/tower_stats.py)
+    (("tests/bot.py",), ("bot", "playthrough", "progression", "balance_log")),
+    (("tools/bot_compete.py",), ()),
     # drawing
     (("graphics.py",), DRAWS + ("controls", "launch", "progress", "music")),
     (("sprites.py", "terrain.py", "ambience.py", "assets/fonts/*"), DRAWS),

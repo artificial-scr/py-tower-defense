@@ -3,6 +3,7 @@
 import pytest
 
 from helpers import dummy_enemy, put, run_wave
+from towers import TOWERS
 
 
 def test_chain_lightning_and_slow(game):
@@ -22,7 +23,7 @@ def test_bonus_vs_slowed(game):
     lance.cooldown = 0
     lance.update(0.01, [e], [], [])
     second = e.max_hp - e.hp - first
-    assert second == pytest.approx(3 * first)
+    assert second == pytest.approx(TOWERS["lance"]["vs_slowed"] * first)
 
 
 def test_multishot(game):

@@ -6,10 +6,11 @@ import pygame
 import pytest
 
 import monsters
-from entities import Enemy, Tower, cast_ability, heal_auras, speed_auras
+from entities import Enemy, Projectile, Tower, cast_ability, heal_auras, speed_auras
 from helpers import dummy_enemy, put, run_wave
 from levels import ALL_BOSS_LEVELS
 from monsters import ABILITIES, ENEMY_TYPES, load_monsters
+from towers import TOWERS
 
 
 def line(length=2000, y=100):
@@ -120,6 +121,15 @@ def test_juggernaut_ignores_slows():
     e = Enemy("juggernaut", line(), 1)
     e.apply_slow(0.3, 5)
     assert e.slow_factor == 1.0
+    assert not e.slowed  # so Shatter's vs_slowed bonus doesn't apply
+
+
+def test_shatter_does_no_bonus_damage_to_a_juggernaut():
+    e = Enemy("juggernaut", line(), 1)
+    tower = Tower("shatter", (5, 5))
+    for _ in range(2):  # the second hit would find it slowed by the first
+        Projectile(tower, e).strike(e, tower.damage, "direct")
+    assert e.max_hp - e.hp == pytest.approx(2 * TOWERS["shatter"]["damage"])
 
 
 def test_healer_heals_others_but_not_itself():

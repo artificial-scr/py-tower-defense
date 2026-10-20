@@ -97,7 +97,9 @@ class LevelLog:
         if tower not in self.towers:
             self.towers.append(tower)
 
-    def start_wave(self, t, number, hp_mult, kinds, lives, gold):
+    def start_wave(self, t, number, hp_mult, kinds, lives, gold, scouted=None, counter=None):
+        """scouted: what the scouts saw after the last wave (waves.scout), counter: the counters it brought
+        (waves.add_counters); Towers side only."""
         counts = defaultdict(int)
         for k in kinds:
             counts[k] += 1
@@ -105,6 +107,8 @@ class LevelLog:
                            "t_start": r(t, 2), "lives_start": lives, "gold_start": gold,
                            "kills": 0, "leaks": 0, "lives_lost": 0, "kill_gold": 0, "summoned": 0,
                            "gold_stolen": 0})
+        if scouted:
+            self.waves[-1].update(scouted=scouted, counter=counter)
 
     def current_wave(self):
         return self.waves[-1] if self.waves else None
@@ -183,13 +187,14 @@ class LevelLog:
         agg = {}
         for e in self.enemies:
             a = agg.setdefault(e.kind, {"spawned": 0, "summoned": 0, "killed": 0, "leaked": 0, "alive_at_end": 0,
-                                        "lives_taken": 0, "hp_total": 0.0, "damage_taken": 0.0,
+                                        "lives_taken": 0, "hp_total": 0.0, "damage_taken": 0.0, "healed": 0.0,
                                         "kill_times": [], "death_progress": [], "slowed_seconds": 0.0,
                                         "burning_seconds": 0.0, "damage_from": defaultdict(float)})
             a["spawned"] += 1
             a["summoned"] += e.origin != "wave"
             a["hp_total"] += e.max_hp
             a["damage_taken"] += e.max_hp - max(e.hp, 0)
+            a["healed"] += e.healed
             a["slowed_seconds"] += e.slowed_seconds
             a["burning_seconds"] += e.burning_seconds
             for tk, v in e.damage_from.items():
@@ -211,6 +216,7 @@ class LevelLog:
             a["leak_rate_pct"] = r(100 * a["leaked"] / a["spawned"])
             a["hp_total"] = r(a["hp_total"])
             a["damage_taken"] = r(a["damage_taken"])
+            a["healed"] = r(a["healed"])
             a["slowed_seconds"] = r(a["slowed_seconds"])
             a["burning_seconds"] = r(a["burning_seconds"])
             a["damage_from"] = {k: r(v) for k, v in sorted(a["damage_from"].items(), key=lambda kv: -kv[1])}
@@ -232,7 +238,7 @@ class LevelLog:
         end = e.end_t if e.end_t is not None else t
         return {"id": e.uid, "kind": e.kind, "origin": e.origin, "wave": e.wave, "outcome": outcome,
                 "max_hp": r(e.max_hp), "damage_taken": r(e.max_hp - max(e.hp, 0)),
-                "overkill_received": r(e.overkill), "seconds_alive": r(end - e.spawn_t, 2),
+                "healed": r(e.healed), "overkill_received": r(e.overkill), "seconds_alive": r(end - e.spawn_t, 2),
                 "path_progress": r(e.travelled / self.path_length, 3),
                 "slowed_seconds": r(e.slowed_seconds, 2), "burning_seconds": r(e.burning_seconds, 2),
                 "killed_by": e.killed_by, "damage_from": {k: r(v) for k, v in e.damage_from.items()}}

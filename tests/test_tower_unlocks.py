@@ -31,9 +31,9 @@ def test_every_tower_but_the_start_has_one_achievement():
     (lambda d: d["achievements"]["mortar"].update(unlocks="rifle"), "already unlocked by"),
     (lambda d: d["achievements"].pop("obsidian"), "towers no achievement unlocks"),
     (lambda d: d["achievements"]["rifle"]["goals"][0].update(condition="vibes"), "condition must be one of"),
-    (lambda d: d["achievements"]["rifle"]["goals"][0].pop("kind"), "missing fields"),
+    (lambda d: d["achievements"]["railgun"]["goals"][0].pop("boss"), "missing fields"),
     (lambda d: d["achievements"]["rifle"]["goals"][0].update(colour=1), "unknown fields"),
-    (lambda d: d["achievements"]["rifle"]["goals"][0].update(kind="laser"), "isn't a tower"),
+    (lambda d: d["achievements"]["rifle"]["goals"][0].update(by=["laser"]), "isn't a tower"),
     (lambda d: d["achievements"]["frost"]["goals"][1].update(enemy=["dragon"]), "isn't a monster"),
     (lambda d: d["achievements"]["frost"]["goals"][1].update(scope="week"), "scope must be one of"),
     (lambda d: d["achievements"]["dragon"]["goals"][0].update(how="magic"), "how must be one of"),
@@ -140,14 +140,16 @@ def test_the_first_two_finals_are_discovered_by_fusing_them(locked):
 
 
 # ---- the unlock card ----------------------------------------------------------------------------
-def test_four_guns_unlock_the_rifle_and_its_card_shows_at_once(locked):
+def test_seven_towers_unlock_the_mortar_and_its_card_shows_at_once(locked):
+    locked.profile.unlock_tower("cannon")
+    locked.pending_unlocks.clear()
     locked.gold = 1000
-    for tile in free_tiles(locked)[:4]:
+    for tile in free_tiles(locked)[:7]:
         locked.build_kind = "gun"
         locked.handle_event(mouse_down(px(tile)))
         locked.update(1 / 60)
-    assert locked.profile.has_tower("rifle")
-    assert locked.overlay == "unlock" and locked.pending_unlocks == [{"kind": "rifle", "how": "achievement"}]
+    assert locked.profile.has_tower("mortar")
+    assert locked.overlay == "unlock" and locked.pending_unlocks == [{"kind": "mortar", "how": "achievement"}]
     locked.handle_event(key(pygame.K_SPACE))
     assert locked.overlay is None and locked.state == "build", "the key only put the card away"
 
@@ -313,17 +315,29 @@ def test_boss_kill_must_be_quick(tracked):
 
 
 def test_peaks_on_the_map(tracked):
-    own_parents(tracked.profile, "blizzard")
+    own_parents(tracked.profile, "blizzard", "mortar")
     t = tracked.tracker
     tower = SimpleNamespace(kind="gun", pos=pygame.Vector2(0, 0), range=100)
     near = [SimpleNamespace(alive=True, pos=pygame.Vector2(10, 0), slowed=i < 9 or i == 14) for i in range(15)]
-    t.tick([tower] * 3, near[:14], True)
+    t.tick([tower] * 6, near[:14], True)
     t.updates = achievements.SAMPLE_EVERY - 1
-    t.tick([tower] * 3, near[:14], True)
+    t.tick([tower] * 6, near[:14], True)
     assert not tracked.unlocked
     t.updates = achievements.SAMPLE_EVERY - 1
-    t.tick([tower] * 4, near, True)
-    assert set(tracked.unlocked) == {"rifle", "cannon", "blizzard"}
+    t.tick([tower] * 7, near, True)
+    assert set(tracked.unlocked) == {"mortar", "blizzard"}, "7 towers of any kind; 10 monsters slowed"
+
+
+def test_the_first_wave_unlocks_the_cannon_and_its_kills_the_rifle(tracked):
+    t = tracked.tracker
+    t.on_wave_cleared(10)
+    assert tracked.unlocked == ["cannon"]
+    for _ in range(9):
+        t.on_death(dead(by="cannon", how="splash"), 0)
+        t.on_death(dead(by="gun"), 0)
+    assert "rifle" not in tracked.unlocked, "only the Cannons' kills count"
+    t.on_death(dead(by="cannon"), 0)
+    assert tracked.unlocked == ["cannon", "rifle"]
 
 
 def test_wave_level_and_pass_goals(tracked):

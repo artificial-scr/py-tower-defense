@@ -25,9 +25,9 @@ uv run tools/select_tests.py --run -- -x -q   # pytest's own options go after --
 The map from files to tests is `RULES` at the top of the script. A changed test file runs itself; a
 file no rule covers runs every test (as do `main.py`, `tests/helpers.py`, `tests/conftest.py` and the
 project files), so the pick errs on the side of running more. The playthroughs (`slow`) only run for
-changes to the rules and balance: towers, monsters, levels, entities, the Monsters side. When you add a
-module or data file, give it a rule: `test_select_tests.py` fails until every file has one. Before a
-commit, run the whole suite anyway.
+changes to the rules and balance: towers, monsters, levels, waves, entities, the Monsters side. When you
+add a module or data file, give it a rule: `test_select_tests.py` fails until every file has one. Before
+a commit, run the whole suite anyway.
 
 ## Running a subset
 
@@ -45,7 +45,8 @@ uv run pytest --durations=10             # list the slowest tests
 
 | Files | Area |
 |---|---|
-| `test_data.py` | Loading `towers.json` and `evolution.json`, the error messages for broken files, the level paths and wave generation |
+| `test_data.py` | Loading `towers.json` and `evolution.json`, the error messages for broken files, the level paths |
+| `test_waves.py` | Loading `waves.json` and its error messages; generated waves (bosses, budgets, newcomers, packs and pauses), the scouts' reports and counters (shares, escalation, the roster, saboteurs, looters), and in the game: pauses, the preview, the log, records left alone |
 | `test_fusion.py`, `test_combat.py` | Game rules: buying, fusing, moving and selling towers; tower mechanics; enemies and bosses |
 | `test_controls.py`, `test_launch.py` | Input and the game loop: keys, clicks at every display scale, the settings screen (the window's size, fullscreen, ambient effects), game speed only in waves, saved settings, quitting |
 | `test_progress.py` | Moving between levels: the wave lock after a level change, Rebuild, the saved checkpoint and Continue |
@@ -55,15 +56,18 @@ uv run pytest --durations=10             # list the slowest tests
 | `test_attack.py` | The Monsters side: the defender from a record, budget and share, drafting, abilities, lives that last the pass (clearing, winning and losing), stat upgrades and escorts, the starter pack, drawing |
 | `test_unlocks.py` | `unlocks.json`, drawing and picking cards after wins (record tiers, sure rares), milestones, and what each tower card does |
 | `test_tower_unlocks.py` | `achievements.json`, the owned towers in the profile, locked buying, fusing and branches, discoveries, each achievement condition, the unlock card |
+| `test_analytics.py` | `analytics/tower_stats.py`: its numbers add up, and its one-pass damage matches real towers firing at a real monster |
 | `test_balance_log.py` | The per-level balance logs: file names, uniqueness, and cross-checks that their numbers add up |
 | `test_rendering.py` | Drawing: every screen at every display scale, text staying inside the map and panel, map decoration, tower sprites, every creature's animation frames, shots and hit effects, ambient particles, the portal and gate, plus pixel snapshots |
 | `test_music.py` | The soundtrack: which cue plays in each state, the intensity rules, the player's fades and crossfades (on tiny generated stems), the Music setting, and that every level's stems are in `assets/music` |
 | `test_sfx.py` | Sound effects: the player's gaps, limits and volumes (on tiny generated files), the game playing them as things happen, the Sound setting, and `sfx.json` listing every sound the code plays and a firing sound for every tower |
 | `test_select_tests.py` | `tools/select_tests.py`: which tests a change picks, and that every file has a rule |
-| `test_playthrough.py` | Long simulations with bot players, on both sides (marked `slow`) |
+| `test_bot.py` | The bot player's decisions on a map set up by hand: its score (range, slowing, overkill), plans that use the towers on the map, waiting for the gold, fusing off plan only for a gain, branches leaning to the stronger one, profiles and lines |
+| `test_playthrough.py` | Long simulations with the bot player, on both sides (marked `slow`) |
+| `test_progression.py` | The top bot profiles on a fresh profile, unlocking towers through achievements run after run (marked `slow`) |
 
 Most tests drive the game the way a player would, by sending pygame events to `Game`, and the
-helpers for that (clicks, drags, placing towers, the bot players) are in `tests/helpers.py`.
+helpers for that (clicks, drags, placing towers) are in `tests/helpers.py`, the bot player in `tests/bot.py`.
 
 ## Test environment
 
@@ -72,7 +76,7 @@ your machine:
 
 - **Headless**: SDL's dummy video and audio drivers are used, so no window opens and the tests
   run without a display (over SSH, in CI).
-- **No writes to the repo**: `settings.json`, `savegame.json`, `profile.json` and the `logs/`
+- **No writes to the repo**: `user/` (`settings.json`, `savegame.json`, `profile.json`) and the `logs/`
   folder are redirected to a temporary directory per test.
 - **No music or sound effects**: a `Game` built in a test has no soundtrack or sound effects player
   (`main()` makes them). `test_launch.py` runs `main()` with the real players on empty folders, so
@@ -95,8 +99,14 @@ logs to the temporary directory), `screen`, and `mouse` (set the mouse position 
 
 ## Slow tests and balance
 
-The tests marked `slow` play the game with a simple bot (buy towers on the best spots, fuse
-whatever can fuse, pick branches at random). Besides checking that long games run without
+The tests marked `slow` play the game with the bot in `tests/bot.py`. Right after every purchase it
+picks a target tower (anything a purchase and some fusions away, finals included) and the tier 1
+tower to buy next toward it, then waits for the gold. Its profile decides the target: `damage` (the
+default) takes the most gain per gold in damage on the path (DPS, with overkill capped, times the
+path in range, stretched by slowing towers); `crowd`, `single`, `dps`, `tall`, `wide` and `random`
+weigh it differently, and `cycle` is the bot before the planner (Gun, Cannon, Frost, Gun in turn).
+Towers go where they cover the most path for the target's range, and a branch is picked at random
+weighted by the square of what each adds. Besides checking that long games run without
 errors, they act as a rough balance check: if a change to `towers.json` or the enemies makes the
 game noticeably harder or easier, they are likely to start failing. Outcomes depend on the
 random seed, so these tests pin their seeds; a failure after a balance change says the game
@@ -104,7 +114,9 @@ changed difficulty, not necessarily that something is broken.
 
 On the Monsters side, the bot first sets tower records for levels 1 and 2, then scripted drafts
 (`scripted_attack` in `tests/helpers.py`) attack them with no unlocks. They pin two properties of
-the current balance:
+the balance, and **both fail since the planning bot (2026-10-20)**: its records (a Hailstorm by the end
+of level 1, Railgun + Absolute Zero on level 2) hold against the scripted drafts. The bot before the
+planner falls on level 2, so it can't set a level 2 record:
 
 - **Monsters level 1 stays winnable.** Even waves take enough lives to clear it, and one big push
   takes all 20, which wins the whole pass (there's no cap on lives per level). This matters more
@@ -114,8 +126,18 @@ the current balance:
   against one big push, until the early hp boost (`EARLY_HP` in `levels.py`) left the bot less gold
   to spend; see DESIGN.md section 9.
 
-On the Towers side the bot no longer wins: its mixed buys clear level 1 and fall on levels 2-4, and
-buying only Guns (seed 1) reaches level 5. Those are pinned too.
+On the Towers side (seeds 0-5) the planning bot wins the pass on 5 seeds of 6; the bot before the
+planner, the planner kept to tiers 1-2 (`wide`) and the planner kept to the Gun line all fall on
+level 2. Those are pinned too. `uv run tools/bot_compete.py` plays every profile over seeds 0-5 and
+compares where each falls, the share of Frost-based towers it ends levels with, and what it aims for,
+picks and keeps.
+
+`test_progression.py` plays the four profiles that win the pass on a fresh profile instead: only the
+start towers owned, the others unlocked by achievements as it plays, runs repeated on the same profile
+(seed 0; seeds 1-2 match). Every first run falls on level 2. `damage` wins the pass on its 4th run and
+`tall` on its 5th or 6th, both with a discovered Railgun. `crowd` and `single` stay stuck on level 2:
+`single` never builds a Cannon, so the Rifle stays locked, and `crowd` never unlocks the Sniper. All of
+that is pinned. `uv run tools/bot_compete.py --locked` shows each run's end and unlocks per seed.
 
 If a change to `monsters.json` or `towers.json` breaks these, look at the budget rules in
 `monsters.json` first.

@@ -3,13 +3,16 @@
 import glob
 import json
 import os
+import random
 
 import pygame
 import pytest
 
 import balance_log
 import main
-from helpers import bot_play, build, key, put, ranked_spots, run_wave
+from bot import bot_play
+from helpers import build, key, put, ranked_spots, run_wave
+from waves import Wave
 
 
 def check_log(path):
@@ -18,8 +21,8 @@ def check_log(path):
         d = json.load(f)
     enemies, by_kind = d["enemies"], d["towers_by_kind"]
     tower_damage = sum(k["damage"] for k in by_kind.values())
-    enemy_damage = sum(e["damage_taken"] for e in enemies)
-    assert tower_damage == pytest.approx(enemy_damage, abs=1 + 0.1 * len(enemies)), "damage dealt == damage taken"
+    enemy_damage = sum(e["damage_taken"] + e["healed"] for e in enemies)
+    assert tower_damage == pytest.approx(enemy_damage, abs=1 + 0.1 * len(enemies)), "dealt == taken + healed"
     killed = [e for e in enemies if e["outcome"] == "killed"]
     assert sum(k["kills"] for k in by_kind.values()) == len(killed)
     assert all(e["killed_by"] for e in killed), "every kill is attributed"
@@ -49,6 +52,7 @@ def log_names(game):
 def test_logs_across_runs(logged_game):
     g = logged_game
     # run 1: the bot clears levels 1-3 (moving and selling towers too), then quits during level 4
+    random.seed(0)
     bot_play(g, until_level=4, move_and_sell=True)
     assert g.level_idx == 3 and g.state == "build"
     g.start_wave()
@@ -74,6 +78,7 @@ def test_logs_across_runs(logged_game):
 
 def test_events_are_logged(logged_game):
     g = logged_game
+    random.seed(0)
     bot_play(g, until_level=2, move_and_sell=True)
     d = check_log(os.path.join(g.log_session.dir, log_names(g)[0]))
     types = {e["type"] for e in d["events"]}
@@ -128,7 +133,7 @@ def test_boss_level_log(logged_game, monkeypatch):
     for tile, kind in zip(ranked_spots(g)[:12], ["railgun", "tesla", "flak", "avalanche"] * 3):
         put(g, kind, tile)
     g.wave_idx = 4
-    monkeypatch.setattr(main, "make_wave", lambda level_idx, wave_idx: (["basic", "warden"], 20))
+    monkeypatch.setattr(main, "make_wave", lambda *_: Wave(["basic", "warden"], 20))
     g.start_wave()
     run_wave(g)
     [name] = log_names(g)

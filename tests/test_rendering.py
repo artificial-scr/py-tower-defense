@@ -27,6 +27,7 @@ from helpers import SCALES, dummy_enemy, free_tiles, put, scaled
 from levels import tile_center
 from monsters import ENEMY_TYPES
 from towers import CROSS, EVOLVE, TOWERS
+from waves import Wave
 
 SNAPSHOTS = os.path.join(os.path.dirname(__file__), "snapshots.json")
 
@@ -84,7 +85,7 @@ def scenes(scale, mouse, monkeypatch):
     g.load_level(9)
     g.banner_timer = 0
     g.wave_idx = 4
-    monkeypatch.setattr(main, "make_wave", lambda level_idx, wave_idx: (["warden"], 5))
+    monkeypatch.setattr(main, "make_wave", lambda *_: Wave(["warden"], 5))
     g.start_wave()
     for _ in range(300):
         g.update(1 / 60)

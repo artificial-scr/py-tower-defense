@@ -11,7 +11,8 @@ import main
 from attack import DEFENDER_LIVES, QUEUE_MAX
 from entities import Enemy
 from helpers import SCALES, key, mouse_down, scaled
-from levels import LEVELS, WAVES_PER_LEVEL, wave_value
+from levels import LEVELS, WAVES_PER_LEVEL
+from waves import wave_value
 from monsters import BUDGET, ENEMY_TYPES, REWARDS, UPGRADES
 from progress import UNLOCKS
 
@@ -59,10 +60,10 @@ def test_no_record_means_no_towers(screen):
 # ---- budget and draft ----------------------------------------------------------------
 def test_budget_is_the_generated_wave_value_and_carries_over(attack):
     g = attack
-    assert g.budget == wave_value(0, 0) == 40
+    assert g.budget == wave_value(0, 0) == 50
     g.draft("basic", 2)
     play_wave(g)
-    assert g.budget == 40 - 10 + wave_value(0, 1)
+    assert g.budget == 50 - 10 + wave_value(0, 1)
 
 
 def test_war_chest_raises_the_budget(screen):
@@ -70,15 +71,15 @@ def test_war_chest_raises_the_budget(screen):
     g.profile.unlock("monster", "war_chest")
     g.profile.unlock("monster", "war_chest")
     g.load_level(0)
-    assert g.budget == round(40 * 1.3)
+    assert g.budget == round(50 * 1.3)
 
 
 def test_draft_and_undraft(attack):
     g = attack
     g.draft("tank", 5)
-    assert g.queue == ["tank"] * 3 and g.budget == 4, "stops when the budget runs out"
+    assert g.queue == ["tank"] * 4 and g.budget == 2, "stops when the budget runs out"
     g.undraft()
-    assert g.queue == ["tank"] * 2 and g.budget == 16
+    assert g.queue == ["tank"] * 3 and g.budget == 14
     g.draft("armored")
     assert "armored" not in g.queue, "locked kinds can't be drafted"
 
@@ -455,7 +456,7 @@ def test_each_monsters_win_grows_the_share_for_the_run(attack):
     g.draft("basic", 20)
     play_wave(g)
     g.reward_cards = []
-    assert g.record_tier == "weak", "a 190 gold record against a par of 310"
+    assert g.record_tier == "weak", "a 190 gold record against a par of 301"
     assert g.monster_wins == 1 and g.share == pytest.approx(BUDGET["share_start"] + REWARDS["weak"]["share"])
     g.advance()
     assert main.load_save()["monster_wins"] == 1
@@ -497,12 +498,12 @@ def test_the_share_follows_the_pace(attack):
 
 @pytest.mark.parametrize("value, tier", [(300, "weak"), (900, "normal"), (1300, "strong")])
 def test_monsters_record_tiers(screen, value, tier):
-    """Level 1's par (its generated waves) is 310: tiers at 2x and 4x that."""
+    """Level 1's par (its generated waves) is 301: tiers at 2x and 4x that."""
     g = main.Game(screen, log_dir=None, side="monsters")
     g.profile.tower_records["1"] = {"2": comp(("railgun", (6, 4), value))}
     g.load_level(0)
-    assert sum(wave_value(0, w) for w in range(WAVES_PER_LEVEL)) == 310
-    assert g.record_ratio == pytest.approx(value / 310) and g.record_tier == tier
+    assert sum(wave_value(0, w) for w in range(WAVES_PER_LEVEL)) == 301
+    assert g.record_ratio == pytest.approx(value / 301) and g.record_tier == tier
 
 
 def test_a_strong_record_pays_more(screen):

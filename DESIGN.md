@@ -233,8 +233,8 @@ There are two files, both git-ignored:
 
 | File | Lifetime | Contents |
 |---|---|---|
-| `profile.json` | Forever | Unlocks and ranks (both pools), per-wave tower and monster records, `monsters_side_unlocked`, `tower_cards_unlocked`, best run |
-| `savegame.json` | One run | Side, pass, level, gold and lives (the defender's on the Monsters side), rebuild list (Towers side), stat upgrades and escort still to send (Monsters side), the finale (level, wave) a Towers pass ends on |
+| `user/profile.json` | Forever | Unlocks and ranks (both pools), per-wave tower and monster records, `monsters_side_unlocked`, `tower_cards_unlocked`, best run |
+| `user/savegame.json` | One run | Side, pass, level, gold and lives (the defender's on the Monsters side), rebuild list (Towers side), stat upgrades and escort still to send (Monsters side), the finale (level, wave) a Towers pass ends on |
 
 - The save becomes the **run in progress**. Continue on the start screen resumes it at the start
   of the current level.
@@ -258,6 +258,7 @@ There are two files, both git-ignored:
 | `main.py` | `Game` keeps the shared loop and the Towers side, picks the side per pass, runs passes and run flow |
 | `graphics.py`, `attack_view.py` | Shared drawing / Monsters-side panel, queue strip, ability bar, card screen, run-over and side-pick screens |
 | `balance_log.py` | Logs record `side` and `pass`. Monsters-side logs add the draft and ability events |
+| `waves.json`, `waves.py` | Generated Towers-side waves and the scouts' counters (section 12) |
 | `music.py`, `music.json` | The soundtrack. `plan(game)` says which cue should play, how intense and whether ducked; `Music` (built in `main()`, never in tests) fades toward that every frame in real time. Stems are decoded on a thread when a level loads |
 
 ## 8. Build plan
@@ -331,10 +332,17 @@ reached level 10 (with 1–9 lives), and `+0.75` lost it few lives but left 600�
 3. The Monsters side keeps the plain curve (`wave_hp_mult`) for its drafts, so a monster record
 replayed on levels 1–3 is weaker than the generated wave it replaces.
 
+**Level 1 smoothed (2026-10-20).** In the first playtest of the reworked waves, level 1 cost 9 lives and
+levels 2–3 none. With the full boost from wave 2, the multiplier went 1 → 3.04 → 5.16 → 7.36 → 9.64. On level 1
+the boost now ramps in (`d / WAVES_PER_LEVEL` of it): 1 → 1.84 → 3.36 → 5.56 → 8.44, then 12 on level 2 as
+before, so no step is over ×1.85. The Gun-only bot now loses 0–3 lives on level 1 (was 5–9) and the mixed
+bot 5 (was 13).
+
 **Berserkers and Saboteurs in the later waves (2026-10-15).** The first playthrough's later levels were a
 walkover for five adjacent Frost Lances, so generated waves swap Basics for Berserkers (10% of the wave
 from level 4, 15% from 6, 20% from 8) and Saboteurs (1, then 2 in waves 4–5 from level 6; 2, then 3 from
 level 8): `BERSERKERS` and `SABOTEURS` in `levels.py`. Levels 1–3 roll nothing extra and don't change.
+(Replaced by the wave rework, section 12: Berserkers and Saboteurs are now newcomers of levels 4 and 6.)
 Replaying that playthrough's own comps, wave by wave on the tiles they stood on (towers frozen, no
 building between waves):
 
@@ -455,7 +463,7 @@ only ever holds towers the player owned.
 ### Showing what's locked
 
 - **The evolution tree (`T`)** shows locked towers as silhouettes, with the achievement and a
-  progress bar ("Cannon: 9 / 15 monsters in range"). Tier 4 towers not yet discovered show `???`
+  progress bar ("Rifle: Cannons kill 10 monsters (4/10)"). Tier 4 towers not yet discovered show `???`
   and their two parents while discovery is still open.
 - **The HUD** pins the closest unfinished achievement in a corner during the Towers side.
 
@@ -465,16 +473,20 @@ only ever holds towers the player owned.
 
 | Unlocks | Achievement | Teaches |
 |---|---|---|
-| Rifle | Have 3 Guns on the map at once | Two of the same fuse into one |
-| Cannon | Have 15 monsters inside one tower's range at once | Crowds need splash |
+| Cannon | Clear your first wave | Something new to build straight away |
+| Rifle | Cannons kill 10 monsters | Use what you've unlocked |
 | Frost | Let a Fast monster through, **or** kill 40 Fasts | Fast monsters need slowing |
-| Mortar | Have 2 Cannons on the map at once | |
+| Mortar | Have 7 towers on the map at once | |
 | Chiller | Have 2 Frosts on the map at once | |
 | Minigun | One Rifle kills 60 monsters in a level | Rapid fire is about volume |
 | Sniper | A Rifle lands the killing shot on a Tank or an Elite | Big hits are about precision |
 | Bombard | One Mortar shot kills 4 monsters | Burst splash |
 | Incinerator | Mortars hit 200 monsters in a level | Spread damage over time |
 | Blizzard | Keep 10 monsters slowed at once | Area control |
+
+The first playtest of the reworked waves (2026-10-20) changed the first three: the Cannon now comes after
+the first wave, the Rifle after 10 Cannon kills (it used to need 4 Guns, which came before any other tower),
+and the Mortar after 7 towers of any kind (it was 3 Cannons).
 | Shatter | Kill 30 slowed monsters in a level | Punishing slowed foes |
 
 **Tier 4** (the two discovered ones skip theirs)
@@ -522,3 +534,118 @@ top, Dragon needs Incinerators). That's intended: the late goals build on the ea
 | `main.py` | The build panel and hotkeys only offer unlocked tier 1 towers; fusion and the branch screen check the result; pending unlocks pop up at the start of the build phase |
 | `graphics.py` | The unlock pop-up, the NEW badge, the locked fusion preview, locked silhouettes and progress bars in the tree, the pinned HUD goal |
 | `tests/` | A fixture that unlocks every tower for the existing bot and slow tests; one test per condition type; discovery stops after two; pop-up timing |
+
+## 12. Wave rework: newcomers, packs and scouts
+
+Status: **built** (2026-10-20), not yet playtested by a person. Rules in `waves.json`, code in `waves.py`.
+
+The balance logs showed generated waves made of Basics, Fasts and Tanks only, with Berserkers from level 4 and
+Saboteurs from level 6. Twelve of the seventeen monster kinds never reached the Towers side, and one strong
+build of a single kind held from level 3 to level 8 without changing. The rework:
+
+- **Each level brings in 1–2 monsters**, which stay for the rest of the pass. Where possible the newcomer is
+  the problem a tower unlock solves (DESIGN section 11):
+
+  | Level | New | Level | New |
+  |---|---|---|---|
+  | 1 | Fast, Swarmling (the Cannon's "15 in range") | 6 | Warded, Saboteur |
+  | 2 | Tank, Armored (armor stops the Gun) | 7 | Thawling, Banner Bearer |
+  | 3 | Splitter, Healer | 8 | (nothing new) |
+  | 4 | Juggernaut, Berserker | 9–10 | (nothing new) |
+  | 5 | Phantom, Mirage | | |
+
+- **Levels 1–3 are scripted** wave by wave. From level 4 on, waves are generated. Each wave has a
+  role (introduce, mix, pressure, counter, finale), made of slots filled from the level's newcomers, a pattern
+  (escort, rush, swarm, wall, …) or the Basic/Fast/Tank stream.
+- **Threat, not cost, sizes a generated wave.** Each monster's threat starts from `matchups.py`'s fair cost.
+  The budget is 1.25 × (18 + 5.7 d), with d the wave's index in the pass, which is 1.25 × the old generator's
+  average. Draft prices can change later without moving difficulty.
+- **Packs** spawn with a 2 s pause between them (`Game.wave_pauses`; monster records have none).
+- **The build panel previews the next wave** (or, during a wave, what's still to come), with a red line
+  saying what the scouts countered.
+
+### Scouts and counters
+
+After each wave, `waves.scout` reports on the towers: the damage they dealt in that wave per tag
+(single-target, light rapid fire, splash, slowing, burning, long range; by gold spent when nothing dealt any), whether 3+ stand within 60 px of one point on the path, and the
+banked gold. The next generated wave changes when:
+
+- **A tag dealt 40% of the damage.** A share of the wave becomes that tag's hardest roster monsters: 0% on
+  levels 1–2, then 10% rising to 40% on levels 9–10. The share is weighted by role (half on the mix wave,
+  ¾ on pressure, full on the counter and finale waves; never wave 1), plus 5% for every wave in a row the
+  same tag stays on top, up to +20%. "Hardest" comes from `counters.scores`, exported by
+  `uv run analytics/matchups.py --counter-scores`: Swarmling, Splitter and Fast against single-target;
+  Elite, Banner Bearer and Fast against splash; Healer and Juggernaut against slowing; Elite against burning;
+  Armored and Swarmling against light fire.
+- **Towers are stacked by the path:** 1 Saboteur for 3 towers, 2 for more (from level 6).
+- **Banked gold reaches 1.5× the towers' value:** one Looter per 1.5×, 3 at most, hidden in the middle of
+  the wave's heaviest pack, not spammed (as decided). Looters are on the roster from the start but no pattern
+  uses them, so they only ever come this way, from level 3 on.
+
+Counters take the place of an equal threat from the back of the wave. That means single monsters from
+streams and scripted packs, then whole repeats of patterns, never a newcomer and never a monster that
+already counters the tag. A wave's threat stays the same. Records from the Monsters side get no counters
+(they are the player's own counter), and `wave_value` uses the wave without counters.
+
+**The scouts weigh damage, not gold (2026-10-20).** In the first playtest, level 3's main tag by gold was
+splash (three Mortars, then Bombards: 48%), so the scouts sent Fast monsters, while one Absolute Zero
+(32% of the gold) dealt 53% of the damage and froze the Fasts at a fifth of the path. Each tower now counts
+the damage it dealt in the last wave (`Tower.wave_damage`, reset when a wave starts). The report says which
+it used (`by`), and the hoard check still compares banked gold with the towers' value in gold.
+
+### What changed from the proposal, and why
+
+- **The Looter came in on level 8 in the proposal.** As a newcomer it filled a whole pack (15 Looters), the
+  spam ruled out. It now joins the roster on level 1 and comes only as the hoard counter.
+- **The counter lists come from data.** The proposal's lists (Mirage against single-target, Thawling and
+  Warded against slowing, Phantom and Mirage against long range) didn't hold up against the full matchup
+  tables. The scores are each tower's matchups against the median tower's, normalized by the tower's own
+  average, so a tower that's weak everywhere only counts where it's weakest.
+- **Only the tag on top picks the counters.** Weighting every tag by its share of the gold sounded better
+  for mixed builds, but it diluted the counters into monsters those builds handle fine (see below).
+- **Level 1 is lighter than the budget.** At the full budget, bots buying Guns lost level 1 on half the seeds
+  and bots buying Gun, Cannon and Frost on every seed. The Swarmling burst (wave 4) and the extra packs of
+  wave 5 did it. Level 1 now has 10 Basics, then 6 + 2 Fasts, 5 + 2 Fasts + 3, 3 + 10 Swarmlings, and
+  6 + 2 Fasts + the Elite. Level 2 wave 2 has 3 Armored and 2 Fasts.
+
+### Measurements
+
+**Bots** (`tests/helpers.bot_play`, every tower unlocked, seeds 0–3), lives lost per level:
+
+| Bot | Level 1 | Level 2 |
+|---|---|---|
+| Guns only | 5–9 (5 of them the Elite) | falls (one seed clears it with 13 lost, falls on 3) |
+| Gun, Cannon, Frost | 13 | falls |
+| Cannon, Gun | 8 | falls |
+
+Before the rework, the Gun bot fell on level 2 as well and the mixed bot on levels 2–4. Bots never adapt, so
+they can't say anything about counters.
+
+**Replaying real comps.** The strongest comp of each wave in four logged playthroughs, frozen on its tiles,
+was played against the old generator, the new waves without counters, and the new waves with counters. Lives
+lost per level:
+
+| Playthrough (main tag) | Level | Old | New | New + counters |
+|---|---|---|---|---|
+| 2026-10-11 21:37 (slowing: Avalanche, Breaker, Tesla, Lances) | 7 | 5 | 5 | 23 |
+| | 8 | 5 | 19 | 51 |
+| | 9 | 25 | 17 | 55 |
+| 2026-10-11 20:29 (mixed; no tag on top, Saboteurs for stacking) | 5–9 together | 20 | 22 | 18 |
+
+The replays have no tower cards, so they're far weaker than the real games (where the old waves cost
+0 lives on these levels). Only the columns' differences mean anything, and only for comps that mostly hold.
+The other two playthroughs, the Lance stack and the Minigun/Incinerator one, collapsed with or without
+counters (90–190 lives a level). There, lives lost even drops with counters, because the Swarmlings that
+replace Tanks take 1 life each instead of 2. The same replay with every tag weighted by its gold took the
+slowing build's levels 7–9 to 0, 4 and 0 lives: the reason for the last change above.
+
+### Not done / to watch
+
+- **Playtest by a person.** The replays and bots can't tell whether a counter feels fair, or whether the
+  preview gives enough warning.
+- **Draft costs** (Juggernaut, Elite, Healer underpriced for the Monsters side) are for a later session with
+  every monster stat on the table. Threat is separate, so that session won't move the Towers side.
+- **Monster budgets moved** with the generated waves (`wave_value`): level 1's par went from 310 to 301 and
+  wave 1 from 40 to 50. The 40% share rule (section 9) hasn't been rechecked with bots.
+- **The slow playthrough tests** (`test_playthrough.py`) were already failing before the rework (they
+  predate tower unlocks), so no long bot test covers the new waves yet.

@@ -67,6 +67,14 @@ them. Each enemy that gets through costs you lives, and you lose when your lives
 - Waves come from your **monster record** for that level when one exists, abilities included. A
   pulsing circle warns you a second before an area ability lands. Without a record, the game
   generates the wave, and those get tougher across the whole game.
+- **Generated waves** come in packs, with a short pause between packs. Each level brings in one or two new
+  monsters, and they stay for the rest of the pass. The panel previews the next wave.
+- **Scouts** look at your towers after every wave from level 3 on. If one kind of tower (single-target,
+  splash, slowing, burning, light rapid fire, long range) dealt 40% of the last wave's damage, part of the
+  next wave becomes the monsters that kind has the hardest time with. The part grows with the level, and
+  grows again for every wave you keep that build. Towers stacked by the path draw Saboteurs, and banking far more
+  gold than your towers are worth draws a few Looters, hidden in the wave's heaviest pack. The preview's
+  red line says what the scouts saw.
 
 ## The Monsters side
 
@@ -171,7 +179,7 @@ Tier 4   12 cross-type towers (see below)
 | Hailstorm | Minigun + Blizzard | 4 slowing shots at once |
 | Tesla Coil | Minigun + Shatter | Lightning that chains through 6 foes |
 | Absolute Zero | Sniper + Blizzard | Instant freezing blast |
-| Frost Lance | Sniper + Shatter | Slows, then deals 3× damage to slowed foes |
+| Frost Lance | Sniper + Shatter | Slows, then deals 2× damage to slowed foes |
 | Avalanche | Bombard + Blizzard | Giant slowing splash |
 | Glacier Breaker | Bombard + Shatter | Splash, 2.5× damage vs slowed |
 | Thermal Shock | Incinerator + Blizzard | Burns and slows an area |
@@ -183,8 +191,8 @@ what the fusion would produce.
 ### Unlocking towers
 
 A new profile owns only the **Gun**. Every other tower is unlocked for good by an achievement on the
-Towers side, for example "Have 3 Guns on the map at once" for the Rifle, or "Have 15 monsters inside
-one tower's range at once" for the Cannon. The first two tier 4 towers you ever make are unlocked by
+Towers side, for example "Clear your first wave" for the Cannon, or "Cannons kill 10 monsters" for
+the Rifle. The first two tier 4 towers you ever make are unlocked by
 fusing them: a **discovery**. The other ten need harder achievements, like winning a Towers pass,
 holding 1,000 gold at the end of one, or killing the Warden within 20 s.
 
@@ -231,11 +239,11 @@ click it.
 
 ## Saving
 
-There are two files, both git-ignored:
+There are two files in `user/`, both git-ignored:
 
-- **`profile.json`** is kept forever: your unlocks, the towers you own and your progress toward
+- **`user/profile.json`** is kept forever: your unlocks, the towers you own and your progress toward
   the others, the records for every level and wave, your milestones and your best run.
-- **`savegame.json`** is the run in progress, saved at the start of every level (on the Monsters side
+- **`user/savegame.json`** is the run in progress, saved at the start of every level (on the Monsters side
   with the defender's lives, your upgrades and any escort still to send). On the start screen,
   press **C** to continue it from the start of that level. Losing a level ends the run and deletes it.
 
@@ -254,12 +262,16 @@ the game stops with a message that says what's wrong.
   `pace_per_life`, `pace_max`, `pace_min`) and the reward tiers (`rewards`).
 - **`unlocks.json`**: both card pools, with each card's effect, numbers per rank, max rank, weight and
   rarity.
+- **`waves.json`**: the generated waves: each monster's threat, the wave budget, the monsters each
+  level brings in (levels 1–3 scripted wave by wave), the wave roles and patterns, and the scouts'
+  counters (shares per level, escalation, tower tags, the matchup scores, saboteurs and looters).
 - **`achievements.json`**: the towers a new profile starts with, how many tier 4 towers can be
   discovered by fusing, and the achievement that unlocks each other tower (its goals, their
   conditions and targets).
 
-Levels and wave generation are in `levels.py`. It holds 20 levels, but only the first `LEVEL_COUNT`
-(10) are played; levels 11–20 and their boss, the Overlord, are kept as a backup.
+Levels and how tough waves get are in `levels.py`. It holds 20 levels, but only the first `LEVEL_COUNT`
+(10) are played; levels 11–20 and their boss, the Overlord, are kept as a backup. What generated waves
+are made of is in `waves.py` and `waves.json`.
 
 ## Balance logs
 
@@ -288,7 +300,8 @@ These logs are meant for tuning the data files. Pass `--no-log` to turn them off
 | `achievements.py` | Loads and validates `achievements.json`; the tracker that counts achievements and unlocks towers |
 | `towers.py` | Loads and validates `towers.json` and `evolution.json` |
 | `monsters.py` | Loads and validates `monsters.json` |
-| `levels.py` | Level themes and paths, wave generation and wave values |
+| `levels.py` | Level themes and paths, the hp curves |
+| `waves.py` | Loads and validates `waves.json`; generated waves, wave values, the scouts and their counters |
 | `entities.py` | `Enemy`, `Projectile`, `Tower`: the combat rules, monster mechanics and abilities |
 | `graphics.py` | Everything drawn on screen (shadows, animation, panels and overlays), plus display scaling |
 | `effects.py` | Short-lived visual effects: rings, beams, explosions, sparks, shards, cast warnings, floating text |
@@ -304,10 +317,11 @@ These logs are meant for tuning the data files. Pass `--no-log` to turn them off
 | `assets/music/` | The soundtrack stems, `<area>/<cue>/<stem>.ogg` |
 | `assets/sfx/` | The sound effects, `<name>.ogg` or `<name>.wav` (names from `sfx.json`) |
 | `tests/` | The pytest suite |
+| `analytics/tower_stats.py` | Tower balance numbers from the data files: DPS, DPS per gold, fusion gains, damage per pass against each monster (`uv run analytics/tower_stats.py --help`) |
 | `tools/select_tests.py` | Picks the tests that cover what changed (see [TESTING.md](TESTING.md)) |
 
-Fullscreen, the ambient effects and the music and sound volumes are saved in `settings.json`. That file,
-`profile.json`, `savegame.json` and `logs/` are git-ignored.
+Fullscreen, the ambient effects and the music and sound volumes are saved in `user/settings.json`. The `user/`
+folder (settings, profile, save and their `.bak` copies) and `logs/` are git-ignored.
 
 ## Music
 

@@ -1,13 +1,10 @@
-"""Levels and waves: the map grid, each level's color theme and path, and how waves are
-built. Enemy types are in monsters.json (see monsters.py).
+"""Levels: the map grid, each level's color theme and path, and how tough waves get. What generated waves
+are made of is in waves.py.
 """
 
-import random
 from dataclasses import dataclass
 
 import pygame
-
-from monsters import ENEMY_TYPES
 
 COLS, ROWS = 20, 16  # map size in tiles
 TILE = 40  # a tile's size in logical pixels (see graphics.py for the layout)
@@ -106,21 +103,11 @@ def build_path_cells(waypoints):
 
 # Generated waves get EARLY_HP more hp multiplier per wave over the first EARLY_WAVES waves, on top of the
 # curve (later waves keep the full boost), so the early levels need building on: without it 3 towers cleared
-# levels 1-2 and gold piled up. The Monsters side's drafted waves use the plain curve.
+# levels 1-2 and gold piled up. On level 1 the boost ramps in (d/WAVES_PER_LEVEL of it), so no step there is
+# more than about x1.85: the full boost made wave 2 three times wave 1. The Monsters side's drafted waves
+# use the plain curve.
 EARLY_HP = 1.5
 EARLY_WAVES = 3 * WAVES_PER_LEVEL
-
-
-# Special monsters swapped in for Basics in generated waves, from a level on (1-based level -> amount, the
-# highest level not past the current one counts). Berserkers come in as a share of the wave; Saboteurs as a
-# count, (in waves 1-3, in waves 4-5). Earlier levels roll nothing extra, so their waves don't change.
-BERSERKERS = {4: 0.10, 6: 0.15, 8: 0.20}
-SABOTEURS = {6: (1, 2), 8: (2, 3)}
-
-
-def from_level(table, level, default):
-    """The entry of `table` for 1-based `level`: the one for the highest level not past it."""
-    return max(((n, v) for n, v in table.items() if n <= level), default=(0, default))[1]
 
 
 def wave_hp_mult(level_idx, wave_idx):
@@ -132,35 +119,4 @@ def wave_hp_mult(level_idx, wave_idx):
 def generated_hp_mult(level_idx, wave_idx):
     """wave_hp_mult with the early boost: what a generated Towers-side wave uses."""
     d = level_idx * WAVES_PER_LEVEL + wave_idx
-    return wave_hp_mult(level_idx, wave_idx) + EARLY_HP * min(d, EARLY_WAVES)
-
-
-def make_wave(level_idx, wave_idx, rng=random):
-    """Return (enemy kinds, hp multiplier) for a generated wave. Difficulty grows across all levels."""
-    d = level_idx * WAVES_PER_LEVEL + wave_idx
-    kinds = []
-    for _ in range(8 + min(d, 64) // 2):
-        r = rng.random()
-        if d >= 2 and r < 0.25:
-            kinds.append("fast")
-        elif d >= 4 and r < 0.25 + min(0.3, 0.03 * d):
-            kinds.append("tank")
-        else:
-            kinds.append("basic")
-    berserkers = round(from_level(BERSERKERS, level_idx + 1, 0) * len(kinds))
-    saboteurs = from_level(SABOTEURS, level_idx + 1, (0, 0))[wave_idx >= 3]
-    if berserkers or saboteurs:
-        basics = [i for i, k in enumerate(kinds) if k == "basic"]
-        rng.shuffle(basics)
-        for i, kind in zip(basics, ["saboteur"] * saboteurs + ["berserker"] * berserkers):
-            kinds[i] = kind
-    if wave_idx == WAVES_PER_LEVEL - 1:
-        kinds.append(BOSS_LEVELS.get(level_idx + 1, "elite"))
-    return kinds, generated_hp_mult(level_idx, wave_idx)
-
-
-def wave_value(level_idx, wave_idx):
-    """The monster player's budget for a wave before bonuses: what the generated wave is worth (the sum
-    of its monsters' costs). The wave is generated with its own seed, so the value never changes."""
-    kinds, _ = make_wave(level_idx, wave_idx, random.Random(level_idx * WAVES_PER_LEVEL + wave_idx))
-    return sum(ENEMY_TYPES[k]["cost"] for k in kinds)
+    return wave_hp_mult(level_idx, wave_idx) + EARLY_HP * min(d, EARLY_WAVES) * min(1, d / WAVES_PER_LEVEL)

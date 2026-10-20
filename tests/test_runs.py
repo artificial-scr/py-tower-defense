@@ -45,7 +45,7 @@ def test_beating_the_last_towers_level_switches_to_the_monsters_side(game):
     assert game.state == "victory" and game.levels_won == 1
     game.handle_event(key(pygame.K_SPACE))
     assert (game.side, game.pass_no, game.level_idx, game.state) == ("monsters", 2, 0, "build")
-    assert game.lives == 20 and game.budget == 40
+    assert game.lives == 20 and game.budget == 50
     assert main.load_save()["side"] == "monsters" and main.load_save()["pass"] == 2
 
 
