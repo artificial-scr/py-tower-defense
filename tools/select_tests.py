@@ -52,11 +52,12 @@ RULES = [
     (("tests/bot.py",), ("bot", "playthrough", "progression", "balance_log")),
     (("tools/bot_compete.py",), ()),
     # drawing
-    (("graphics.py",), DRAWS + ("controls", "launch", "progress", "music")),
+    (("graphics.py",), DRAWS + ("controls", "launch", "progress", "music", "tooltips")),
     (("sprites.py", "terrain.py", "ambience.py", "assets/fonts/*"), DRAWS),
     (("effects.py",), ("combat", "monsters", "records", "rendering")),
     (("unlock_view.py",), ("tower_unlocks", "unlocks", "rendering")),
     (("attack_view.py",), ("attack", "rendering")),
+    (("tooltip_view.py",), ("tooltips", "rendering")),
     (("tests/snapshots.json",), ("rendering",)),
     # the soundtrack and sound effects
     (("music.py", "music.json", "assets/music/*"), ("music", "launch")),

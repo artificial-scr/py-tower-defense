@@ -26,6 +26,7 @@ from graphics import HEIGHT, MAP_H, MAP_W, PANEL_W, TILE
 from helpers import SCALES, dummy_enemy, free_tiles, put, scaled
 from levels import tile_center
 from monsters import ENEMY_TYPES
+from tooltip_view import Tip
 from towers import CROSS, EVOLVE, TOWERS
 from waves import Wave
 
@@ -55,6 +56,15 @@ def scenes(scale, mouse, monkeypatch):
     g.selected = next(iter(g.towers.values()))
     yield "selected", g
     g.selected = None
+    g.tooltip = Tip("tower", "cannon", next(t for t in g.towers.values() if t.tier == 4))
+    yield "tooltip_tower", g
+    e = dummy_enemy(tile_center(*free[2]), hp=100)
+    e.hp = 40
+    g.enemies.append(e)
+    g.tooltip = Tip("monster", e.kind, e)
+    yield "tooltip_monster", g
+    g.tooltip = None
+    g.enemies.remove(e)
     g.build_kind = "gun"
     mouse[:] = scaled(tile_center(*free[1]), scale)
     yield "build", g
@@ -67,6 +77,10 @@ def scenes(scale, mouse, monkeypatch):
     mouse[:] = 0, 0
     g.show_tree = True
     yield "tree", g
+    kind, x, y, _ = g.tree_spots()[-1]
+    g.tooltip = Tip("tower", kind, anchor=pygame.Vector2(x + 10, y), where="tree")
+    yield "tree_tooltip", g
+    g.tooltip = None
     g.show_tree = False
     g.choice = (g.towers[free[0]], EVOLVE["rifle"])
     yield "choice", g

@@ -209,6 +209,7 @@ holding 1,000 gold at the end of one, or killing the Warden within 20 s.
 - A locked tower can't be bought, and a fusion into it is refused. A locked tier 3 branch shows on
   the branch screen, but can't be picked.
 - The evolution tree (**T**) shows each locked tower's progress. Point at one to see how to unlock it.
+  Right click a tower on it for its tooltip; a click closes the tooltip, the next one the tree.
   The panel pins the locked tower closest to unlocking.
 - A tower unlocked during a wave is announced, and can be used, at the start of the next build phase.
   One unlocked while building is announced at once. Any key or click puts the card away.
@@ -221,7 +222,8 @@ holding 1,000 gold at the end of one, or killing the Warden within 20 s.
 | `1`–`9`, `0` | `1`–`3`: pick a tower to build | Draft phase: draft that monster (`Shift`: 5 of them). During a wave: use that ability |
 | Left click | Place the picked tower / select a tower | Draft from the panel, remove a queued monster, cast an aimed ability, see a tower's range |
 | Drag a tower | Move it to any free tile, even during a wave. Drop it on a matching tower to fuse them | — |
-| Right click / `Esc` | Cancel placement / deselect | Cancel aiming |
+| Right click a thing | A tower or monster on the map, a build button, a monster in the wave preview: its tooltip | A monster or tower on the map, a monster in the draft list: its tooltip |
+| Right click elsewhere / `Esc` | Cancel placement / deselect | Cancel aiming |
 | `Backspace` | — | Take the last monster off the queue |
 | `Q` / `W` / `E` | — | Draft phase: buy a rank of Vitality / Stride / Plating (right click its button to undo) |
 | `S` / `B` | Sell the selected tower / rebuild the previous level's towers | — |
@@ -233,6 +235,7 @@ Both sides:
 | `Space` | Send the next wave / continue to the next level / switch sides when a pass is won (sending a wave is blocked for 1 s after a level change, so a double press can't start one by accident) |
 | `C` | Continue the saved run (on the start screen) |
 | `T` | Show the evolution tree |
+| Tooltips | A small card with the thing's stats as they stand (tower cards, the wave's HP multiplier and upgrades included, base values in grey) and a line about it. One on the map follows what it's about, live. A left click, any key or a right click on nothing closes it; `Esc` only closes it (on the tree, `Esc` closes both). They don't pause the game, and work while paused |
 | `F` / `Shift+F` | Change game speed during waves: 1×, 2×, 4×, 10× (building always runs at 1×) |
 | `P` | Pause |
 | `O` | Settings (fullscreen, ambient effects on or off with `A`, music and sound volumes) |

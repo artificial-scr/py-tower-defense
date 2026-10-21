@@ -16,7 +16,7 @@ from balance_log import new_kind_stats
 from effects import Beam, Explosion, Ring, Sparks
 from levels import tile_center
 from monsters import ENEMY_TYPES, WARD_BREAK
-from towers import NO_TOWER_MODS, TOWER_LINES, TOWERS, fusion_options
+from towers import NO_TOWER_MODS, TOWERS, card_damage, fusion_options
 
 ENEMY_IDS = itertools.count(1)
 TOWER_IDS = itertools.count(1)
@@ -472,9 +472,8 @@ class Tower:
 
     @property
     def damage(self):
-        """Damage per hit with the damage cards of the tower's line(s): a final gets both lines' bonuses."""
-        bonus = sum(self.mods["damage"].get(line, 1.0) - 1 for line in TOWER_LINES[self.kind])
-        return self.spec["damage"] * (1 + bonus)
+        """Damage per hit with the damage cards of the tower's line(s) (towers.card_damage)."""
+        return card_damage(self.kind, self.mods)
 
     @property
     def burn(self):

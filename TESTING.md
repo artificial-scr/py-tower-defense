@@ -58,6 +58,7 @@ uv run pytest --durations=10             # list the slowest tests
 | `test_tower_unlocks.py` | `achievements.json`, the owned towers in the profile, locked buying, fusing and branches, discoveries, each achievement condition, the unlock card |
 | `test_analytics.py` | `analytics/tower_stats.py`: its numbers add up, and its one-pass damage matches real towers firing at a real monster |
 | `test_balance_log.py` | The per-level balance logs: file names, uniqueness, and cross-checks that their numbers add up |
+| `test_tooltips.py` | Tooltips: what a right click opens them on (map, panel, wave preview, draft list, tree), what closes them (clicks, keys, Esc with the tree, what they follow dying or being sold), the pause left alone, and the stats they show |
 | `test_rendering.py` | Drawing: every screen at every display scale, text staying inside the map and panel, map decoration, tower sprites, every creature's animation frames, shots and hit effects, ambient particles, the portal and gate, plus pixel snapshots |
 | `test_music.py` | The soundtrack: which cue plays in each state, the intensity rules, the player's fades and crossfades (on tiny generated stems), the Music setting, and that every level's stems are in `assets/music` |
 | `test_sfx.py` | Sound effects: the player's gaps, limits and volumes (on tiny generated files), the game playing them as things happen, the Sound setting, and `sfx.json` listing every sound the code plays and a firing sound for every tower |

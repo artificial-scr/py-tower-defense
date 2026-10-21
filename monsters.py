@@ -12,7 +12,7 @@ MONSTERS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "monste
 
 ENEMY_FIELDS = ("name", "hp", "speed", "cost", "damage", "gap", "draft", "size", "color", "sides")
 # Optional fields; their meaning is in the comment at the top of monsters.json.
-ENEMY_EXTRAS = ("elite", "boss", "fatal", "shape", "inner", "armor", "heal_aura", "split", "phase", "slow_floor", "summon",
+ENEMY_EXTRAS = ("desc", "elite", "boss", "fatal", "shape", "inner", "armor", "heal_aura", "split", "phase", "slow_floor", "summon",
                 "summon_max", "ward", "decoy", "enrage", "rebound", "sabotage", "loot",
                 "speed_aura", "ambush", "follows", "layoff", "dividends", "severance", "bankrupts")
 AMBUSH_FIELDS = ("from_level", "chance", "max")

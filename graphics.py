@@ -66,6 +66,10 @@ CARD_HOVER = (55, 55, 68)
 TIER_RIM = {1: (78, 80, 94), 2: (176, 116, 64), 3: (205, 205, 220), 4: GOLD}
 TIER_COLORS = {"weak": TEXT_DIM, "normal": TEXT, "strong": GOLD}  # record tiers on the reward screen
 PREVIEW_KINDS = 4  # monster kinds the wave preview has room for (more show as a "+n")
+PREVIEW_Y = 516  # the wave preview's row in the panel
+TREE_COLS = (40, 230, 440)  # the evolution tree's tier 1, 2 and 3 columns
+TREE_TOP, TREE_ROW = 100, 92  # the first line's row, and the space between rows
+FINALS_TOP = 368  # the final forms' heading
 
 
 def wrap(text, width):
@@ -652,6 +656,8 @@ class GameView:
             {"settings": self.draw_settings, "quit": self.draw_quit_prompt, "side_pick": self.draw_side_pick,
              "rewards": self.draw_rewards, "choice": self.draw_choice, "unlock": self.draw_unlock,
              "tree": self.draw_tree}[overlay]()
+        if overlay in (None, "tree"):
+            self.draw_tooltip()  # tooltip_view.TooltipView
         screen.set_clip(None)
         self.draw_panel()
 
@@ -1009,47 +1015,37 @@ class GameView:
     def stat_line(spec):
         return f"Dmg {spec['damage']:.0f}  Rng {spec['range']:.0f}  Rate {spec['rate']:.1f}/s"
 
+    @staticmethod
+    def tree_spots():
+        """(kind, x, y, width) of every tower on the evolution tree, in logical units: the lines' towers (by
+        their row, tier 3 branches above and below it), then the finals. A tower's box is (x, y - 18, width, 36)."""
+        spots = []
+        for row, (t1, t2, branches) in enumerate(LINES.values()):
+            y = TREE_TOP + row * TREE_ROW
+            spots += [(t1, TREE_COLS[0], y, 180), (t2, TREE_COLS[1], y, 180),
+                      (branches[0], TREE_COLS[2], y - 22, 180), (branches[1], TREE_COLS[2], y + 22, 180)]
+        for i, kind in enumerate(CROSS.values()):
+            spots.append((kind, 30 + (i // 6) * 390, FINALS_TOP + 44 + (i % 6) * 38, 380))
+        return spots
+
     def draw_tree(self):
         """Full-screen evolution chart over the map."""
         self.shade_map(225)
         self.text(self.font_l, "EVOLUTION TREE", GOLD, (MAP_W / 2, 14), "midtop")
         self.text(self.font_s, "Fuse two identical towers to evolve them. Tier 2 -> 3 lets you pick a branch.",
                   TEXT_DIM, (MAP_W / 2, 46), "midtop")
-        cols = (40, 230, 440)
-        self.tree_hint = None  # how to unlock the locked tower under the mouse
-        for row, (t1, t2, branches) in enumerate(LINES.values()):
-            y = 100 + row * 92
-            self.tree_node(t1, cols[0], y)
-            self.text(self.font_s, "x2 ->", TEXT_DIM, (cols[1] - 66, y), "midleft")
-            self.tree_node(t2, cols[1], y)
-            self.text(self.font_s, "x2 ->", TEXT_DIM, (cols[2] - 66, y), "midleft")
-            self.tree_node(branches[0], cols[2], y - 22)
-            self.tree_node(branches[1], cols[2], y + 22)
-        top = 368
-        discovery = self.profile.discoveries_left > 0  # locked finals can still be found by fusing them
-        self.text(self.font, "FINAL FORMS: fuse two tier 3 towers from different lines", GOLD, (MAP_W / 2, top),
+        for row in range(len(LINES)):
+            y = TREE_TOP + row * TREE_ROW
+            self.text(self.font_s, "x2 ->", TEXT_DIM, (TREE_COLS[1] - 66, y), "midleft")
+            self.text(self.font_s, "x2 ->", TEXT_DIM, (TREE_COLS[2] - 66, y), "midleft")
+        self.text(self.font, "FINAL FORMS: fuse two tier 3 towers from different lines", GOLD, (MAP_W / 2, FINALS_TOP),
                   "midtop")
-        for i, (pair, kind) in enumerate(CROSS.items()):
-            x = 30 + (i // 6) * 390
-            y = top + 44 + (i % 6) * 38
-            a, b = sorted(pair, key=list(TOWERS).index)
-            spec = TOWERS[kind]
-            parents = f"{TOWERS[a]['name']} + {TOWERS[b]['name']}"
-            if self.profile.has_tower(kind):
-                draw_tower_shape(self.screen, spec, pygame.Vector2(x + 16, y))
-                r = self.text(self.font, spec["name"], spec["color"], (x + 42, y - 14))
-                self.text(self.font_s, parents, TEXT, (r.right / SCALE + 10, r.bottom / SCALE), "bottomleft")
-                self.text(self.font_s, spec["desc"], TEXT_DIM, (x + 42, y + 3))
-                continue
-            self.draw_locked_shape(self.screen, kind, pygame.Vector2(x + 16, y))
-            r = self.text(self.font, "???" if discovery else spec["name"], TEXT_DIM, (x + 42, y - 14))
-            self.text(self.font_s, parents, TEXT, (r.right / SCALE + 10, r.bottom / SCALE), "bottomleft")
-            goal, progress = self.unlock_goals(kind)[0]
-            line = self.needs_first(kind) or ("Fuse them to discover it" if discovery
-                                              else self.goal_text(goal, progress))
-            self.text(self.fit_font(line, 340, self.font_s), line, TEXT_DIM, (x + 42, y + 3))
-            if pygame.Rect(x, y - 18, 380, 36).collidepoint(mouse_pos()):
+        self.tree_hint = None  # how to unlock the locked tower under the mouse
+        for kind, x, y, w in self.tree_spots():
+            (self.tree_final if TOWERS[kind]["tier"] == 4 else self.tree_node)(kind, x, y)
+            if not self.profile.has_tower(kind) and pygame.Rect(x, y - 18, w, 36).collidepoint(mouse_pos()):
                 self.tree_hint = (kind, self.how_to_unlock(kind))
+        discovery = self.profile.discoveries_left > 0  # locked finals can still be found by fusing them
         if self.tree_hint:
             kind, hint = self.tree_hint
             name = "???" if TOWERS[kind]["tier"] == 4 and discovery else TOWERS[kind]["name"]
@@ -1058,7 +1054,8 @@ class GameView:
         elif len(self.profile.towers_unlocked) < len(TOWERS):
             self.text(self.font_s, "Point at a locked tower to see how to unlock it", TEXT_DIM, (MAP_W / 2, 326),
                       "midtop")
-        self.text(self.font_s, "Press T or click to close", TEXT_DIM, (MAP_W - 10, MAP_H - 8), "bottomright")
+        self.text(self.font_s, "Right click a tower for its stats.  T, Esc or click to close", TEXT_DIM,
+                  (MAP_W - 10, MAP_H - 8), "bottomright")
 
     def tree_node(self, kind, x, y):
         spec = TOWERS[kind]
@@ -1071,8 +1068,25 @@ class GameView:
         goal, progress = self.unlock_goals(kind)[0]
         if goal["target"] > 1 and self.tracker.available(kind):  # under the name, clear of the arrows and branch
             self.text(self.font_s, f"{min(int(progress), goal['target'])}/{goal['target']}", GOLD, (x + 42, y + 9))
-        if pygame.Rect(x, y - 18, 180, 36).collidepoint(mouse_pos()):
-            self.tree_hint = (kind, self.how_to_unlock(kind))
+
+    def tree_final(self, kind, x, y):
+        """A final form's row: its name, its parents and its line (or, while locked, how to get it)."""
+        spec = TOWERS[kind]
+        a, b = sorted(next(pair for pair, k in CROSS.items() if k == kind), key=list(TOWERS).index)
+        parents = f"{TOWERS[a]['name']} + {TOWERS[b]['name']}"
+        if self.profile.has_tower(kind):
+            draw_tower_shape(self.screen, spec, pygame.Vector2(x + 16, y))
+            r = self.text(self.font, spec["name"], spec["color"], (x + 42, y - 14))
+            self.text(self.font_s, parents, TEXT, (r.right / SCALE + 10, r.bottom / SCALE), "bottomleft")
+            self.text(self.font_s, spec["desc"], TEXT_DIM, (x + 42, y + 3))
+            return
+        discovery = self.profile.discoveries_left > 0  # locked finals can still be found by fusing them
+        self.draw_locked_shape(self.screen, kind, pygame.Vector2(x + 16, y))
+        r = self.text(self.font, "???" if discovery else spec["name"], TEXT_DIM, (x + 42, y - 14))
+        self.text(self.font_s, parents, TEXT, (r.right / SCALE + 10, r.bottom / SCALE), "bottomleft")
+        goal, progress = self.unlock_goals(kind)[0]
+        line = self.needs_first(kind) or ("Fuse them to discover it" if discovery else self.goal_text(goal, progress))
+        self.text(self.fit_font(line, 340, self.font_s), line, TEXT_DIM, (x + 42, y + 3))
 
     @staticmethod
     def ambient_button():
@@ -1218,33 +1232,50 @@ class GameView:
         self.draw_wave_preview(x)
         self.draw_panel_footer()
 
-    def draw_wave_preview(self, x):
-        """The next wave's monsters in the build phase (those still to come during a wave), most first, and
-        what the scouts countered."""
+    def wave_preview(self):
+        """(label, [(kind, count)] most first, the scouts' counters) for the wave preview: the next wave in the
+        build phase, what's still to come of it during a wave, None otherwise."""
         if self.state == "build":
             _, wave = self.next_wave()
             label, kinds, counter = "Next", wave.kinds, wave.counter
         elif self.state == "wave":
             label, kinds, counter = "Coming", self.spawn_queue, self.wave_counter
         else:
-            return
-        counts = sorted(Counter(kinds).items(), key=lambda kc: -kc[1])
-        self.text(self.font_s, label, TEXT_DIM, (x, 516), "midleft")
-        left = x + self.font_s.size(label)[0] / SCALE + 14
+            return None
+        return label, sorted(Counter(kinds).items(), key=lambda kc: -kc[1]), counter
+
+    def preview_icons(self, preview=None):
+        """(kind, count, center) of each monster icon the wave preview shows (the rest show as a "+n")."""
+        preview = preview or self.wave_preview()
+        if not preview:
+            return []
+        label, counts, _ = preview
+        left = MAP_W + 12 + self.font_s.size(label)[0] / SCALE + 14
         shown = counts if len(counts) <= PREVIEW_KINDS else counts[:PREVIEW_KINDS - 1]
-        for i, (kind, n) in enumerate(shown):
-            cx = left + i * 38
-            draw_enemy_icon(self.screen, kind, pygame.Vector2(cx, 516), 7)
-            self.text(self.font_s, str(n), TEXT, (cx + 10, 516), "midleft")
-        if len(shown) < len(counts):
-            more = sum(n for _, n in counts[len(shown):])
-            self.text(self.font_s, f"+{more}", TEXT_DIM, (left + len(shown) * 38 - 6, 516), "midleft")
+        return [(kind, n, pygame.Vector2(left + i * 38, PREVIEW_Y)) for i, (kind, n) in enumerate(shown)]
+
+    def draw_wave_preview(self, x):
+        """The next wave's monsters in the build phase (those still to come during a wave), most first, and
+        what the scouts countered."""
+        preview = self.wave_preview()
+        if not preview:
+            return
+        label, counts, counter = preview
+        self.text(self.font_s, label, TEXT_DIM, (x, PREVIEW_Y), "midleft")
+        icons = self.preview_icons(preview)
+        for kind, n, center in icons:
+            draw_enemy_icon(self.screen, kind, center, 7)
+            self.text(self.font_s, str(n), TEXT, (center.x + 10, PREVIEW_Y), "midleft")
+        if len(icons) < len(counts):
+            more = sum(n for _, n in counts[len(icons):])
+            left = x + self.font_s.size(label)[0] / SCALE + 14
+            self.text(self.font_s, f"+{more}", TEXT_DIM, (left + len(icons) * 38 - 6, PREVIEW_Y), "midleft")
         if counter:
             reasons = counter["reasons"]
             note = "Scouts: " + ", ".join(reasons)
             if self.font_s.size(note)[0] > (PANEL_W - 24) * SCALE:
                 note = f"Scouts: {reasons[0]} +{len(reasons) - 1}"
-            self.text(self.font_s, note, BAD, (x, 533), "midleft")
+            self.text(self.font_s, note, BAD, (x, PREVIEW_Y + 17), "midleft")
 
     def draw_panel_header(self):
         """Panel background and the level header in the level's accent color."""

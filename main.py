@@ -64,6 +64,7 @@ from levels import (BOSS_LEVELS, COLS, LEVELS, ROWS, START_GOLD, START_LIVES, WA
 from monsters import ABILITIES, ENEMY_TYPES, REWARDS, UPGRADES, summon_count, summon_kinds, summon_offsets
 from progress import UNLOCKS, Profile, comp_snapshot, stronger
 from towers import TOWER_ORDER, TOWERS, fusion_options
+from tooltip_view import TooltipView
 from unlock_view import UnlockView
 from waves import Wave, make_wave, scout, wave_value
 
@@ -179,7 +180,7 @@ def spec_snapshot():
                         for k, s in ENEMY_TYPES.items()}}
 
 
-class Game(AttackMixin, AttackView, UnlockView, GameView):
+class Game(AttackMixin, AttackView, UnlockView, TooltipView, GameView):
     def __init__(self, screen, log_dir=LOG_DIR, side="towers", soundtrack=None, sounds=None):
         """`side` is who the player plays: "towers" (build and defend) or "monsters" (attack.py). `soundtrack`
         is the music.Music that plays the levels' music, `sounds` the sfx.Sfx that plays the sound effects;
@@ -338,6 +339,7 @@ class Game(AttackMixin, AttackView, UnlockView, GameView):
         self.selected = None
         self.dragging = None
         self.choice = None  # (tower, [kind, kind]) while the player picks a branch
+        self.tooltip = None  # the tooltip open, if any (tooltip_view.Tip)
         self.strongest_comp = None  # the most valuable set of towers on the map this level (progress.comp_snapshot)
         self.comps_by_wave = {}  # wave number -> the same, for that wave's window (see check_comp)
         self.wave_mods = {}  # monster modifiers for the current wave (entities.Enemy)
@@ -1117,10 +1119,21 @@ class Game(AttackMixin, AttackView, UnlockView, GameView):
         if handler:
             handler(event)
         elif event.type == pygame.KEYDOWN:
+            if self.tooltip and event.key == pygame.K_ESCAPE:
+                self.tooltip = None
+                self.show_tree = False  # Esc closes the tooltip and the tree in one go
+                return
+            self.tooltip = None  # any other key closes it, and does what it does
             self.handle_key(event.key)
         elif event.type == pygame.MOUSEBUTTONDOWN:
             if self.show_tree:
-                self.show_tree = False
+                self.handle_tree_click(event.pos, event.button)
+                return
+            tip = self.tooltip_at(event.pos) if event.button == 3 and not self.aiming else None
+            if event.button in (1, 3):  # a right click on something opens its tooltip, any other click closes it
+                self.tooltip = tip
+            if tip:
+                pass
             elif self.side == "monsters" and self.handle_attack_click(event.pos, event.button):
                 pass
             elif event.button == 3:
@@ -1131,6 +1144,17 @@ class Game(AttackMixin, AttackView, UnlockView, GameView):
                 self.handle_click(event.pos)
         elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
             self.drop_dragged(event.pos)
+
+    def handle_tree_click(self, pos, button):
+        """Over the evolution tree, a right click on a tower opens its tooltip; a click closes the tooltip if one
+        is open, else the tree."""
+        tip = self.tooltip_at(pos) if button == 3 else None
+        if tip:
+            self.tooltip = tip
+        elif self.tooltip:
+            self.tooltip = None
+        else:
+            self.show_tree = False
 
     def handle_choice_event(self, event):
         if event.type == pygame.KEYDOWN and event.key in (pygame.K_1, pygame.K_2):

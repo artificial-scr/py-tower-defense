@@ -138,6 +138,12 @@ NO_TOWER_MODS = {"damage": {line: 1.0 for line in LINES}, "range": 1.0, "gold": 
                  "burn": 1.0}
 
 
+def card_damage(kind, mods):
+    """Damage per hit with the damage cards of the tower's line(s): a final gets both lines' bonuses."""
+    bonus = sum(mods["damage"].get(line, 1.0) - 1 for line in TOWER_LINES[kind])
+    return TOWERS[kind]["damage"] * (1 + bonus)
+
+
 def fusion_options(a, b):
     """Tower kinds that fusing kinds `a` and `b` can produce (empty if they can't fuse)."""
     if a == b:
