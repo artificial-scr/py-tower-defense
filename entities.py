@@ -105,6 +105,10 @@ class Enemy:
         return self.slow_timer > 0
 
     @property
+    def burning(self):
+        return self.burn_timer > 0
+
+    @property
     def phased(self):
         """Phantoms spend the last `for` seconds of every `every` seconds out of reach of targeting."""
         if "phase" not in self.spec:
@@ -185,7 +189,7 @@ class Enemy:
             self.escaped = True
 
     def hit(self, damage, source=None, how="direct", bonus_frac=0.0):
-        """Take damage. `bonus_frac` is the part of it that came from a vs_slowed multiplier. Returns
+        """Take damage. `bonus_frac` is the part of it that came from vs_slowed and vs_burning multipliers. Returns
         whether the hit landed: a ward that's up absorbs a whole hit (burns excluded) and goes down.
 
         Armor blocks a flat amount of every hit except burns, but at least ARMOR_MIN_SHARE of a
@@ -240,10 +244,12 @@ class Enemy:
     def apply_burn(self, dps, duration, source=None):
         dps *= self.mods["burn"]
         current = self.burn_dps if self.burn_timer > 0 else 0
-        if dps >= current:
-            self.burn_dps = dps
+        if dps > current:  # a stronger burn takes over, for its own duration (a Dragon's flash doesn't inherit a long burn's)
+            self.burn_dps, self.burn_source, self.burn_timer = dps, source, duration
+        elif dps == current:
             self.burn_source = source
-        self.burn_timer = max(self.burn_timer, duration)
+            self.burn_timer = max(self.burn_timer, duration)
+        # a weaker burn is lost: burns don't stack
 
     def cast_illusion(self):
         """A Mirage's illusion of itself, `ahead` pixels further along the path: one hit pops it, it's worth
@@ -349,6 +355,7 @@ class Projectile:
     def __init__(self, tower, target):
         self.spec = tower.spec
         self.damage = tower.damage  # card bonuses included
+        self.burn = tower.burn
         self.source = (tower, tower.kind)  # credited even if the tower evolves mid-flight
         self.pos = tower.pos.copy()
         self.target = target
@@ -371,16 +378,19 @@ class Projectile:
 
     def strike(self, enemy, damage, how):
         spec = self.spec
-        bonus_frac = 0.0
+        bonus = 1.0
         if enemy.slowed and "vs_slowed" in spec:
-            damage *= spec["vs_slowed"]
-            bonus_frac = 1 - 1 / spec["vs_slowed"]
+            bonus *= spec["vs_slowed"]
+        if enemy.burning and "vs_burning" in spec:
+            bonus *= spec["vs_burning"]
+        damage *= bonus
+        bonus_frac = 1 - 1 / bonus
         if not enemy.hit(damage, self.source, how, bonus_frac):
             return  # absorbed by a ward, slow and burn too
         if "slow" in spec:
             enemy.apply_slow(spec["slow"], spec["slow_time"])
         if "burn" in spec:
-            enemy.apply_burn(spec["burn"], spec["burn_time"], self.source)
+            enemy.apply_burn(self.burn, spec["burn_time"], self.source)
 
     def impact(self, enemies, effects):
         spec = self.spec
@@ -465,6 +475,11 @@ class Tower:
         """Damage per hit with the damage cards of the tower's line(s): a final gets both lines' bonuses."""
         bonus = sum(self.mods["damage"].get(line, 1.0) - 1 for line in TOWER_LINES[self.kind])
         return self.spec["damage"] * (1 + bonus)
+
+    @property
+    def burn(self):
+        """Burn damage per second with the Hotter Fuel card."""
+        return self.spec.get("burn", 0) * self.mods["burn"]
 
     @property
     def disabled(self):

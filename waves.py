@@ -350,7 +350,7 @@ def scout(towers, gold, path_points, previous=None):
     """What the scouts report after a wave: towers is (kind, gold spent, centre, damage dealt in the wave)
     for each tower on the map, path_points the points along the path a saboteur could stand on, previous
     the last report this level. The tags' shares are of the damage dealt (what actually holds the line: one
-    Absolute Zero can outdo three Mortars that cost more), or of the gold when nothing dealt any.
+    Frostbite can outdo three Mortars that cost more), or of the gold when nothing dealt any.
     The report is plain data (it goes into the balance log)."""
     value = sum(spent for _, spent, _, _ in towers)
     by = "damage" if sum(damage for *_, damage in towers) > 0 else "gold"

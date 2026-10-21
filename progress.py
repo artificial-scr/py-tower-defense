@@ -26,7 +26,8 @@ ABILITY_RANK_COOLDOWN = 0.85  # each extra rank of an ability multiplies its coo
 CARD_EFFECTS = {
     "monster": {"type": ("type",), "ability": ("ability",), "buff": ("mod", "per_rank"), "budget": ("per_rank",)},
     "tower": {"damage": ("line", "per_rank"), "range": ("per_rank",), "gold": ("per_rank",), "lives": ("per_rank",),
-              "refund": ("per_rank",), "detector": (), "armor": ("per_rank",), "grounding": ("per_rank",)},
+              "refund": ("per_rank",), "detector": (), "armor": ("per_rank",), "grounding": ("per_rank",),
+              "burn": ("per_rank",)},
 }
 CARD_FIELDS = ("name", "desc", "effect", "weight")
 CARD_EXTRAS = ("max", "rare", "type", "ability", "mod", "per_rank", "line")

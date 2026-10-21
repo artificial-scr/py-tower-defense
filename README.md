@@ -151,14 +151,14 @@ Only the Champion can be drafted.
 | Bulwark | Monsters take 50% less damage for 3 s | 30 s |
 
 Extra ranks of an ability cut its cooldown by 15%. The buff cards (up to 3 ranks each) are Thick
-Hide (+10% HP), Swiftness (+6% speed), Insulation (−20% burn damage) and Thaw (slows 15% weaker).
+Hide (+10% HP), Swiftness (+6% speed), Insulation (−15% burn damage) and Thaw (slows 15% weaker).
 The rare War Chest card (up to 5 ranks) adds 15% to the draft budget.
 
 ### Tower cards
 
 Sharpened Guns / Cannons / Frost (+8% damage for that line, and finals count for both parent
 lines), Long Barrels (+5% range), Treasury (+50 starting gold), Fortify (+2 starting lives) and
-Salvage (+5% sell refund) go up to 3 ranks. The rare cards counter monster unlocks: Detector
+Salvage (+5% sell refund) and Hotter Fuel (+15% burn damage) go up to 3 ranks. The rare cards counter monster unlocks: Detector
 (target phased Phantoms), Piercing Rounds (halves armor) and Grounding (EMP and Smokescreen last
 half as long). A tower record keeps the cards it was won with.
 
@@ -181,17 +181,17 @@ Tier 4   12 cross-type towers (see below)
 | Tier 4 tower | Fused from | Specialty |
 |---|---|---|
 | Flak Battery | Minigun + Bombard | 3 explosive shots at once |
-| Dragon | Minigun + Incinerator | Rapid burning bursts |
+| Dragon | Minigun + Incinerator | Rapid flash burns that ignore armor (they replace weaker burns) |
 | Railgun | Sniper + Bombard | Instant, huge, explosive |
 | Solar Lance | Sniper + Incinerator | Instant beam, heavy burn |
 | Hailstorm | Minigun + Blizzard | 4 slowing shots at once |
 | Tesla Coil | Minigun + Shatter | Lightning that chains through 6 foes |
-| Absolute Zero | Sniper + Blizzard | Instant freezing blast |
+| Frostbite | Sniper + Blizzard | Instant freezing blast |
 | Frost Lance | Sniper + Shatter | Slows, then deals 2× damage to slowed foes |
 | Avalanche | Bombard + Blizzard | Giant slowing splash |
 | Glacier Breaker | Bombard + Shatter | Splash, 2.5× damage vs slowed |
 | Thermal Shock | Incinerator + Blizzard | Burns and slows an area |
-| Obsidian | Incinerator + Shatter | Burn, slow, 2× damage vs slowed |
+| Obsidian | Incinerator + Shatter | Splash, 2× damage vs slowed and 2× vs burning (4× if both): pair it with a slow and a burn |
 
 Press **T** in game to see the whole tree. While you drag a tower over another one, the game shows
 what the fusion would produce.
@@ -262,7 +262,7 @@ the game stops with a message that says what's wrong.
 
 - **`towers.json`**: each tower's stats (`range`, `damage`, `rate`, `proj_speed`, `cost` for tier 1
   towers) and its look (layered shapes and barrels). Optional mechanics are `splash`, `slow` +
-  `slow_time`, `burn` + `burn_time`, `chain`, `multishot`, `instant` and `vs_slowed`.
+  `slow_time`, `burn` + `burn_time`, `chain`, `multishot`, `instant`, `vs_slowed` and `vs_burning`.
 - **`evolution.json`**: the three tier 1 → 3 lines and the twelve tier 4 recipes.
 - **`monsters.json`**: every monster's stats, cost, look and mechanics (`armor`, `heal_aura`, `split`,
   `phase`, `slow_floor`, `summon`), the abilities, the stat upgrades, and the Monsters-side rules

@@ -1,7 +1,7 @@
 """Long simulations with the bot player (bot.py). Skip them with: uv run pytest -m "not slow".
 
 These double as balance checks (2026-10-20, seeds 0-5): the planning bot (profile damage) wins the
-Towers pass on 5 seeds of 6, with Railguns and Absolute Zeros from level 2 on; the bot before the
+Towers pass on 5 seeds of 6, with Railguns and Frostbites from level 2 on; the bot before the
 planner (profile cycle) and the planner kept to tiers 1-2 or to the Gun line fall on level 2.
 """
 

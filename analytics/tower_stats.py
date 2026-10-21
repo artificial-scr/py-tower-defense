@@ -11,7 +11,7 @@ The model (the real rules are in entities.py):
   - monsters walk in single file, SPACINGS px apart: "1 target" is a lone monster, "wave" the usual
     gap in generated waves (speed x gap is 40-60 px), "swarm" Swarmlings and Spiderlings (~14 px)
   - DPS is sustained: a tower's own slow counts for its vs_slowed bonus when it hits again before the
-    slow wears off, and a burn counts in full when it's renewed before it runs out; burns don't stack
+    slow wears off (and its own burn for vs_burning); a partner's slow or burn isn't counted, and a burn counts in full when it's renewed before it runs out; burns don't stack
   - splash, multishot and chain hit an endless line of monsters; multishot can't pick more targets
     than are in range
   - tower cards, the monster player's buffs and abilities, healers and decoys are left out
@@ -79,6 +79,11 @@ def keeps_slowed(spec):
     return "slow" in spec and 1 / spec["rate"] < spec["slow_time"]
 
 
+def keeps_burning(spec):
+    """Whether the tower's own hits keep a target burning (it fires again before its burn wears off)."""
+    return "burn" in spec and 1 / spec["rate"] < spec["burn_time"]
+
+
 def slow_uptime(spec):
     return min(1.0, spec["rate"] * spec["slow_time"]) if "slow" in spec else 0.0
 
@@ -92,6 +97,8 @@ def hit_damage(spec, armor=0, slowed=None):
     damage = spec["damage"]
     if "vs_slowed" in spec and (keeps_slowed(spec) if slowed is None else slowed):
         damage *= spec["vs_slowed"]
+    if "vs_burning" in spec and keeps_burning(spec):
+        damage *= spec["vs_burning"]
     return after_armor(damage, armor)
 
 

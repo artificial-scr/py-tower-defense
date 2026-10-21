@@ -10,7 +10,7 @@
     "Tower effects: damage (per_rank more damage for towers of `line`; finals count for both parent lines),",
     "  range (per_rank more range), gold (per_rank more starting gold each Towers pass), lives (same for",
     "  lives), refund (per_rank more sell refund), detector (towers can target phased monsters), armor (adds",
-    "  per_rank to the monster armor multiplier), grounding (adds per_rank to how long EMP and Smokescreen last)."
+    "  per_rank to the monster armor multiplier), grounding (adds per_rank to how long EMP and Smokescreen last), burn (per_rank more burn damage)."
   ],
   "monster": {
     "swarmling": {"name": "Swarmlings", "desc": "Tiny, cheap, fast; they come in crowds", "effect": "type",
@@ -55,8 +55,8 @@
                    "weight": 3, "max": 3},
     "swiftness": {"name": "Swiftness", "desc": "+6% monster speed", "effect": "buff", "mod": "speed",
                   "per_rank": 0.06, "weight": 3, "max": 3},
-    "insulation": {"name": "Insulation", "desc": "-20% burn damage taken", "effect": "buff", "mod": "burn",
-                   "per_rank": -0.2, "weight": 3, "max": 3},
+    "insulation": {"name": "Insulation", "desc": "-15% burn damage taken", "effect": "buff", "mod": "burn",
+                   "per_rank": -0.15, "weight": 3, "max": 3},
     "thaw": {"name": "Thaw", "desc": "Slows are 15% weaker", "effect": "buff", "mod": "thaw", "per_rank": 0.15,
              "weight": 3, "max": 3},
     "war_chest": {"name": "War Chest", "desc": "+15% draft budget", "effect": "budget", "per_rank": 0.15,
@@ -77,6 +77,8 @@
                 "weight": 3, "max": 3},
     "salvage": {"name": "Salvage", "desc": "+5% sell refund", "effect": "refund", "per_rank": 0.05, "weight": 2,
                 "max": 3},
+    "hotter_fuel": {"name": "Hotter Fuel", "desc": "+15% burn damage", "effect": "burn", "per_rank": 0.15,
+                    "weight": 3, "max": 3},
     "detector": {"name": "Detector", "desc": "Towers can target phased Phantoms", "effect": "detector",
                  "weight": 1, "rare": true},
     "piercing": {"name": "Piercing Rounds", "desc": "Monster armor is halved", "effect": "armor", "per_rank": -0.5,

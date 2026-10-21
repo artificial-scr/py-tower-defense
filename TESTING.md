@@ -115,7 +115,7 @@ changed difficulty, not necessarily that something is broken.
 On the Monsters side, the bot first sets tower records for levels 1 and 2, then scripted drafts
 (`scripted_attack` in `tests/helpers.py`) attack them with no unlocks. They pin two properties of
 the balance, and **both fail since the planning bot (2026-10-20)**: its records (a Hailstorm by the end
-of level 1, Railgun + Absolute Zero on level 2) hold against the scripted drafts. The bot before the
+of level 1, Railgun + Frostbite on level 2) hold against the scripted drafts. The bot before the
 planner falls on level 2, so it can't set a level 2 record:
 
 - **Monsters level 1 stays winnable.** Even waves take enough lives to clear it, and one big push

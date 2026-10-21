@@ -148,7 +148,7 @@ file.
 | Type | Mechanic | Counters | Countered by |
 |---|---|---|---|
 | **Swarmling** | Tiny and very cheap (cost 2, 8 HP), spawns fast | Single-target towers, overkill | Splash |
-| **Armored** | Every hit loses a flat amount of damage | Rapid fire (Minigun, Dragon, Flak) | Big hits (Sniper, Railgun) |
+| **Armored** | Every hit loses a flat amount of damage | Rapid fire (Minigun, Flak) | Big hits (Sniper, Railgun) |
 | **Healer** | Heals nearby monsters over time | Burn, slow attrition | Burst, focus fire |
 | **Splitter** | Splits into 3 Swarmlings when it dies | Single big hits | Splash, chain |
 | **Phantom** | Every 4 s it can't be targeted for 1.5 s | Long-range snipers | Area slows, splash |
@@ -159,7 +159,7 @@ file.
 |---|---|
 | Thick Hide | +10% HP |
 | Swiftness | +6% speed |
-| Insulation | −20% burn damage |
+| Insulation | −15% burn damage |
 | Thaw | Slows are 15% weaker |
 | War Chest (rare, 5 ranks) | +15% budget |
 
@@ -223,6 +223,7 @@ stay winnable, or the side would be a dead end (see the balance findings).
 | Detector (rare) | Towers can target phased Phantoms | 1 |
 | Piercing Rounds (rare) | Armor is halved | 1 |
 | Grounding (rare) | EMP and Smokescreen last half as long | 1 |
+| Hotter Fuel | +15% burn damage (answers Insulation) | 3 |
 
 The rare tower cards are direct counters to monster unlocks, so each side's progress answers the
 other's.
@@ -309,7 +310,7 @@ one push wins level 1 every time, and evenly paced waves still lose. That's the 
 | | Save for one push | Pace evenly |
 |---|---|---|
 | Level 1 | wins | loses |
-| Level 2 (record ends on Dragon + Absolute Zero) | loses: Zero slows the whole column, Dragon burns it | wins |
+| Level 2 (record ends on Dragon + Frostbite) | loses: Frostbite slows the whole column, Dragon burns it | wins |
 
 Juggernauts (immune to slows) beat that level 2 record outright. Both rows were pinned by slow tests,
 until the early hp boost below: the bot's level 2 record now ends on Railgun + Blizzard (990 gold),
@@ -501,12 +502,12 @@ and the Mortar after 7 towers of any kind (it was 3 Cannons).
 | Dragon | Burns kill 500 monsters (over all runs) |
 | Hailstorm | Clear a level without losing a life, from level 5 on |
 | Tesla Coil | Kill 25 monsters within 2 s |
-| Absolute Zero | Clear a level where only Frost towers (fusions with a Frost parent included) deal damage |
+| Frostbite | Clear a level where only Frost towers (fusions with a Frost parent included) deal damage |
 | Frost Lance | Snipers kill 10 Elites (over all runs) |
 | Glacier Breaker | Survive a wave with 60 or more monsters in it |
 | Obsidian | Win 3 Towers passes |
 
-Some of these need towers that may still be locked (Absolute Zero needs the Frost line to the
+Some of these need towers that may still be locked (Frostbite needs the Frost line to the
 top, Dragon needs Incinerators). That's intended: the late goals build on the early unlocks.
 
 ### Effects on the rest of the game
@@ -588,7 +589,7 @@ already counters the tag. A wave's threat stays the same. Records from the Monst
 (they are the player's own counter), and `wave_value` uses the wave without counters.
 
 **The scouts weigh damage, not gold (2026-10-20).** In the first playtest, level 3's main tag by gold was
-splash (three Mortars, then Bombards: 48%), so the scouts sent Fast monsters, while one Absolute Zero
+splash (three Mortars, then Bombards: 48%), so the scouts sent Fast monsters, while one Frostbite
 (32% of the gold) dealt 53% of the damage and froze the Fasts at a fifth of the path. Each tower now counts
 the damage it dealt in the last wave (`Tower.wave_damage`, reset when a wave starts). The report says which
 it used (`by`), and the hoard check still compares banked gold with the towers' value in gold.

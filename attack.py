@@ -108,7 +108,7 @@ class AttackMixin:
         comp = self.defender_comp(wave)
         self.towers = {}
         self.selected = None
-        self.defender_mods = comp.get("mods", NO_TOWER_MODS) if comp else NO_TOWER_MODS
+        self.defender_mods = {**NO_TOWER_MODS, **comp.get("mods", {})} if comp else NO_TOWER_MODS  # older records lack newer cards
         for entry in comp["towers"] if comp else []:
             t = Tower(entry["kind"], tuple(entry["tile"]), entry["gold_spent"])
             t.mods = self.defender_mods

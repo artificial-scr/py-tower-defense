@@ -42,7 +42,8 @@ def test_fusion_rules():
 
 def test_tower_fields():
     for kind, s in TOWERS.items():
-        assert s["range"] > 0 and s["damage"] > 0 and s["rate"] > 0, kind
+        assert s["range"] > 0 and s["rate"] > 0, kind
+        assert s["damage"] > 0 or s.get("burn", 0) > 0, kind  # a Dragon does all its damage by burning
         assert (s["cost"] is not None) == (s["tier"] == 1), kind
         assert all(len(c) == 3 for _, _, c in s["look"]["layers"]), kind
 

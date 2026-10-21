@@ -21,7 +21,9 @@ SHAPES = ("circle", "square", "diamond", "triangle", "hexagon", "octagon", "star
 #   multishot   number of targets fired at per shot
 #   instant     hits immediately with a beam instead of a projectile
 #   vs_slowed   damage multiplier against enemies that are already slowed
-MECHANICS = ("splash", "slow", "slow_time", "burn", "burn_time", "chain", "multishot", "instant", "vs_slowed")
+#   vs_burning  damage multiplier against enemies that are already burning (stacks with vs_slowed)
+MECHANICS = ("splash", "slow", "slow_time", "burn", "burn_time", "chain", "multishot", "instant", "vs_slowed",
+             "vs_burning")
 TOWER_FIELDS = ("name", "tier", "desc", "range", "damage", "rate", "proj_speed", "cost", "look")
 REQUIRED_TOWER_FIELDS = ("name", "tier", "desc", "range", "damage", "rate", "look")
 
@@ -132,7 +134,8 @@ for parents, final in CROSS.items():
 # extra starting gold and lives, sell refund share, whether towers can target phased monsters, the
 # armor multiplier towers impose on monsters, and how long area abilities last on towers.
 NO_TOWER_MODS = {"damage": {line: 1.0 for line in LINES}, "range": 1.0, "gold": 0, "lives": 0, "refund": 0.7,
-                 "detector": False, "armor": 1.0, "grounding": 1.0}
+                 "detector": False, "armor": 1.0, "grounding": 1.0,
+                 "burn": 1.0}
 
 
 def fusion_options(a, b):

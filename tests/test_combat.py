@@ -2,6 +2,7 @@
 
 import pytest
 
+from entities import Projectile
 from helpers import dummy_enemy, put, run_wave
 from towers import TOWERS
 
@@ -103,3 +104,26 @@ def test_turrets_turn_toward_their_target_and_kick_back_when_firing(game):
     for _ in range(10):
         gun.update(1 / 60, [e], [], [])
     assert gun.kick == 0.0
+
+
+def test_obsidian_bonuses_stack(game):
+    obsidian = TOWERS["obsidian"]
+    hits = []
+    for slowed, burning in ((False, False), (True, False), (False, True), (True, True)):
+        e = dummy_enemy((0, 0), hp=10_000)
+        if slowed:
+            e.apply_slow(0.5, 5)
+        if burning:
+            e.apply_burn(1, 5)
+        Projectile(put(game, "obsidian", (5, 5)), e).strike(e, obsidian["damage"], "direct")
+        hits.append(e.max_hp - e.hp)
+    assert hits == pytest.approx([obsidian["damage"] * m for m in (1, 2, 2, 4)])
+
+
+def test_a_short_strong_burn_doesnt_inherit_a_long_one():
+    e = dummy_enemy((0, 0), hp=10_000)
+    e.apply_burn(60, 4)  # a Solar Lance
+    e.apply_burn(190, 0.1)  # a Dragon's flash takes over, for 0.1 s only
+    assert (e.burn_dps, e.burn_timer) == (190, 0.1)
+    e.apply_burn(60, 4)  # weaker: lost, and it doesn't stretch the flash either
+    assert (e.burn_dps, e.burn_timer) == (190, 0.1)

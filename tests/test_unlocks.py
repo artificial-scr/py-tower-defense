@@ -13,7 +13,7 @@ from entities import Enemy, Tower
 from helpers import SCALES, key, mouse_down, put, run_wave, scaled
 from monsters import REWARDS
 from progress import UNLOCKS, Profile, load_unlocks
-from towers import NO_TOWER_MODS
+from towers import NO_TOWER_MODS, TOWERS
 
 
 def win_towers_level(game):
@@ -37,7 +37,7 @@ def win_monsters_level(game):
 
 # ---- unlocks.json ---------------------------------------------------------------------
 def test_pools():
-    assert len(UNLOCKS["monster"]) == 23 and len(UNLOCKS["tower"]) == 10
+    assert len(UNLOCKS["monster"]) == 23 and len(UNLOCKS["tower"]) == 11
     assert {c["effect"] for c in UNLOCKS["monster"].values()} == {"type", "ability", "buff", "budget"}
     assert all(c["max"] >= 1 for pool in UNLOCKS.values() for c in pool.values())
 
@@ -261,3 +261,12 @@ def test_towers_side_record_tiers(game):
                                                "casts": []}}
     game.load_level(0)
     assert game.record_tier == "strong"
+
+
+def test_hotter_fuel_strengthens_burns(game):
+    unlock(game.profile, "hotter_fuel", 2)
+    game.load_level(0)
+    tower = put(game, "incinerator", (6, 4))
+    tower.mods = game.card_mods
+    assert tower.burn == pytest.approx(TOWERS["incinerator"]["burn"] * 1.3)
+    assert Tower("incinerator", (1, 1)).burn == TOWERS["incinerator"]["burn"], "no card, no bonus"

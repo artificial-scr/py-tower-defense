@@ -106,7 +106,7 @@ def test_scouts_find_the_tag_holding_most_of_the_gold():
 
 
 def test_scouts_weigh_towers_by_the_damage_they_dealt():
-    # the first playtest's level 3: three Mortars held most of the gold, one Absolute Zero did most of the work
+    # the first playtest's level 3: three Mortars held most of the gold, one Frostbite did most of the work
     towers = [("mortar", 180, (0, 0), 500), ("mortar", 180, (0, 0), 500), ("mortar", 180, (0, 0), 500),
               ("zero", 480, (0, 0), 3000)]
     r = scout(towers, 0, PATH)

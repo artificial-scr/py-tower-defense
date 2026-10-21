@@ -51,8 +51,10 @@ def log_names(game):
 
 def test_logs_across_runs(logged_game):
     g = logged_game
-    # run 1: the bot clears levels 1-3 (moving and selling towers too), then quits during level 4
+    # run 1: the bot clears levels 1-3 (moving and selling towers too), then quits during level 4; spare lives
+    # keep this about the logs, not about whether the bot's comp holds
     random.seed(0)
+    g.lives = 100
     bot_play(g, until_level=4, move_and_sell=True)
     assert g.level_idx == 3 and g.state == "build"
     g.start_wave()
