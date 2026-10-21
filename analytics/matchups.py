@@ -449,15 +449,15 @@ def report(name, monsters, jobs, csv_dir=None):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--checkpoint", default=",".join(CHECKPOINTS), help=f"comma-separated: {', '.join(CHECKPOINTS)}")
-    parser.add_argument("--monsters", default=",".join(MONSTERS), help="comma-separated draftable monsters")
+    parser.add_argument("--monsters", default=",".join(MONSTERS), help="comma-separated draftable monsters (or elites)")
     parser.add_argument("--jobs", type=int, default=os.cpu_count(), help="worker processes")
     parser.add_argument("--csv", help="also write each checkpoint's matrix to this directory")
     parser.add_argument("--counter-scores", action="store_true", help="print the counter scores for waves.json")
     args = parser.parse_args(argv)
     monsters = args.monsters.split(",")
     for m in monsters:
-        if m not in MONSTERS:
-            parser.error(f"{m} isn't a draftable monster")
+        if m not in MONSTERS and not ENEMY_TYPES.get(m, {}).get("elite"):
+            parser.error(f"{m} isn't a draftable monster or an elite")
     tables = []
     for name in args.checkpoint.split(","):
         if name not in CHECKPOINTS:

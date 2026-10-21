@@ -100,7 +100,7 @@ Records are kept **per wave**: each level has five slots, one for each of its wa
   too small a share to take a life on the next one, so a good start lost the run. The panel shows
   it, e.g. "claims 55% (+15% pace)".
 - Every monster type gets a `cost`. For the existing types, cost = the old kill reward
-  (basic 5, fast 6, tank 12, elite 80, bosses 400 / 1000). So "the army your towers beat" and "the
+  (basic 5, fast 6, tank 12, champion 80, bosses 400 / 1000). So "the army your towers beat" and "the
   gold your towers earned from it" are the same number.
 - Unspent budget **carries over** to the next wave of the same level. You can starve early waves
   and save up for one big push.
@@ -501,7 +501,7 @@ and the Mortar after 7 towers of any kind (it was 3 Cannons).
 | Dragon | Burns kill 500 monsters (over all runs) |
 | Hailstorm | Clear a level without losing a life, from level 5 on |
 | Tesla Coil | Kill 25 monsters within 2 s |
-| Absolute Zero | Clear a level with only Frost-line towers |
+| Absolute Zero | Clear a level where only Frost towers (fusions with a Frost parent included) deal damage |
 | Frost Lance | Snipers kill 10 Elites (over all runs) |
 | Glacier Breaker | Survive a wave with 60 or more monsters in it |
 | Obsidian | Win 3 Towers passes |
@@ -649,3 +649,34 @@ slowing build's levels 7–9 to 0, 4 and 0 lives: the reason for the last change
   wave 1 from 40 to 50. The 40% share rule (section 9) hasn't been rechecked with bots.
 - **The slow playthrough tests** (`test_playthrough.py`) were already failing before the rework (they
   predate tower unlocks), so no long bot test covers the new waves yet.
+
+## 13. Elites: one per level
+
+Status: **built** (2026-10-21), not yet playtested by a person. Stats in `monsters.json` (`"elite": true`),
+which level gets which in `waves.json` (`levels[i].elite`), pictures in `sprites.py`.
+
+Every level without a boss used to end on the same Elite. Now six elites take turns, each with its own
+answer, so the end of a level tests something different each time:
+
+| Elite | HP | Speed | What it does | Answer | Levels |
+|---|---|---|---|---|---|
+| Champion | 400 | 30 | Nothing special: a big wall of HP | Any damage | 1 |
+| Bastion | 320 | 26 | Armor 9: a Gun's 14 does 5 | Big hits (Rifle line, Cannon line) | 2, 7 |
+| Hierophant | 300 | 30 | A ward that eats a whole hit every 3 s; calls a Healer every 12 s | Kill the Healers; rapid fire breaks the ward | 3 |
+| Warlord | 340 | 28 | Up to twice as fast as it's hurt (enrage 1); slows can't push it below 50% | Burst it down before it runs; slows help less | 4, 9 |
+| Wraith | 280 | 42 | Phases out of reach for 1.5 s every 4 s | Detector card, splash, a wide net of towers | 5, 8 |
+| Plague Bloat | 240 | 26 | Bursts into 2 Splitters (6 Swarmlings) | Splash | 6 |
+
+- Each one reuses mechanics the normal monsters already have, at elite scale, and each level's elite
+  plays off what the level brings in (the Bastion with the Armored, the Hierophant with the Healer, the Warlord
+  with the Berserker, the Wraith with the Phantom).
+- All are worth 80 gold and take 5 lives, except the Bloat: 50 gold, as its brood pays out the rest.
+- Only the Champion can be drafted on the Monsters side. The others are `draft: never`, so the draft
+  panel (10 rows) doesn't grow.
+- Achievements that name Elites (Big Game, Elite Hunter) count all six, and so does the music's danger
+  layer.
+- Tuned with `matchups.py --monsters champion,bastion,hierophant,warlord,wraith,bloat` (elites are allowed
+  there). "Fair cost" at the mid checkpoint: Champion 83, Bastion 72, Hierophant 74, Warlord 99, Wraith 79,
+  Bloat 74. At first the Hierophant scored 195: it called a Healer every 7 s and the Healers' auras stacked
+  on it. The matchups play a stream of one kind, which flatters summoners and splitters, so the Bloat's 173
+  at the early checkpoint says little: it comes on level 6.

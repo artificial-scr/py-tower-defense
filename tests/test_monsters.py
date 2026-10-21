@@ -21,17 +21,21 @@ def line(length=2000, y=100):
 # ---- the shipped data ----------------------------------------------------------
 def test_roster():
     drafts = {k: s["draft"] for k, s in ENEMY_TYPES.items()}
-    assert [k for k, d in drafts.items() if d == "starter"] == ["basic", "fast", "tank", "elite"]
+    assert [k for k, d in drafts.items() if d == "starter"] == ["basic", "fast", "tank", "champion"]
     assert sorted(k for k, d in drafts.items() if d == "unlock") == \
         ["armored", "bearer", "berserker", "healer", "juggernaut", "looter", "mirage", "phantom", "saboteur", "splitter", "swarmling", "thawling",
          "warded"]
     assert all(drafts[boss] == "boss" and ENEMY_TYPES[boss]["fatal"] for boss in ALL_BOSS_LEVELS.values())
+    elites = [k for k, s in ENEMY_TYPES.items() if s.get("elite")]
+    assert elites == ["champion", "bastion", "hierophant", "warlord", "wraith", "bloat"]
+    assert all(drafts[k] == "never" for k in elites[1:]), "only the Champion is draftable"
+    assert {ENEMY_TYPES[k]["damage"] for k in elites} == {5}
     assert sorted(ABILITIES) == ["bulwark", "emp", "frenzy", "mend", "smoke"]
 
 
 def test_original_costs_match_the_old_kill_rewards():
-    assert {k: ENEMY_TYPES[k]["cost"] for k in ("basic", "fast", "tank", "elite", "warden", "overlord")} == \
-        {"basic": 5, "fast": 6, "tank": 12, "elite": 80, "warden": 400, "overlord": 1000}
+    assert {k: ENEMY_TYPES[k]["cost"] for k in ("basic", "fast", "tank", "champion", "warden", "overlord")} == \
+        {"basic": 5, "fast": 6, "tank": 12, "champion": 80, "warden": 400, "overlord": 1000}
 
 
 # ---- broken files --------------------------------------------------------------
@@ -55,6 +59,8 @@ def shipped():
     (lambda d: d["enemies"]["splitter"].update(split=["ghost", 2]), "split makes 'ghost'"),
     (lambda d: d["enemies"]["warden"].pop("boss"), "bosses need both"),
     (lambda d: d["enemies"]["warded"].update(ward=0), "ward must be a positive number"),
+    (lambda d: d["enemies"]["bastion"].update(elite=1), "elite must be true"),
+    (lambda d: d["enemies"]["warden"].update(elite=True), "on a monster that isn't a boss"),
     (lambda d: d["enemies"]["mirage"].update(decoy=[2, 40]), "decoy must be"),
     (lambda d: d["enemies"]["berserker"].update(enrage=-1), "enrage must be"),
     (lambda d: d["enemies"]["thawling"].update(rebound=[0.8]), "rebound must be"),

@@ -113,7 +113,7 @@ The towers on the map are your **tower record** for the level, and you have to g
 | Basic | Average speed and HP | Always |
 | Fast | Quick, with a Basic's HP | Always |
 | Tank | Slow and tough, costs 2 lives if it gets through | Always |
-| Elite | Very tough, costs 5 lives | Always |
+| Champion | The first Elite: very tough, costs 5 lives | Always |
 | Swarmling | Tiny, cheap, fast; comes in crowds | Card |
 | Armored | Blocks a flat part of every hit (not burns): shrugs off rapid fire | Card |
 | Healer | Heals the monsters around it | Card |
@@ -127,10 +127,18 @@ The towers on the map are your **tower record** for the level, and you have to g
 | Saboteur | When killed, towers within 1.5 tiles stop firing for 2 s | Card |
 | Looter | Takes no lives: steals 15% of the tower player's gold, or brings back 2× its cost as budget | Card |
 | Banner Bearer | Monsters around it move 30% faster | Card |
+| *Bastion* | Elite (levels 2, 7): heavy armor (9), shrugs off rapid fire | Ends a level |
+| *Hierophant* | Elite (level 3): a ward that eats a whole hit every 3 s; calls a Healer every 12 s | Ends a level |
+| *Warlord* | Elite (levels 4, 9): up to twice as fast as it's hurt, slows hold it to 50% at most | Ends a level |
+| *Wraith* | Elite (levels 5, 8): fast, and out of reach for 1.5 s every 4 s | Ends a level |
+| *Plague Bloat* | Elite (level 6): bursts into 2 Splitters | Ends a level |
 | **The Warden** | Boss of level 10: summons Fast monsters and resists slows | Boss level, last wave; a Towers pass's finale wave |
 | **The Brood Mother** | Boss: every 2.5 s shoots out 3 Spiderlings (1 behind, 2 in front); resists slows | No level yet |
 
 If a boss gets through, its side loses every life at once.
+
+Every level without a boss ends on an Elite, a different one by level (`waves.json`). Elites cost 5 lives.
+Only the Champion can be drafted.
 
 ### Abilities and buffs
 

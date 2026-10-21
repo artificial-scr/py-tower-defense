@@ -386,7 +386,7 @@ def paint_ghost(cv, size, color, inner, f, p):
 
 
 def paint_champion(cv, size, color, inner, f, p):
-    """Elite: a spiked champion on heavy feet."""
+    """Champion: a spiked champion on heavy feet."""
     _feet(cv, color, f, p, size, spread=0.7, foot=0.3, stride=0.35)
     _spikes(cv, color, f, 6, size, 1.25 + 0.05 * math.sin(math.tau * p))
     gem(cv, color, (0, 0), regular_polygon(V(), size, 6, f.as_polar()[1]), 1.5)
@@ -865,6 +865,143 @@ def paint_chairman(cv, size, color, inner, f, p):
     sphere(cv, SHOE, hat, size * 0.3, 0.6)
 
 
+# --------------------------------------------------------------------------
+# Elites: the one monster that ends a level, a different one each level (waves.json)
+# --------------------------------------------------------------------------
+CRIMSON = (190, 35, 50)
+STEEL = (175, 185, 200)
+
+
+def paint_bastion(cv, size, color, inner, f, p):
+    """Bastion: a knight in heavy plate marching behind a great tower shield (gold-rimmed, a boss in its
+    middle), riveted pauldrons on its shoulders and a crimson plume streaming from its helm."""
+    s = f.rotate(90)
+    a = f.as_polar()[1]
+    _feet(cv, IRON, f, p, size, spread=0.6, foot=0.32, stride=0.3)
+    for i in range(6):  # the plume, rippling back
+        t = i / 5
+        c = -f * size * (0.2 + 0.85 * t) + s * size * math.sin(math.tau * p + t * 3) * 0.12 * t
+        cv.circle(shade(CRIMSON, 0.85 + 0.25 * (1 - t)), c, size * (0.24 - 0.1 * t))
+    for k in (-1, 1):
+        pad = s * k * size * 0.72 - f * size * 0.08
+        gem(cv, shade(color, 0.85), pad, regular_polygon(pad, size * 0.4, 4, a + 45), 1)
+        cv.circle(inner, pad, max(0.6, size * 0.07))
+    gem(cv, color, (0, 0), regular_polygon(V(), size * 0.82, 8, a + 22.5), 1.5)
+    sphere(cv, STEEL, -f * size * 0.05, size * 0.42, 1)  # the helm
+    cv.line(INK, -f * size * 0.05 + f * size * 0.32 + s * size * 0.2,
+            -f * size * 0.05 + f * size * 0.32 - s * size * 0.2, max(0.6, size * 0.07))  # its visor slit
+    curve = [f * size * (0.72 + 0.22 * math.cos(t * math.pi / 2)) + s * size * 0.98 * t
+             for t in (i / 6 - 1 for i in range(13))]
+    shield = curve + [pt - f * size * 0.26 for pt in reversed(curve)]
+    gem(cv, color, f * size * 0.8, shield, 1.2)
+    cv.polygon(inner, shield, max(0.7, size * 0.07))
+    sphere(cv, inner, f * size * 0.9, size * 0.18, 0.6)
+
+
+def paint_hierophant(cv, size, color, inner, f, p):
+    """Hierophant: a priest floating in ivory robes, a teal stole down its back, a gold halo over its hood
+    and a censer swinging from one hand, trailing incense."""
+    s = f.rotate(90)
+    hem = [-f * size * (0.95 + 0.1 * math.sin(math.tau * p + i * 1.2)) + s * size * (0.85 - i * 0.34)
+           for i in range(6)]
+    robe = [f * size * 0.15 + s * size * 0.75, *hem, f * size * 0.15 - s * size * 0.75]
+    cv.polygon(shade(color, 0.7), robe)
+    cv.polygon(shade(color, 0.4), robe, 1)
+    blob(cv, color, -f * size * 0.05, f, size * 0.85, size * 0.82, 1.5)
+    for k in (-1, 1):  # the stole: two teal bands down the back, gold-tipped
+        band = [f * size * 0.3 + s * k * size * 0.22, -f * size * 0.95 + s * k * size * 0.3,
+                -f * size * 0.95 + s * k * size * 0.12, f * size * 0.3 + s * k * size * 0.08]
+        cv.polygon(inner, band)
+        cv.line(GOLD, band[1], band[2], max(0.6, size * 0.08))
+    swing = math.sin(math.tau * p) * 0.5
+    hand = s * size * 0.8 + f * size * 0.3
+    censer = hand + (f * math.cos(swing) + s * math.sin(swing)) * size * 0.7
+    for i in range(3):  # incense curling back from the censer
+        puff = censer - f * size * (0.35 + 0.35 * i) + s * size * 0.12 * math.sin(math.tau * p + i)
+        cv.circle((230, 235, 225, 120 - 30 * i), puff, size * (0.14 + 0.06 * i))
+    cv.line(GOLD, hand, censer, max(0.5, size * 0.05))
+    sphere(cv, GOLD, censer, size * 0.2, 0.6)
+    sphere(cv, shade(color, 0.9), hand, size * 0.2, 0.8)
+    hood = f * size * 0.3
+    sphere(cv, shade(color, 0.92), hood, size * 0.5, 1)
+    cv.circle((*GOLD, 210), hood - f * size * 0.1, size * 0.62, max(0.8, size * 0.09))  # the halo
+    gem(cv, inner, -f * size * 0.35, regular_polygon(-f * size * 0.35, size * 0.22, 4, f.as_polar()[1]), 0.8)
+
+
+def paint_warlord(cv, size, color, inner, f, p):
+    """Warlord: a horned brute in spiked black-iron armor, a tattered war cape snapping behind it and a
+    great axe on one shoulder, a hot ember glowing at the crest of its helm."""
+    s = f.rotate(90)
+    a = f.as_polar()[1]
+    cape = []
+    for i in range(7):
+        t = i / 6
+        cape.append(-f * size * (0.2 + 1.0 * t + (0.15 if i % 2 else 0) * t)
+                    + s * size * (0.95 - 1.9 * t) + f * size * 0.1 * math.sin(math.tau * p + t * 4))
+    cv.polygon(shade(color, 0.55), [s * size * 0.9, *cape, -s * size * 0.9])
+    cv.polygon(shade(color, 0.3), [s * size * 0.9, *cape, -s * size * 0.9], 1)
+    _feet(cv, IRON, f, p, size, spread=0.72, foot=0.36, stride=0.45)
+    _spikes(cv, IRON, f, 6, size, 1.3, 30)
+    gem(cv, color, (0, 0), regular_polygon(V(), size, 6, a), 1.5)
+    gem(cv, shade(IRON, 1.2), (0, 0), regular_polygon(V(), size * 0.6, 6, a + 30), 1)
+    for k in (-1, 1):
+        root = f * size * 0.3 + s * k * size * 0.38
+        _tapered(cv, BONE, root, root + s * k * size * 0.7, root + s * k * size * 0.5 + f * size * 0.7, size * 0.17)
+    haft = s * size * 1.0 - f * size * 0.6
+    head = s * size * 1.05 + f * size * 0.7
+    cv.line(LEATHER, haft, head, max(0.8, size * 0.1))
+    blade = [head - f * size * 0.05, head + s * size * 0.55 + f * size * 0.3, head + s * size * 0.65,
+             head + s * size * 0.55 - f * size * 0.35, head - f * size * 0.3]
+    gem(cv, STEEL, head + s * size * 0.3, blade, 0.8)
+    cv.circle(inner, f * size * 0.5, max(0.8, size * 0.12))
+
+
+def paint_wraith(cv, size, color, inner, f, p):
+    """Wraith: a hooded reaper drifting in a tattered cloak whose ragged hem trails behind, a scythe held
+    out to one side, green witch-light inside its hood."""
+    s = f.rotate(90)
+    hem = []
+    for i in range(9):
+        t = i / 8
+        rag = 0.35 if i % 2 else 0  # ragged points
+        hem.append(-f * size * (0.9 + rag + 0.15 * math.sin(math.tau * p + i)) + s * size * (0.85 - 1.7 * t))
+    cloak = [f * size * 0.2 + s * size * 0.8, *hem, f * size * 0.2 - s * size * 0.8]
+    cv.polygon(shade(color, 0.5), cloak)
+    cv.polygon(shade(color, 0.3), cloak, 1)
+    blob(cv, color, (0, 0), f, size * 0.8, size * 0.75, 1.2)
+    hand = -s * size * 0.75 + f * size * 0.15
+    top = hand + f * size * 1.05 - s * size * 0.2
+    cv.line((70, 55, 50), hand - f * size * 0.6, top, max(0.7, size * 0.08))  # the scythe's snath
+    _tapered(cv, STEEL, top, top + s * size * 0.55 + f * size * 0.25, top + s * size * 0.95 - f * size * 0.15,
+             size * 0.14)
+    sphere(cv, shade(color, 0.85), hand, size * 0.18, 0.6)
+    hood = f * size * 0.3
+    sphere(cv, shade(color, 0.75), hood, size * 0.55, 1)
+    cv.circle((*inner, 90), hood + f * size * 0.12, size * 0.42)  # the light inside the hood
+    cv.circle(shade(color, 0.25), hood + f * size * 0.22, size * 0.3)
+
+
+def paint_bloat(cv, size, color, inner, f, p):
+    """Plague Bloat: a swollen sac waddling on six stubby legs, its skin veined and swelling as it breathes,
+    pustules throbbing on its back and a trail of drips behind it (it bursts into Splitters)."""
+    s = f.rotate(90)
+    breathe = math.sin(math.tau * p)
+    for i in range(3):  # legs, three a side, stepping in turn
+        x = (0.45 - 0.45 * i) * size + math.sin(math.tau * p + i * 2.1) * 0.12 * size
+        for k in (-1, 1):
+            blob(cv, shade(color, 0.5), f * x + s * k * size * 0.9, f, size * 0.2, size * 0.16, 0.6)
+    for back, r in ((1.2, 0.18), (1.55, 0.12)):
+        cv.circle((*color, 120), -f * size * back + s * size * 0.15 * breathe, size * r)
+    blob(cv, color, (0, 0), f, size * (0.95 + 0.05 * breathe), size * (0.9 + 0.07 * breathe), 1.5)
+    for x, y, dx, dy in ((0.3, 0.5, -0.4, 0.2), (0.1, -0.55, -0.35, -0.15), (-0.4, 0.1, -0.3, 0.35)):
+        cv.line(shade(color, 0.6), (f * x + s * y) * size, (f * (x + dx) + s * (y + dy)) * size, max(0.6, size * 0.05))
+    for i, (x, y, r) in enumerate(((-0.25, 0.35, 0.2), (0.15, -0.3, 0.17), (-0.5, -0.25, 0.15), (0.3, 0.2, 0.12))):
+        throb = 1 + 0.18 * math.sin(math.tau * p + i * 1.7)
+        c = (f * x + s * y) * size
+        cv.circle(shade(inner, 0.6), c, size * r * throb)
+        sphere(cv, inner, c, size * r * throb * 0.75, 0)
+
+
 # kind -> how it's drawn and animated:
 #   paint     the painter
 #   clock     "walk": the animation follows the distance walked (one cycle per `stride` sizes walked),
@@ -913,8 +1050,18 @@ CREATURES = {
                "eyes": (0.32, 0.26, 0.2, "round")},
     "warded": {"paint": paint_sentinel, "clock": "walk", "stride": 2.3, "move": "hop", "reach": 1.3,
                "eyes": (0.42, 0.3, 0.2, "round")},
-    "elite": {"paint": paint_champion, "clock": "walk", "stride": 2.4, "move": "hop", "reach": 1.3,
+    "champion": {"paint": paint_champion, "clock": "walk", "stride": 2.4, "move": "hop", "reach": 1.3,
               "eyes": (0.3, 0.3, 0.2, "angry")},
+    "bastion": {"paint": paint_bastion, "clock": "walk", "stride": 1.8, "move": "hop", "reach": 1.35,
+                "eyes": (0.33, 0.14, 0.09, "glow")},  # behind its visor slit
+    "hierophant": {"paint": paint_hierophant, "clock": "time", "rate": 1.0, "move": "hover", "reach": 1.75,
+                   "eyes": (0.5, 0.2, 0.16, "round")},
+    "warlord": {"paint": paint_warlord, "clock": "walk", "stride": 2.0, "move": "hop", "reach": 1.75,
+                "eyes": (0.52, 0.24, 0.16, "angry")},
+    "wraith": {"paint": paint_wraith, "clock": "time", "rate": 1.5, "move": "hover", "reach": 1.6, "alpha": 0.85,
+               "eyes": (0.52, 0.18, 0.15, "glow")},
+    "bloat": {"paint": paint_bloat, "clock": "walk", "stride": 1.4, "move": None, "reach": 1.6,
+              "eyes": (0.65, 0.3, 0.2, "round")},
     "juggernaut": {"paint": paint_golem, "clock": "walk", "stride": 2.0, "move": "hop", "reach": 1.45,
                    "eyes": (0.55, 0.3, 0.14, "glow")},
     "warden": {"paint": paint_warden, "clock": "walk", "stride": 1.6, "move": "hop", "reach": 1.75,

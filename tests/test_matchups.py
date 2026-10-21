@@ -61,12 +61,12 @@ def test_supports_spread_out_and_damage_gathers_on_them():
 def test_a_gun_stops_one_basic_but_not_a_crowd_of_elites():
     gun = matchups.place([("gun", 1)])
     assert not matchups.leaks(gun, "basic", 1, 1.0)
-    assert matchups.leaks(gun, "elite", 20, MID_HP)
+    assert matchups.leaks(gun, "champion", 20, MID_HP)
 
 
 def test_cells_are_cheaper_against_easier_monsters():
     gold, capped = matchups.cell([("railgun", 2)], "basic", MID_HP)
-    assert not capped and gold < matchups.cell([("railgun", 2)], "elite", MID_HP)[0]
+    assert not capped and gold < matchups.cell([("railgun", 2)], "champion", MID_HP)[0]
 
 
 @pytest.mark.slow

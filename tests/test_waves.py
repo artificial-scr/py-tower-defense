@@ -8,8 +8,9 @@ import main
 import waves
 from helpers import put, ranked_spots
 from levels import BOSS_LEVELS, LEVEL_COUNT, WAVES_PER_LEVEL, tile_center
-from waves import (THREAT, add_counters, base_packs, counter_options, load_waves, make_wave, roster, scout, threat,
-                   wave_budget)
+from monsters import ENEMY_TYPES
+from waves import (THREAT, add_counters, base_packs, counter_options, level_elite, load_waves, make_wave, roster,
+                   scout, threat, wave_budget)
 
 LEVEL_WAVES = [(level, wave) for level in range(LEVEL_COUNT) for wave in range(WAVES_PER_LEVEL)]
 PATH = [(x * 40 + 20, 220) for x in range(20)]  # a straight path along row 5
@@ -17,7 +18,7 @@ GOLD = {"gun": 50, "minigun": 200, "chiller": 140, "bombard": 360, "lance": 480,
 
 
 def bosses(kinds):
-    return [k for k in kinds if k in ("elite", "warden", "overlord")]
+    return [k for k in kinds if ENEMY_TYPES[k].get("elite") or ENEMY_TYPES[k]["draft"] == "boss"]
 
 
 def report(towers, gold=0, previous=None):
@@ -44,7 +45,14 @@ def test_only_the_last_wave_has_its_elite_or_boss(level_idx):
     for wave_idx in range(WAVES_PER_LEVEL - 1):
         assert not bosses(make_wave(level_idx, wave_idx).kinds)
     kinds = make_wave(level_idx, WAVES_PER_LEVEL - 1).kinds
-    assert bosses(kinds) == [kinds[-1]] == [BOSS_LEVELS.get(level_idx + 1, "elite")]
+    assert bosses(kinds) == [kinds[-1]] == [BOSS_LEVELS.get(level_idx + 1) or level_elite(level_idx)]
+
+
+def test_every_elite_ends_some_level_and_level_1_keeps_the_champion():
+    elites = {k for k, s in ENEMY_TYPES.items() if s.get("elite")}
+    used = [level_elite(i) for i in range(LEVEL_COUNT) if i + 1 not in BOSS_LEVELS]
+    assert set(used) == elites and used[0] == "champion"
+    assert level_elite(99) == level_elite(len(waves.RULES["levels"]) - 1), "levels past the list keep the last one's"
 
 
 def test_waves_get_harder():
@@ -188,7 +196,7 @@ def test_banked_gold_draws_a_few_looters_into_the_heaviest_pack(gold, looters):
 
 
 @pytest.mark.parametrize("tag, best", [("single", ["swarmling", "splitter", "fast"]), ("slow", ["healer", "juggernaut"]),
-                                       ("splash", ["elite", "bearer", "fast"]), ("light", ["armored", "swarmling"])])
+                                       ("splash", ["champion", "bearer", "fast"]), ("light", ["armored", "swarmling"])])
 def test_counters_are_the_main_tags_hardest_monsters(tag, best):
     kind = waves.COUNTERS["tags"][tag]["towers"][-1]
     assert counter_options(scout([(kind, 500, (0, 0), 0)], 0, PATH), roster(9)) == best
@@ -282,6 +290,8 @@ def shipped():
     (lambda d: d["counters"]["scores"].pop("burn"), "scores needs one table for each tag"),
     (lambda d: d["counters"]["scores"]["burn"].update(ghost=2), "'ghost' has no threat"),
     (lambda d: d["counters"].update(options=0), "options a whole number"),
+    (lambda d: d["levels"][1].update(elite="tank"), "level 2: elite 'tank' isn't an elite"),
+    (lambda d: d["levels"][1].update(elite="ghost"), "elite 'ghost' isn't an elite"),
     (lambda d: d["counters"]["hoard"].update(kind="ghost"), "'ghost' has no threat"),
 ])
 def test_broken_waves_file(tmp_path, change, message):

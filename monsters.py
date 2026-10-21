@@ -12,7 +12,7 @@ MONSTERS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "monste
 
 ENEMY_FIELDS = ("name", "hp", "speed", "cost", "damage", "gap", "draft", "size", "color", "sides")
 # Optional fields; their meaning is in the comment at the top of monsters.json.
-ENEMY_EXTRAS = ("boss", "fatal", "shape", "inner", "armor", "heal_aura", "split", "phase", "slow_floor", "summon",
+ENEMY_EXTRAS = ("elite", "boss", "fatal", "shape", "inner", "armor", "heal_aura", "split", "phase", "slow_floor", "summon",
                 "summon_max", "ward", "decoy", "enrage", "rebound", "sabotage", "loot",
                 "speed_aura", "ambush", "follows", "layoff", "dividends", "severance", "bankrupts")
 AMBUSH_FIELDS = ("from_level", "chance", "max")
@@ -57,6 +57,8 @@ def load_monsters(path):
             fail(what, f"draft must be one of {DRAFT}")
         if ("boss" in raw) != (raw["draft"] == "boss"):
             fail(what, "bosses need both a boss name and draft: boss")
+        if "elite" in raw and not (raw["elite"] is True and "boss" not in raw):
+            fail(what, "elite must be true, on a monster that isn't a boss")
         if raw["hp"] <= 0 or raw["speed"] <= 0 or raw["cost"] <= 0:
             fail(what, "hp, speed and cost must be positive")
         if "ward" in raw and not (isinstance(raw["ward"], (int, float)) and raw["ward"] > 0):

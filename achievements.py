@@ -165,7 +165,7 @@ class AchievementTracker:
         self.level_counts = defaultdict(int)  # goal key -> count this level (scope level)
         self.kill_times = deque()
         self.frame_kills = defaultdict(int)  # (tower uid, tower kind) -> kills this update, burns left out
-        self.lines_used = set()  # tower lines on the map at some point this level
+        self.damage_lines = set()  # the lines (TOWER_LINES) of every tower that dealt damage this level
         self.leaked = False
         self.updates = 0
 
@@ -271,7 +271,8 @@ class AchievementTracker:
         counts = defaultdict(int)
         for t in towers:
             counts[t.kind] += 1
-            self.lines_used.update(TOWER_LINES[t.kind])
+            if t.wave_damage:
+                self.damage_lines.add(TOWER_LINES[t.kind])
         for key, goal in self.open_goals("towers_on_map"):
             self.reach(key, goal, counts[goal["kind"]] if "kind" in goal else len(towers))
         # the kills one tower made in a single update (burns left out) all came from one shot. With `kills`,
@@ -307,7 +308,7 @@ class AchievementTracker:
         for key, goal in self.open_goals("level_cleared"):
             only = goal.get("only_line")
             if (level >= goal.get("min_level", 1) and not (goal.get("no_leaks") and self.leaked)
-                    and (not only or self.lines_used == {only})):
+                    and (not only or all(only in lines for lines in self.damage_lines))):
                 self.add(key, goal)
         self.flush()
 

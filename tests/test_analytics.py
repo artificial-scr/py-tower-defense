@@ -61,6 +61,6 @@ def play_pass(kind, enemy_kind, hp_mult):
 @pytest.mark.parametrize("kind", ["gun", "cannon", "frost", "shatter", "incinerator", "solar", "lance"])
 def test_pass_damage_matches_the_game(kind):
     hp_mult = 1000  # so the monster lives through the pass
-    elite = ENEMY_TYPES["elite"]
+    elite = ENEMY_TYPES["champion"]
     expected = tower_stats.pass_damage(TOWERS[kind], elite, hp_mult) * elite["hp"] * hp_mult
-    assert play_pass(kind, "elite", hp_mult) == pytest.approx(expected, rel=0.15)
+    assert play_pass(kind, "champion", hp_mult) == pytest.approx(expected, rel=0.15)

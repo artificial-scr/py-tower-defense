@@ -87,7 +87,7 @@ def threat(game):
     length = sum(a.distance_to(b) for a, b in zip(game.path_pts, game.path_pts[1:])) or 1
     front = max((e.travelled / length for e in monsters), default=0.0)
     if (front >= DANGER_AT or game.lives <= LOW_LIVES * game.lives_at_start
-            or any("boss" in e.spec or e.kind == "elite" for e in monsters)):
+            or any("boss" in e.spec or e.spec.get("elite") for e in monsters)):
         return DANGER
     if front >= PRESSED_AT or len(monsters) > CROWD:
         return PRESSED

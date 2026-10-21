@@ -71,7 +71,9 @@ def load_waves(path):
         fail("levels", "needs at least one level")
     for i, level in enumerate(data["levels"]):
         what = f"level {i + 1}"
-        check_fields(what, level, ("new",) + (("waves",) if "waves" in level else ()))
+        check_fields(what, level, ("new",) + tuple(f for f in ("waves", "elite") if f in level))
+        if "elite" in level and not ENEMY_TYPES.get(level["elite"], {}).get("elite"):
+            fail(what, f"elite {level['elite']!r} isn't an elite (monsters.json)")
         for kind in level["new"]:
             check_kind(what, kind)
             if kind in on_roster:
@@ -159,6 +161,12 @@ def plan(level_idx):
     """The level's entry in waves.json; levels past the list get the last one, with nothing new or scripted."""
     levels = RULES["levels"]
     return levels[level_idx] if level_idx < len(levels) else {"new": []}
+
+
+def level_elite(level_idx):
+    """The elite that ends a level's last wave when no boss does (levels past the list keep the last one's)."""
+    levels = RULES["levels"]
+    return levels[min(level_idx, len(levels) - 1)].get("elite", "champion")
 
 
 def roster(level_idx):
@@ -328,7 +336,7 @@ def make_wave(level_idx, wave_idx, report=None):
             pauses[len(kinds)] = RULES["pack_pause"]
         kinds += pack.kinds
     if wave_idx == WAVES_PER_LEVEL - 1:
-        kinds.append(BOSS_LEVELS.get(level_idx + 1, "elite"))
+        kinds.append(BOSS_LEVELS.get(level_idx + 1) or level_elite(level_idx))
     return Wave(kinds, generated_hp_mult(level_idx, wave_idx), pauses, counter)
 
 

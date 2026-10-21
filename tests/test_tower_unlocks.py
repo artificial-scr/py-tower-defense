@@ -302,16 +302,49 @@ def test_a_looter_through_on_the_monsters_side_counts_toward_hostile_takeover(sc
 
 
 def test_level_kills_restart_each_level(tracked):
+    own_parents(tracked.profile, "shatter")
+    for _ in range(29):
+        tracked.tracker.on_death(dead(slowed=True, by="frost"), 0)
+    tracked.tracker.start_level()
+    tracked.tracker.on_death(dead(slowed=True, by="frost"), 0)
+    assert "shatter" not in tracked.unlocked
+    assert tracked.profile.achievements["shatter/0"] == 29, "the best is kept"
+    for _ in range(29):
+        tracked.tracker.on_death(dead(slowed=True, by="frost"), 0)
+    assert "shatter" in tracked.unlocked
+
+
+def test_mortar_kills_add_up_across_levels_for_the_incinerator(tracked):
     own_parents(tracked.profile, "incinerator")
-    for _ in range(49):
+    for _ in range(30):
         tracked.tracker.on_death(dead(by="mortar"), 0)
     tracked.tracker.start_level()
-    tracked.tracker.on_death(dead(by="mortar"), 0)
-    assert "incinerator" not in tracked.unlocked
-    assert tracked.profile.achievements["incinerator/0"] == 49, "the best is kept"
-    for _ in range(49):
+    for _ in range(19):
         tracked.tracker.on_death(dead(by="mortar"), 0)
+    assert "incinerator" not in tracked.unlocked
+    tracked.tracker.on_death(dead(by="mortar"), 0)
     assert "incinerator" in tracked.unlocked
+
+
+def test_absolute_zero_counts_only_the_towers_that_dealt_damage(tracked):
+    own_parents(tracked.profile, "zero")
+    towers = [SimpleNamespace(kind=k, wave_damage=d) for k, d in (("frost", 40), ("thermal", 90), ("gun", 0),
+                                                                  ("mortar", 0))]
+    tracked.tracker.tick(towers, [], False)
+    tracked.tracker.on_level_cleared(1)
+    assert "zero" in tracked.unlocked, "Frost fusions may fight; other lines may stand by"
+
+
+def test_absolute_zero_fails_once_another_line_deals_damage(tracked):
+    own_parents(tracked.profile, "zero")
+    tracked.tracker.tick([SimpleNamespace(kind="gun", wave_damage=5)], [], False)
+    tracked.tracker.tick([SimpleNamespace(kind="frost", wave_damage=60)], [], False)  # the Gun was sold
+    tracked.tracker.on_level_cleared(1)
+    tracked.tracker.start_level()
+    assert "zero" not in tracked.unlocked
+    tracked.tracker.tick([SimpleNamespace(kind="gun", wave_damage=0)], [], False)
+    tracked.tracker.on_level_cleared(2)
+    assert "zero" in tracked.unlocked, "a new level starts clean"
 
 
 def test_kill_filters(tracked):
@@ -320,7 +353,7 @@ def test_kill_filters(tracked):
     t.on_death(dead("basic", by="rifle"), 0)
     t.on_death(dead("tank", by="gun"), 0)
     assert "sniper" not in tracked.unlocked
-    t.on_death(dead("elite", by="rifle"), 0)
+    t.on_death(dead("champion", by="rifle"), 0)
     assert "sniper" in tracked.unlocked
     for _ in range(29):
         t.on_death(dead(slowed=True, by="frost"), 0)
@@ -397,7 +430,7 @@ def test_boss_kill_must_be_quick(tracked):
 def test_peaks_on_the_map(tracked):
     own_parents(tracked.profile, "blizzard", "mortar")
     t = tracked.tracker
-    tower = SimpleNamespace(kind="gun", pos=pygame.Vector2(0, 0), range=100)
+    tower = SimpleNamespace(kind="gun", pos=pygame.Vector2(0, 0), range=100, wave_damage=0)
     near = [SimpleNamespace(alive=True, pos=pygame.Vector2(10, 0), slowed=i < 9 or i == 14) for i in range(15)]
     t.tick([tower] * 6, near[:14], True)
     t.updates = achievements.SAMPLE_EVERY - 1
@@ -427,7 +460,7 @@ def test_wave_level_and_pass_goals(tracked):
     assert not tracked.unlocked
     t.on_wave_cleared(60)
     assert tracked.unlocked == ["breaker"]
-    t.tick([SimpleNamespace(kind="frost", pos=pygame.Vector2(), range=1)], [], False)
+    t.tick([SimpleNamespace(kind="frost", pos=pygame.Vector2(), range=1, wave_damage=10)], [], False)
     t.on_level_cleared(4)
     assert "zero" in tracked.unlocked and "hailstorm" not in tracked.unlocked, "no leaks, but before level 5"
     t.start_level()
@@ -448,12 +481,12 @@ def test_wave_level_and_pass_goals(tracked):
 def test_an_achievement_counts_only_once_its_parents_are_owned(tracked):
     p, t = tracked.profile, tracked.tracker
     assert {k for k in TOWERS if t.available(k)} == {"rifle", "cannon", "frost"}
-    t.on_death(dead("elite", by="rifle"), 0)
+    t.on_death(dead("champion", by="rifle"), 0)
     assert "sniper" not in tracked.unlocked and "sniper/0" not in p.achievements, "no progress either"
     assert t.closest()[0] in ("rifle", "cannon", "frost")
     p.unlock_tower("rifle")
     assert t.available("sniper") and t.missing_prerequisites("flak") == ["minigun", "bombard"]
-    t.on_death(dead("elite", by="rifle"), 0)
+    t.on_death(dead("champion", by="rifle"), 0)
     assert tracked.unlocked == ["sniper"]
 
 

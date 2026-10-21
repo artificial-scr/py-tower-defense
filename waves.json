@@ -11,7 +11,8 @@
     "  counter). levels[i].new: the monsters a level brings in; they stay for the rest of the pass.",
     "  levels[i].waves, when given, scripts every wave instead (tuned by playtests, not the budget): a wave is a",
     "  list of packs, a pack a list of [kind, count] spawned in order. Levels past the list use the last entry,",
-    "  with nothing new.",
+    "  with nothing new. levels[i].elite: the elite (monsters.json) that ends the level's last wave when no boss",
+    "  does; the Champion when not given.",
     "roles: what each wave of a level is for, as slots, each a share of the wave's threat: 'new' (the level's",
     "  newcomers, at least one of each), 'pattern' (a pattern from the roster) or 'stream' (the stream pattern).",
     "  A slot that overshoots its share takes it from the slots after it.",
@@ -32,13 +33,13 @@
     "  with any counter share, and only once their monster is on the roster."
   ],
   "threat": {
-    "basic": 2.3, "fast": 5.7, "tank": 12, "elite": 136, "swarmling": 2.8, "armored": 9.6, "healer": 25,
+    "basic": 2.3, "fast": 5.7, "tank": 12, "champion": 136, "swarmling": 2.8, "armored": 9.6, "healer": 25,
     "splitter": 15, "phantom": 8.7, "juggernaut": 83, "warded": 11, "mirage": 9.2, "berserker": 15,
     "thawling": 9.2, "saboteur": 8.6, "looter": 7.3, "bearer": 15
   },
   "budget": {"base": 18, "per_wave": 5.7, "challenge": 1.25},
   "pack_pause": 2.0,
-  "start": ["basic", "elite", "looter"],
+  "start": ["basic", "champion", "looter"],
   "levels": [
     {"new": ["fast", "swarmling"], "waves": [
       [[["basic", 10]]],
@@ -47,26 +48,26 @@
       [[["basic", 3]], [["swarmling", 10]]],
       [[["basic", 6]], [["fast", 2]]]
     ]},
-    {"new": ["tank", "armored"], "waves": [
+    {"elite": "bastion", "new": ["tank", "armored"], "waves": [
       [[["basic", 8]], [["tank", 3]]],
       [[["basic", 6]], [["armored", 3]], [["fast", 2]]],
       [[["tank", 2]], [["basic", 5]], [["fast", 3]], [["armored", 2]]],
       [[["armored", 2]], [["basic", 6]], [["swarmling", 8]], [["tank", 2]]],
       [[["fast", 3]], [["armored", 3]], [["tank", 2]], [["basic", 6]]]
     ]},
-    {"new": ["splitter", "healer"], "waves": [
+    {"elite": "hierophant", "new": ["splitter", "healer"], "waves": [
       [[["basic", 6]], [["splitter", 3]], [["tank", 2]], [["basic", 6]]],
       [[["tank", 2], ["healer", 1], ["tank", 2]], [["fast", 3]], [["basic", 6]]],
       [[["splitter", 2]], [["armored", 2], ["healer", 1], ["armored", 2]], [["fast", 3]]],
       [[["tank", 3]], [["splitter", 3]], [["basic", 6]], [["armored", 2]]],
       [[["tank", 2], ["healer", 1], ["tank", 2]], [["splitter", 2]], [["fast", 4]]]
     ]},
-    {"new": ["juggernaut", "berserker"]},
-    {"new": ["phantom", "mirage"]},
-    {"new": ["warded", "saboteur"]},
-    {"new": ["thawling", "bearer"]},
-    {"new": []},
-    {"new": []},
+    {"elite": "warlord", "new": ["juggernaut", "berserker"]},
+    {"elite": "wraith", "new": ["phantom", "mirage"]},
+    {"elite": "bloat", "new": ["warded", "saboteur"]},
+    {"elite": "bastion", "new": ["thawling", "bearer"]},
+    {"elite": "wraith", "new": []},
+    {"elite": "warlord", "new": []},
     {"new": []}
   ],
   "roles": [
@@ -113,22 +114,22 @@
         "towers": ["sniper"]}
     },
     "scores": {
-      "single": {"basic": 0.93, "fast": 1.15, "tank": 1.03, "elite": 0.84, "swarmling": 2.25, "armored": 1.03,
+      "single": {"basic": 0.93, "fast": 1.15, "tank": 1.03, "champion": 0.84, "swarmling": 2.25, "armored": 1.03,
         "healer": 0.54, "splitter": 1.4, "phantom": 0.84, "juggernaut": 0.77, "warded": 0.99, "mirage": 0.92,
         "berserker": 0.79, "thawling": 1.02, "saboteur": 0.88, "looter": 0.93, "bearer": 0.71},
-      "light": {"basic": 0.93, "fast": 0.84, "tank": 1.09, "elite": 1.13, "swarmling": 1.45, "armored": 1.59,
+      "light": {"basic": 0.93, "fast": 0.84, "tank": 1.09, "champion": 1.13, "swarmling": 1.45, "armored": 1.59,
         "healer": 0.91, "splitter": 0.95, "phantom": 0.89, "juggernaut": 0.79, "warded": 0.84,
         "mirage": 0.99, "berserker": 0.92, "thawling": 1.03, "saboteur": 0.95, "looter": 0.89, "bearer": 0.8},
-      "splash": {"basic": 1.06, "fast": 1.23, "tank": 0.87, "elite": 1.52, "swarmling": 0.61, "armored": 0.72,
+      "splash": {"basic": 1.06, "fast": 1.23, "tank": 0.87, "champion": 1.52, "swarmling": 0.61, "armored": 0.72,
         "healer": 0.76, "splitter": 0.95, "phantom": 1.08, "juggernaut": 0.7, "warded": 1.07, "mirage": 1.02,
         "berserker": 1.03, "thawling": 0.86, "saboteur": 1.0, "looter": 1.15, "bearer": 1.37},
-      "slow": {"basic": 0.89, "fast": 1.07, "tank": 0.89, "elite": 0.85, "swarmling": 1.05, "armored": 0.86,
+      "slow": {"basic": 0.89, "fast": 1.07, "tank": 0.89, "champion": 0.85, "swarmling": 1.05, "armored": 0.86,
         "healer": 1.48, "splitter": 0.94, "phantom": 0.93, "juggernaut": 1.43, "warded": 1.0, "mirage": 1.03,
         "berserker": 0.88, "thawling": 0.95, "saboteur": 0.89, "looter": 0.95, "bearer": 0.89},
-      "burn": {"basic": 0.93, "fast": 0.83, "tank": 1.17, "elite": 2.06, "swarmling": 0.55, "armored": 1.04,
+      "burn": {"basic": 0.93, "fast": 0.83, "tank": 1.17, "champion": 2.06, "swarmling": 0.55, "armored": 1.04,
         "healer": 0.93, "splitter": 0.79, "phantom": 0.87, "juggernaut": 0.85, "warded": 1.0, "mirage": 0.93,
         "berserker": 1.04, "thawling": 1.02, "saboteur": 0.95, "looter": 0.88, "bearer": 1.15},
-      "long": {"basic": 1.05, "fast": 1.72, "tank": 0.96, "elite": 0.66, "swarmling": 2.08, "armored": 0.81,
+      "long": {"basic": 1.05, "fast": 1.72, "tank": 0.96, "champion": 0.66, "swarmling": 2.08, "armored": 0.81,
         "healer": 0.37, "splitter": 1.75, "phantom": 0.75, "juggernaut": 0.55, "warded": 1.02,
         "mirage": 1.08, "berserker": 0.73, "thawling": 0.92, "saboteur": 0.84, "looter": 0.94,
         "bearer": 0.75}

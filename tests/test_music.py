@@ -57,7 +57,8 @@ def test_a_wave_plays_the_wave_cue_and_grows_with_the_threat(game):
     crowd = [walker(game) for _ in range(music.CROWD + 1)]
     assert in_wave(game, *crowd).intensity == music.PRESSED
     assert in_wave(game, walker(game, progress=0.85)).intensity == music.DANGER, "nearly through"
-    assert in_wave(game, walker(game, "elite")).intensity == music.DANGER
+    assert in_wave(game, walker(game, "champion")).intensity == music.DANGER
+    assert in_wave(game, walker(game, "wraith")).intensity == music.DANGER, "every elite, not just the Champion"
 
 
 def test_illusions_dont_count(game):

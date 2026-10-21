@@ -40,7 +40,7 @@ CHAIN_FALLOFF = 0.85  # damage kept per jump
 REF_SPEED = 60  # px/s, a Basic's speed, for the exposure columns
 REF_ARMOR = 6  # an Armored's armor
 DEFAULT_LEVEL, DEFAULT_WAVE = 5, 3  # mid-run: at level 1 one tower kills everything several times over
-DEFAULT_MONSTERS = ("basic", "fast", "tank", "elite", "swarmling", "armored", "phantom", "juggernaut", "warded",
+DEFAULT_MONSTERS = ("basic", "fast", "tank", "champion", "swarmling", "armored", "phantom", "juggernaut", "warded",
                     "berserker", "warden")
 
 

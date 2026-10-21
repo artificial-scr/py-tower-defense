@@ -71,7 +71,7 @@ def records(game):
 def test_a_full_loop_towers_monsters_towers(records, screen):
     """Records from the Towers side feed the Monsters side, whose win feeds the Towers side again."""
     g = main.Game(screen, log_dir=None, side="monsters")
-    assert scripted_attack(g, ["tank", "basic", "elite"], save_for_last=True)
+    assert scripted_attack(g, ["tank", "basic", "champion"], save_for_last=True)
     g.reward_cards = []
     push = g.profile.monster_record(1)
     assert list(push) == [5], "empty waves aren't recorded"

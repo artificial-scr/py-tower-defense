@@ -17,7 +17,8 @@
     "  leaks            optional enemy (monster kinds); scope: level or ever",
     "  boss_kill        boss, seconds: kill that boss within `seconds` of it spawning",
     "  wave_cleared     min_monsters: clear a wave in which at least that many monsters spawned (splits included)",
-    "  level_cleared    optional min_level (1-based), no_leaks (true), only_line (a line from evolution.json);",
+    "  level_cleared    optional min_level (1-based), no_leaks (true), only_line (a line from evolution.json:",
+    "                   only towers of that line, fused from it included, dealt damage; others may help);",
     "                   counts levels cleared that way, over all runs",
     "  pass_won         optional finale (true: a pass that ended on a finale), min_gold (gold held at the end);",
     "                   counts Towers passes won that way, over all runs",
@@ -48,13 +49,13 @@
       {"desc": "Kill 100 monsters", "condition": "kills", "scope": "ever", "target": 100}]},
     "sniper": {"name": "Big Game", "unlocks": "sniper", "goals": [
       {"desc": "A Rifle kills a Tank or an Elite", "condition": "kills", "by": ["rifle"],
-       "enemy": ["tank", "elite"], "scope": "ever", "target": 1}]},
+       "enemy": ["tank", "champion", "bastion", "hierophant", "warlord", "wraith", "bloat"], "scope": "ever",
+       "target": 1}]},
     "bombard": {"name": "Direct Hit", "unlocks": "bombard", "goals": [
       {"desc": "Kill 25 monsters with splash damage", "condition": "kills", "how": "splash", "scope": "ever",
        "target": 25}]},
     "incinerator": {"name": "Scorched Earth", "unlocks": "incinerator", "goals": [
-      {"desc": "Mortars kill 50 monsters in one level", "condition": "kills", "by": ["mortar"], "scope": "level",
-       "target": 50}]},
+      {"desc": "Mortars kill 50 monsters", "condition": "kills", "by": ["mortar"], "scope": "ever", "target": 50}]},
     "blizzard": {"name": "Whiteout", "unlocks": "blizzard", "goals": [
       {"desc": "Keep 10 monsters slowed at once", "condition": "slowed_at_once", "target": 10}]},
     "shatter": {"name": "Brittle", "unlocks": "shatter", "goals": [
@@ -80,11 +81,11 @@
     "tesla": {"name": "Chain Reaction", "unlocks": "tesla", "goals": [
       {"desc": "Kill 25 monsters within 2 s", "condition": "burst", "seconds": 2, "target": 25}]},
     "zero": {"name": "Deep Freeze", "unlocks": "zero", "goals": [
-      {"desc": "Clear a level with only Frost-line towers", "condition": "level_cleared", "only_line": "frost",
+      {"desc": "Clear a level where only Frost towers deal damage", "condition": "level_cleared", "only_line": "frost",
        "target": 1}]},
     "lance": {"name": "Elite Hunter", "unlocks": "lance", "goals": [
-      {"desc": "Snipers kill 10 Elites", "condition": "kills", "by": ["sniper"], "enemy": ["elite"],
-       "scope": "ever", "target": 10}]},
+      {"desc": "Snipers kill 10 Elites", "condition": "kills", "by": ["sniper"],
+       "enemy": ["champion", "bastion", "hierophant", "warlord", "wraith", "bloat"], "scope": "ever", "target": 10}]},
     "breaker": {"name": "Hold the Line", "unlocks": "breaker", "goals": [
       {"desc": "Clear a wave of 60 or more monsters", "condition": "wave_cleared", "min_monsters": 60,
        "target": 1}]},
