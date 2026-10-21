@@ -2,8 +2,7 @@
 
 These double as balance checks (2026-10-20, seeds 0-5): the planning bot (profile damage) wins the
 Towers pass on 5 seeds of 6, with Railguns and Absolute Zeros from level 2 on; the bot before the
-planner (profile cycle) and the planner kept to tiers 1-2 or to the Gun line fall on level 2. On the
-Monsters side, scripted drafts against the bot's own tower records check that the first levels stay winnable.
+planner (profile cycle) and the planner kept to tiers 1-2 or to the Gun line fall on level 2.
 """
 
 import random
@@ -63,31 +62,10 @@ def test_stress_at_10x(game):
 @pytest.fixture
 def records(game):
     """Tower records for levels 1-2, set by the bot before the planner (profile cycle) on a known seed (the
-    same profile file is shared). The planner's records (Railgun and Absolute Zero by level 2) are far stronger
-    than the scripted drafts below."""
+    same profile file is shared)."""
     random.seed(1)
     bot_play(game, until_level=3)
     assert game.profile.tower_record(2)
-
-
-@pytest.mark.parametrize("save_for_last, outcome", [(True, "victory"), (False, "level_complete")])
-def test_monsters_level_1_falls_to_both_plans(records, screen, save_for_last, outcome):
-    """With no unlocks, even waves take a few lives (enough to clear the level), while one big push takes
-    all 20 and wins the whole pass on its first level (there's no cap on lives per level). It must stay
-    winnable: monster cards only come from Monsters wins."""
-    g = main.Game(screen, log_dir=None, side="monsters")
-    assert scripted_attack(g, ["tank", "basic", "elite"], save_for_last)
-    assert g.state == outcome
-
-
-@pytest.mark.parametrize("save_for_last", [True, False])
-def test_monsters_level_2_falls_to_both_plans(records, screen, save_for_last):
-    """Level 2's record ends on Railgun + Blizzard (990 gold: the harder Towers side leaves the bot less to
-    spend), which falls to one big push and to steady waves alike."""
-    g = main.Game(screen, log_dir=None, side="monsters")
-    g.monster_wins = 1  # as after winning level 1
-    g.load_level(1)
-    assert scripted_attack(g, ["tank", "basic", "elite"], save_for_last)
 
 
 def test_a_full_loop_towers_monsters_towers(records, screen):

@@ -113,6 +113,13 @@ class Profile:
         self.new_towers = [k for k in data.get("new_towers", ()) if k in self.towers_unlocked]
         self.achievements = dict(data.get("achievements", {}))
         self.discoveries_left = int(data.get("discoveries_left", DISCOVERIES))
+        # secret bosses unlocked (achievements.json bosses), which may now ambush Towers-side waves, and how
+        # angry each is: its kin (ambush angered_by) killed, or the gold held as waves started (per_gold), since it
+        # last ambushed or a run was lost
+        self.bosses_unlocked = [k for k in data.get("bosses_unlocked", ()) if k in ENEMY_TYPES]
+        self.bosses_met = [k for k in data.get("bosses_met", ()) if k in self.bosses_unlocked]  # came at least once
+        saved_anger = data.get("boss_anger", {})
+        self.boss_anger = {k: int(saved_anger.get(k, 0)) for k in self.bosses_unlocked}
 
     @classmethod
     def load(cls, path):
@@ -132,6 +139,8 @@ class Profile:
         return {"version": PROFILE_VERSION, "milestones": self.milestones, "best_run": self.best_run,
                 "unlocks": self.unlocks, "towers_unlocked": self.towers_unlocked, "new_towers": self.new_towers,
                 "achievements": self.achievements, "discoveries_left": self.discoveries_left,
+                "bosses_unlocked": self.bosses_unlocked, "boss_anger": self.boss_anger,
+                "bosses_met": self.bosses_met,
                 "tower_records": self.tower_records, "monster_records": self.monster_records}
 
     def reach(self, milestone):
@@ -174,6 +183,44 @@ class Profile:
         if kind in self.new_towers:
             self.new_towers.remove(kind)
             self.save()
+
+    def has_boss(self, kind):
+        return kind in self.bosses_unlocked
+
+    def unlock_boss(self, kind):
+        """A secret boss may ambush from now on. Returns whether it's new."""
+        if self.has_boss(kind):
+            return False
+        self.bosses_unlocked.append(kind)
+        self.boss_anger[kind] = 0
+        self.save()
+        return True
+
+    def meet(self, kind):
+        """A secret boss came onto the map (Towers side)."""
+        if kind in self.bosses_unlocked and kind not in self.bosses_met:
+            self.bosses_met.append(kind)
+            self.save()
+
+    def anger(self, killed):
+        """A monster of kind `killed` was killed: the unlocked bosses it angers grow angrier. Saved with the
+        next save (main.Game saves after every wave cleared)."""
+        for kind in self.bosses_unlocked:
+            if killed in ENEMY_TYPES[kind].get("ambush", {}).get("angered_by", ()):
+                self.boss_anger[kind] += 1
+
+    def audit(self, gold):
+        """A Towers-side wave starts with `gold` held: the unlocked bosses whose ambush grows with gold
+        (per_gold) count it. Saved with the next save, as anger is."""
+        for kind in self.bosses_unlocked:
+            if "per_gold" in ENEMY_TYPES[kind].get("ambush", {}):
+                self.boss_anger[kind] += int(gold)
+
+    def calm(self, kind=None):
+        """A boss ambushed (or, without `kind`, a run was lost): its anger (every boss's) starts over."""
+        for k in [kind] if kind else self.bosses_unlocked:
+            self.boss_anger[k] = 0
+        self.save()
 
     def has_line(self, line):
         """Whether the player owns a line's tier 1 tower (cards for a line they can't build are left out)."""

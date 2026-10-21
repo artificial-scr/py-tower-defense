@@ -1,13 +1,14 @@
 """monsters.json loading and validation, and the monster mechanics and abilities."""
 
 import json
+import random
 
 import pygame
 import pytest
 
 import monsters
-from entities import Enemy, Projectile, Tower, cast_ability, heal_auras, speed_auras
-from helpers import dummy_enemy, put, run_wave
+from entities import Enemy, Projectile, Tower, cast_ability, heal_auras, lay_off, speed_auras
+from helpers import dummy_enemy, free_tiles, put, run_wave
 from levels import ALL_BOSS_LEVELS
 from monsters import ABILITIES, ENEMY_TYPES, load_monsters
 from towers import TOWERS
@@ -61,6 +62,22 @@ def shipped():
     (lambda d: d["enemies"]["looter"].update(loot=[1.5, 2]), "loot must be"),
     (lambda d: d["enemies"]["bearer"].update(speed_aura=[80]), "speed_aura must be"),
     (lambda d: d["enemies"]["brood"]["summon"][3].pop(), "summon offsets need one per"),
+    (lambda d: d["enemies"]["brood"]["ambush"].pop("max"), "only bosses ambush"),
+    (lambda d: d["enemies"]["overlord"]["follows"].update(boss="tank"), "only bosses follow"),
+    (lambda d: d["enemies"]["overlord"]["follows"].update(boss="overlord"), "only bosses follow"),
+    (lambda d: d["enemies"]["overlord"]["follows"].pop("announce"), "only bosses follow"),
+    (lambda d: d["enemies"]["overlord"]["follows"].update(chance=1.5), "chance must be between 0 and 1"),
+    (lambda d: d["enemies"]["swarmling"].update(ambush=d["enemies"]["brood"]["ambush"]), "only bosses ambush"),
+    (lambda d: d["enemies"]["brood"]["ambush"].update(chance=0.5), "chance <= max"),
+    (lambda d: d["enemies"]["brood"]["ambush"].update(angered_by=["dragon"]), "angered_by 'dragon'"),
+    (lambda d: d["enemies"]["chairman"]["ambush"].update(per_kill=0.1), "only bosses ambush"),
+    (lambda d: d["enemies"]["chairman"]["ambush"].update(per_gold=-1), "can't be negative"),
+    (lambda d: d["enemies"]["chairman"]["summon"][0].append("dragon"), "summon makes 'dragon'"),
+    (lambda d: d["enemies"]["chairman"].update(layoff=[7, 170]), "layoff must be"),
+    (lambda d: d["enemies"]["chairman"].update(dividends=0), "dividends must be a positive number"),
+    (lambda d: d["enemies"]["chairman"].update(severance=1.5), "severance is a share"),
+    (lambda d: d["enemies"]["chairman"].update(fatal=True), "bankrupts must be true, on a boss that isn't fatal"),
+    (lambda d: d["enemies"]["tank"].update(bankrupts=True), "bankrupts must be true, on a boss"),
     (lambda d: d["abilities"]["emp"].update(effect="explode"), "effect must be one of"),
     (lambda d: d["abilities"]["emp"].pop("radius"), "disable on area needs ['radius']"),
     (lambda d: d["abilities"]["frenzy"].pop("duration"), "haste on all needs ['duration']"),
@@ -433,3 +450,221 @@ def test_the_brood_mother_shoots_out_swarmlings_one_behind_two_in_front(game):
     assert len(minions) == count == 3 and all(m.kind == kind == "spiderling" for m in minions)
     assert sorted(round(m.travelled - brood.travelled) for m in minions) == sorted(offsets)
     assert sum(m.travelled < brood.travelled for m in minions) == 1, "one behind, two in front"
+
+
+def test_the_brood_mothers_brood_grows_from_3_to_15_over_the_levels():
+    spec = ENEMY_TYPES["brood"]
+    counts = [monsters.summon_count(spec, i, 10) for i in range(10)]
+    assert counts[0] == 3 and counts[-1] == 15 and counts == sorted(counts)
+    lo, hi = min(spec["summon"][3]), max(spec["summon"][3])
+    spots = monsters.summon_offsets(spec["summon"][3], 15)
+    assert len(spots) == 15 and spots[0] == lo and spots[-1] == hi
+    assert monsters.summon_count(ENEMY_TYPES["warden"], 9, 10) == ENEMY_TYPES["warden"]["summon"][1]
+
+
+def test_the_brood_mother_ambushes_once_a_level_from_level_3_once_unlocked(game, monkeypatch):
+    monkeypatch.setattr(random, "random", lambda: 0.0)
+
+    def ambushed(level, wave=0):
+        game.load_level(level)
+        game.wave_idx = wave
+        game.profile.boss_anger["brood"] = 100
+        game.start_wave()
+        return "brood" in game.spawn_queue
+
+    assert not ambushed(2), "locked"
+    game.profile.unlock_boss("brood")
+    assert not ambushed(0) and not ambushed(1), "too early on levels 1 and 2"
+    assert ambushed(2)
+    assert game.spawn_queue.index("brood") >= (len(game.spawn_queue) - 1) // 2, "in the wave's second half"
+    game.state = "build"
+    game.profile.boss_anger["brood"] = 100
+    game.start_wave()
+    assert "brood" not in game.spawn_queue, "once a level"
+    assert not ambushed(9, 4), "not with another boss"
+
+
+def test_swarmling_kills_anger_the_brood_mother_until_she_comes_or_a_run_is_lost(game, monkeypatch):
+    monkeypatch.setattr(random, "random", lambda: 0.0499)
+    p = game.profile
+    p.anger("swarmling")
+    assert "brood" not in p.boss_anger, "kills count once she's unlocked"
+    p.unlock_boss("brood")
+    for _ in range(99):
+        p.anger("swarmling")
+        p.anger("basic")
+    game.load_level(2)
+    game.start_wave()
+    assert "brood" not in game.spawn_queue and p.boss_anger["brood"] == 99, "0.05% a Swarmling: 4.95%"
+    p.anger("swarmling")
+    game.state = "build"
+    game.start_wave()
+    assert "brood" in game.spawn_queue, "5%"
+    assert p.boss_anger["brood"] == 0, "she came: it starts over"
+    p.anger("swarmling")
+    p.save()
+    assert type(p).load(p.path).boss_anger == {"brood": 1}
+    game.run_over()
+    assert p.boss_anger["brood"] == 0, "a lost run starts it over"
+
+
+def test_the_overlord_follows_the_warden_surely_the_first_time_then_a_third_of_the_time(game, monkeypatch):
+    def last_wave(level, roll=0.5):
+        monkeypatch.setattr(random, "random", lambda: roll)
+        game.load_level(level)
+        game.wave_idx = 4
+        game.start_wave()
+        return game.spawn_queue
+
+    assert "overlord" not in last_wave(9)
+    game.profile.unlock_boss("overlord")
+    queue = last_wave(9, roll=0.99)
+    assert queue[queue.index("warden") + 1] == "overlord", "surely, the first time"
+    assert "overlord" not in last_wave(4), "only where the Warden is"
+    assert "overlord" in last_wave(9, roll=0.99), "until he has come"
+    game.profile.meet("overlord")
+    assert "overlord" not in last_wave(9, roll=0.34)
+    assert "overlord" in last_wave(9, roll=0.32)
+    game.load_level(9)
+    game.wave_idx = 4
+    assert "overlord" not in game.next_wave()[1].kinds, "the wave preview keeps the secret"
+
+
+def test_he_walks_in_after_the_wardens_alert_with_a_grander_one(game):
+    game.profile.unlock_boss("overlord")
+    game.load_level(9)
+    game.wave_idx = 4
+    game.start_wave()
+    game.spawn_queue = ["warden", "overlord"]
+    for _ in range(3):
+        game.update(1 / 60)
+    assert game.alert_kind == "warden" and game.profile.bosses_met == []
+    for _ in range(int(3.9 * 60)):
+        game.update(1 / 60)
+    assert game.spawn_queue == ["overlord"], "a breather behind the Warden, longer than its alert"
+    for _ in range(12):
+        game.update(1 / 60)
+    assert game.alert_kind == "overlord" and game.boss_alert > 4 and game.profile.bosses_met == ["overlord"]
+    game.draw()
+
+
+# ---- The Chairman -------------------------------------------------------------------------
+def test_the_chairman_sends_saboteurs_and_looters_in_turn(game):
+    kinds, count, every, offsets = ENEMY_TYPES["chairman"]["summon"]
+    game.load_level(3)
+    game.start_wave()
+    game.spawn_queue = []
+    boss = Enemy("chairman", game.path_pts, 1)
+    boss.advance(300)
+    game.register_enemy(boss, "wave")
+    boss.summon_timer = 1 / 120
+    game.update(1 / 60)
+    minions = [e for e in game.enemies if e.origin == "summon:chairman"]
+    assert [m.kind for m in minions] == ["saboteur", "looter", "saboteur"], "3 on level 4, taking turns"
+    assert monsters.summon_count(ENEMY_TYPES["chairman"], 0, 10) == count == 2
+    assert monsters.summon_count(ENEMY_TYPES["chairman"], 9, 10) == 6
+
+
+def test_layoffs_silence_the_costliest_tower_in_reach():
+    every, radius, seconds = ENEMY_TYPES["chairman"]["layoff"]
+    boss = Enemy("chairman", line(), 1)
+    boss.advance(400)
+    cheap, dear, far = Tower("gun", (10, 1)), Tower("gun", (11, 1)), Tower("gun", (19, 1))
+    dear.spent, far.spent = 300, 1000
+    assert far.pos.distance_to(boss.pos) > radius
+    assert lay_off(boss, [cheap, dear, far]) is dear
+    assert dear.disabled_timer == seconds and not cheap.disabled and not far.disabled
+    assert lay_off(boss, [far]) is None
+
+
+def test_the_chairman_lays_off_a_tower_every_few_seconds(game):
+    every, radius, seconds = ENEMY_TYPES["chairman"]["layoff"]
+    game.start_wave()
+    game.spawn_queue = []
+    boss = Enemy("chairman", game.path_pts, 1000)
+    boss.advance(200)
+    game.register_enemy(boss, "wave")
+    boss.summon_timer = 1000
+    tile = (int(boss.pos.x // 40), int(boss.pos.y // 40))
+    tower = next(put(game, "gun", (tile[0] + dx, tile[1] + dy)) for dx, dy in ((0, -1), (0, 1), (-1, 0), (1, 0))
+                 if game.is_free((tile[0] + dx, tile[1] + dy)))
+    boss.layoff_timer = 1 / 120
+    game.update(1 / 60)
+    assert tower.disabled and "Laid off!" in [p.text for p in game.popups]
+    assert boss.layoff_timer == pytest.approx(every)
+    game.draw()
+
+
+def test_dividends_a_barrier_soaks_up_damage_before_hp():
+    boss = Enemy("chairman", line(), 1)
+    boss.barrier = 100
+    boss.hit(60)
+    assert boss.hp == boss.max_hp and boss.barrier == 40
+    boss.hit(60)
+    assert boss.barrier == 0 and boss.hp == boss.max_hp - 20
+
+
+def test_looters_pay_the_chairman_dividends_and_he_pays_severance(game):
+    game.start_wave()
+    game.spawn_queue = []
+    boss = Enemy("chairman", game.path_pts, 1)
+    boss.advance(100)
+    game.register_enemy(boss, "wave")
+    boss.summon_timer = boss.layoff_timer = 1000
+    game.gold = 1000
+    leak(game, "looter")
+    stolen = int(1000 * ENEMY_TYPES["looter"]["loot"][0])
+    assert game.gold == 1000 - stolen and game.wave_stolen == stolen
+    assert boss.barrier == stolen * ENEMY_TYPES["chairman"]["dividends"]
+    game.draw()
+    gold = game.gold
+    boss.barrier = 0
+    boss.hit(boss.max_hp * 2)
+    game.update(1 / 60)
+    assert game.gold == gold + stolen + ENEMY_TYPES["chairman"]["cost"], "the loot back, and his bounty"
+    assert game.wave_stolen == 0
+
+
+def test_the_chairman_audits_hoarded_gold_from_level_3(game, monkeypatch):
+    """His odds grow with the gold held as each wave starts, and start over when he comes or a run is lost."""
+    ambush = ENEMY_TYPES["chairman"]["ambush"]
+    p = game.profile
+    p.unlock_boss("chairman")
+    monkeypatch.setattr(random, "random", lambda: 0.99)
+    game.load_level(2)
+    game.gold = 2000
+    game.start_wave()
+    assert p.boss_anger["chairman"] == 2000 and "chairman" not in game.spawn_queue
+    p.anger("swarmling")
+    assert p.boss_anger["chairman"] == 2000, "kills don't count for him"
+    odds = ambush["per_gold"] * 4000
+    monkeypatch.setattr(random, "random", lambda: odds - 0.001)
+    game.state = "build"
+    game.start_wave()
+    assert "chairman" in game.spawn_queue and p.boss_anger["chairman"] == 0
+    game.load_level(4)
+    game.gold = 1000
+    game.start_wave()
+    game.run_over()
+    assert p.boss_anger["chairman"] == 0, "a lost run starts it over"
+    game.load_level(0)
+    game.gold = 10 ** 6
+    monkeypatch.setattr(random, "random", lambda: 0.0)
+    game.start_wave()
+    assert "chairman" not in game.spawn_queue, "not on levels 1 and 2"
+
+
+def test_the_chairman_through_takes_no_lives_but_every_coin_and_every_tower(game):
+    game.load_level(3)
+    game.start_wave()
+    game.spawn_queue = []
+    towers = [put(game, "gun", tile) for tile in free_tiles(game)[:3]]
+    game.gold, lives = 1240, game.lives
+    leak(game, "chairman")
+    assert game.lives == lives and game.gold == 0 and not game.towers and game.state == "wave"
+    assert all(t.status == "repossessed" for t in towers)
+    assert game.bankrupt_notice > 0 and game.notice_taken == (1240 + 3 * 50, "The Chairman"), "gold and towers"
+    game.draw()
+    game.update(1.0)
+    game.draw()
+

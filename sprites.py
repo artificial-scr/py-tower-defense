@@ -820,6 +820,51 @@ def overlord_corona(cv, size, color, f):
                    [d.rotate(4) * size * 1.08, d * size * long_, d.rotate(-4) * size * 1.08])
 
 
+SHOE = (24, 22, 28)
+LEATHER = (110, 66, 34)
+
+
+def paint_chairman(cv, size, color, inner, f, p):
+    """The Chairman: a portly tycoon in a pinstriped suit, seen from above in his top hat, his belly leading
+    the way with a gold tie and watch chain down it. Gold cufflinks, and a briefcase swinging from one hand
+    as he strolls."""
+    s = f.rotate(90)
+    _feet(cv, SHOE, f, p, size, spread=0.45, foot=0.3, stride=0.3)
+    swing = math.sin(math.tau * p) * 0.22 * size
+    case = s * size * 1.12 + f * swing
+    corners = [case + f * x * size + s * y * size for x, y in ((0.42, 0.14), (-0.42, 0.14), (-0.42, -0.14),
+                                                                (0.42, -0.14))]
+    gem(cv, LEATHER, case, corners, 0.8)
+    cv.circle(inner, case - s * size * 0.15, size * 0.07)  # the clasp
+    cv.line(shade(LEATHER, 0.6), case - s * size * 0.14 + f * size * 0.18, case - s * size * 0.14 - f * size * 0.18,
+            max(0.6, size * 0.05))  # the handle
+    blob(cv, color, f * size * 0.08, f, size * 0.9, size * 0.98, 1.5)
+    stripe = mix(color, WHITE, 0.3)
+    for y in (-0.6, -0.3, 0.3, 0.6):  # pinstripes down his back
+        reach = 0.9 * math.sqrt(max(0.0, 1 - (y / 0.98) ** 2))
+        cv.line((*stripe, 150), f * size * (0.08 - reach * 0.92) + s * size * y, f * size * 0.2 + s * size * y,
+                max(0.5, size * 0.025))
+    shirt = [f * size * 0.97, f * size * 0.3 + s * size * 0.36, f * size * 0.3 - s * size * 0.36]
+    cv.polygon((240, 240, 235), shirt)
+    tie = [f * size * 0.5 + s * size * 0.09, f * size * 0.5 - s * size * 0.09, f * size * 0.86 - s * size * 0.12,
+           f * size * 0.98, f * size * 0.86 + s * size * 0.12]
+    gem(cv, inner, f * size * 0.72, tie, 0.6)
+    chain = [f * size * (0.62 + 0.1 * math.sin(math.pi * t)) + s * size * (0.12 + 0.6 * t) for t in
+             (i / 6 for i in range(7))]
+    for a, b in zip(chain, chain[1:]):
+        cv.line(inner, a, b, max(0.5, size * 0.04))
+    cv.circle(inner, chain[-1], size * 0.08)  # the watch, in its pocket
+    for k in (-1, 1):  # his arms, the cufflinks glinting
+        hand = s * k * size * 0.98 + f * size * (0.15 - 0.12 * math.sin(math.tau * p) * k)
+        sphere(cv, shade(color, 0.9), hand, size * 0.24, 0.8)
+        cv.circle(inner, hand + f * size * 0.13, size * 0.06)
+    hat = -f * size * 0.06
+    cv.circle(shade(SHOE, 0.9), hat, size * 0.5)  # the brim
+    cv.circle(mix(SHOE, WHITE, 0.18), hat, size * 0.5, max(0.6, size * 0.03))
+    cv.circle(inner, hat, size * 0.35)  # the gold band, round the crown
+    sphere(cv, SHOE, hat, size * 0.3, 0.6)
+
+
 # kind -> how it's drawn and animated:
 #   paint     the painter
 #   clock     "walk": the animation follows the distance walked (one cycle per `stride` sizes walked),
@@ -878,6 +923,8 @@ CREATURES = {
                  "face": overlord_face, "corona": overlord_corona, "orbit": 1.6,
                  "orbs": [(RUBY, 3.5), ((60, 130, 240), 3.5), ((60, 200, 120), 3.5)],
                  "eyes": (0.08, 0.17, 0.1, "angry")},
+    "chairman": {"paint": paint_chairman, "clock": "walk", "stride": 1.8, "move": "hop", "reach": 1.65, "halo": True,
+                 "eyes": (0.48, 0.14, 0.08, "angry")},  # glaring from under the brim
 }
 DEFAULT_EYES = (0.4, 0.34, 0.27, "round")  # for kinds added without a design here
 

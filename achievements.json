@@ -2,7 +2,8 @@
   "_comment": [
     "Tower unlocks, loaded when the game starts (see DESIGN.md section 11). A new profile owns the `start` towers;",
     "every other tower is unlocked for good by its achievement. The first `discoveries` tier 4 towers ever fused",
-    "are unlocked by the fusion itself, so their achievements are never needed. Only the Towers side counts.",
+    "are unlocked by the fusion itself, so their achievements are never needed. Only the Towers side counts",
+    "(but for monsters_pass_won and looted).",
     "Each achievement: name, the tower it unlocks, and goals (one, or two when either one will do). Each goal:",
     "desc (what the player reads), condition, target, plus what the condition needs:",
     "  towers_on_map    optional kind: that many towers (of `kind`) on the map at once",
@@ -19,7 +20,13 @@
     "  level_cleared    optional min_level (1-based), no_leaks (true), only_line (a line from evolution.json);",
     "                   counts levels cleared that way, over all runs",
     "  pass_won         optional finale (true: a pass that ended on a finale), min_gold (gold held at the end);",
-    "                   counts Towers passes won that way, over all runs"
+    "                   counts Towers passes won that way, over all runs",
+    "  monsters_pass_won  counts Monsters passes won, over all runs (a goal the Monsters side counts)",
+    "  looted           the budget Looters bring back on the Monsters side, added up over all runs",
+    "Bosses: secret bosses unlocked the same way (the boss's ambush in monsters.json says where it shows up),",
+    "  each with name, boss, after (a profile milestone: monsters_side, reached by winning a Towers pass;",
+    "  nothing counts before it), goals, and card: what the card shown on unlocking says (title, deed: what",
+    "  earned it, lore, hint: of what happens next; the boss isn't named). They're never shown until unlocked."
   ],
   "start": ["gun"],
   "discoveries": 2,
@@ -83,5 +90,22 @@
        "target": 1}]},
     "obsidian": {"name": "Veteran", "unlocks": "obsidian", "goals": [
       {"desc": "Win 3 Towers passes", "condition": "pass_won", "target": 3}]}
+  },
+  "bosses": {
+    "pest_control": {"name": "Pest Control", "boss": "brood", "after": "monsters_side", "goals": [
+      {"desc": "Kill 500 Swarmlings", "condition": "kills", "enemy": ["swarmling"], "target": 500}],
+      "card": {"title": "SOMETHING STIRS", "deed": "500 Swarmlings crushed beneath your towers",
+               "lore": "Every one of them was somebody's child. Deep below the path, eight eyes open.",
+               "hint": "Keep killing her young, and she will come to collect."}},
+    "usurper": {"name": "Usurper", "boss": "overlord", "after": "monsters_side", "goals": [
+      {"desc": "Win a Monsters pass", "condition": "monsters_pass_won", "target": 1}],
+      "card": {"title": "A CROWN TURNS", "deed": "You led the horde over the last of the towers",
+               "lore": "The Warden only ever kept the gate. Behind it, something on a throne saw who commands the army now.",
+               "hint": "Break the gatekeeper, and its master may step through."}},
+    "hostile_takeover": {"name": "Hostile Takeover", "boss": "chairman", "after": "monsters_side", "goals": [
+      {"desc": "Looters bring back 1,000 gold (Monsters side)", "condition": "looted", "target": 1000}],
+      "card": {"title": "YOUR ACCOUNT HAS BEEN FLAGGED", "deed": "Your Looters carried off 1,000 gold",
+               "lore": "Someone upstairs has been reading the ledgers. They like how you do business.",
+               "hint": "Hoard your gold, and someone will come to count it."}}
   }
 }

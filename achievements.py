@@ -2,7 +2,9 @@
 
 A new profile owns only the start towers (the Gun). Every other tower is unlocked for good by its
 achievement, or, for the first few tier 4 towers ever fused, by the fusion itself (a discovery). Only
-the Towers side counts toward achievements. See DESIGN.md section 11.
+the Towers side counts toward achievements, but for Monsters passes won and Looters' loot. See DESIGN.md section 11.
+Secret bosses are unlocked the same way, by the achievements' `bosses`, once the profile reached their
+milestone.
 
 The file is read and checked once, at import, like towers.json: a mistake stops the game with a
 message naming the achievement and the problem.
@@ -30,6 +32,8 @@ CONDITIONS = {
     "wave_cleared": (("min_monsters",), ()),
     "level_cleared": ((), ("min_level", "no_leaks", "only_line")),
     "pass_won": ((), ("finale", "min_gold")),
+    "monsters_pass_won": ((), ()),
+    "looted": ((), ()),
 }
 # Conditions measured as a peak (the best seen counts) rather than added up over time. A multi_kill goal with
 # `kills` is added up instead (see is_peak).
@@ -38,10 +42,13 @@ GOAL_FIELDS = ("desc", "condition", "target")
 SCOPES = ("level", "ever")
 SAMPLE_EVERY = 6  # updates between checks of in_range and slowed_at_once (they look at every tower / enemy)
 BURST_MEMORY = 10.0  # seconds of kill times kept for burst goals
+BOSS_CARD_FIELDS = ("title", "deed", "lore", "hint")  # the card shown when a secret boss is unlocked
+MILESTONES = ("monsters_side", "tower_cards", "starter_pack")  # progress.Profile.milestones, for bosses' `after`
 
 
 def load_achievements(path):
-    """Return (start towers, discoveries, {achievement id: achievement}) from achievements.json."""
+    """Return (start towers, discoveries, {achievement id: achievement}, {achievement id: boss achievement})
+    from achievements.json."""
     data = read_json(path)
     name = os.path.basename(path)
 
@@ -52,19 +59,9 @@ def load_achievements(path):
     for kind in start:
         if kind not in TOWERS or TOWERS[kind]["tier"] != 1:
             fail(f"start: {kind!r} isn't a tier 1 tower")
-    achievements, unlocked_by = {}, {}
-    for key, raw in data["achievements"].items():
-        def bad(message):
-            fail(f"achievement {key!r}: {message}")
-        tower = raw.get("unlocks")
-        if tower not in TOWERS:
-            bad(f"unlocks {tower!r}, which isn't in towers.json")
-        if tower in start:
-            bad(f"unlocks {tower!r}, which every profile starts with")
-        if tower in unlocked_by:
-            bad(f"{tower!r} is already unlocked by {unlocked_by[tower]!r}")
-        unlocked_by[tower] = key
-        goals = raw.get("goals") or bad("needs at least one goal")
+    def check_goals(goals, bad):
+        """The goals, each with its scope filled in (ever by default)."""
+        goals = goals or bad("needs at least one goal")
         for i, goal in enumerate(goals):
             missing = [f for f in GOAL_FIELDS if f not in goal]
             if missing:
@@ -91,15 +88,43 @@ def load_achievements(path):
                 bad(f"goal {i + 1}: scope must be one of {SCOPES}")
             if goal.get("only_line", next(iter(LINES))) not in LINES:
                 bad(f"goal {i + 1}: {goal['only_line']!r} isn't a tower line")
-        achievements[key] = {"name": raw["name"], "unlocks": tower,
-                             "goals": [{"scope": "ever", **g} for g in goals]}
+        return [{"scope": "ever", **g} for g in goals]
+
+    achievements, unlocked_by = {}, {}
+    for key, raw in data["achievements"].items():
+        def bad(message):
+            fail(f"achievement {key!r}: {message}")
+        tower = raw.get("unlocks")
+        if tower not in TOWERS:
+            bad(f"unlocks {tower!r}, which isn't in towers.json")
+        if tower in start:
+            bad(f"unlocks {tower!r}, which every profile starts with")
+        if tower in unlocked_by:
+            bad(f"{tower!r} is already unlocked by {unlocked_by[tower]!r}")
+        unlocked_by[tower] = key
+        achievements[key] = {"name": raw["name"], "unlocks": tower, "goals": check_goals(raw.get("goals"), bad)}
+    bosses = {}
+    for key, raw in data.get("bosses", {}).items():
+        def bad(message):
+            fail(f"boss achievement {key!r}: {message}")
+        if key in achievements:
+            bad("a tower's achievement has the same id")
+        if "boss" not in ENEMY_TYPES.get(raw.get("boss"), {}):
+            bad(f"boss {raw.get('boss')!r} isn't a boss in monsters.json")
+        if raw.get("after") not in MILESTONES:
+            bad(f"after must be one of {MILESTONES}")
+        missing = [f for f in BOSS_CARD_FIELDS if f not in raw.get("card", {})]
+        if missing:
+            bad(f"card: missing fields {missing}")
+        bosses[key] = {"name": raw["name"], "boss": raw["boss"], "after": raw["after"], "card": raw["card"],
+                       "goals": check_goals(raw.get("goals"), bad)}
     never = [k for k in TOWERS if k not in start and k not in unlocked_by]
     if never:
         fail(f"towers no achievement unlocks: {never}")
-    return start, int(data["discoveries"]), achievements
+    return start, int(data["discoveries"]), achievements, bosses
 
 
-START_TOWERS, DISCOVERIES, ACHIEVEMENTS = load_achievements(ACHIEVEMENTS_FILE)
+START_TOWERS, DISCOVERIES, ACHIEVEMENTS, BOSS_ACHIEVEMENTS = load_achievements(ACHIEVEMENTS_FILE)
 UNLOCKED_BY = {a["unlocks"]: key for key, a in ACHIEVEMENTS.items()}  # tower -> achievement id
 # tower -> the towers fused to make it: the one before it in its line, or a final's two tier 3 parents.
 # A tower's achievement is hidden, and counts nothing, until the player owns all of them.
@@ -124,13 +149,15 @@ def goal_key(achievement, index):
 class AchievementTracker:
     """Counts the Towers side's achievements and unlocks towers in the profile as goals are met.
 
-    main.Game calls the on_* hooks and tick(); `on_unlock(kind)` is called once per tower unlocked.
+    main.Game calls the on_* hooks and tick(); `on_unlock(kind)` is called once per tower unlocked, and
+    `on_boss(achievement)` once per secret boss unlocked (with the achievement that did it).
     Progress that lasts (scope ever, and the best peaks) lives in profile.achievements and is written
     to disk by flush(); counts for one level live here and restart with start_level()."""
 
-    def __init__(self, profile, on_unlock):
+    def __init__(self, profile, on_unlock, on_boss=lambda achievement: None):
         self.profile = profile
         self.on_unlock = on_unlock
+        self.on_boss = on_boss
         self.dirty = False
         self.start_level()
 
@@ -147,14 +174,22 @@ class AchievementTracker:
         """Whether a locked tower's achievement is shown and counted: the player owns every tower it's fused from."""
         return not self.profile.has_tower(kind) and all(self.profile.has_tower(p) for p in PREREQUISITES[kind])
 
+    def boss_available(self, achievement):
+        """Whether a secret boss's achievement counts: the boss is locked and its milestone reached."""
+        ach = BOSS_ACHIEVEMENTS[achievement]
+        return not self.profile.has_boss(ach["boss"]) and self.profile.milestones[ach["after"]]
+
     def missing_prerequisites(self, kind):
         """The towers `kind` is fused from that the player doesn't own yet."""
         return [p for p in PREREQUISITES[kind] if not self.profile.has_tower(p)]
 
     def open_goals(self, condition):
-        """(key, goal) for every goal of `condition` whose tower is locked but available. A list, made before
+        """(key, goal) for every goal of `condition` whose tower is locked but available, or whose secret boss
+        counts (boss_available). A list, made before
         any of them count, so a tower unlocked by this event doesn't let its children count the same event."""
-        return [(goal_key(aid, i), goal) for aid, ach in ACHIEVEMENTS.items() if self.available(ach["unlocks"])
+        open_ = [(aid, ach) for aid, ach in ACHIEVEMENTS.items() if self.available(ach["unlocks"])]
+        open_ += [(aid, ach) for aid, ach in BOSS_ACHIEVEMENTS.items() if self.boss_available(aid)]
+        return [(goal_key(aid, i), goal) for aid, ach in open_
                 for i, goal in enumerate(ach["goals"]) if goal["condition"] == condition]
 
     def reach(self, key, goal, value):
@@ -164,9 +199,12 @@ class AchievementTracker:
             self.profile.achievements[key] = value
             self.dirty = True
         if value >= goal["target"]:
-            kind = ACHIEVEMENTS[key.split("/")[0]]["unlocks"]
-            if self.profile.unlock_tower(kind):
-                self.on_unlock(kind)
+            aid = key.split("/")[0]
+            if aid in BOSS_ACHIEVEMENTS:
+                if self.profile.unlock_boss(BOSS_ACHIEVEMENTS[aid]["boss"]):
+                    self.on_boss(aid)
+            elif self.profile.unlock_tower(ACHIEVEMENTS[aid]["unlocks"]):
+                self.on_unlock(ACHIEVEMENTS[aid]["unlocks"])
 
     def add(self, key, goal, amount=1):
         """Count toward an added-up goal, in this level or over all time (its scope)."""
@@ -272,6 +310,18 @@ class AchievementTracker:
                     and (not only or self.lines_used == {only})):
                 self.add(key, goal)
         self.flush()
+
+    def on_monsters_pass_won(self):
+        """A Monsters pass was won."""
+        for key, goal in self.open_goals("monsters_pass_won"):
+            self.add(key, goal)
+        self.flush()
+
+    def on_loot(self, amount):
+        """A Looter got through on the Monsters side, bringing `amount` back into the budget (written to disk as
+        the wave ends: AttackMixin.end_attack_wave)."""
+        for key, goal in self.open_goals("looted"):
+            self.add(key, goal, amount)
 
     def on_pass_won(self, finale, gold):
         """A Towers pass was won; `finale` if it ended early on a finale wave."""

@@ -259,6 +259,7 @@ class AttackMixin:
         """A wave is over and the towers still stand: draft the next one, or the level is over. It's
         cleared if it took a life, unless it was the last level (where every life had to go)."""
         self.aiming = None
+        self.tracker.flush()  # the Looters' loot (AchievementTracker.on_loot)
         if self.wave_idx < WAVES_PER_LEVEL:
             self.state = "build"
             self.prepare_draft()
@@ -282,6 +283,7 @@ class AttackMixin:
         self.sound("pass_won" if pass_won else "level_complete")
         if pass_won:
             self.profile.reach("tower_cards")
+            self.tracker.on_monsters_pass_won()
             self.finale = (self.level_idx + 1, self.wave_idx)  # where the next Towers pass ends
         self.monster_wins += 1
         self.share_growth += REWARDS[self.record_tier]["share"]

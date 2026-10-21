@@ -51,6 +51,16 @@ BUTTON = (70, 70, 85)
 BUTTON_HOVER = (90, 90, 108)
 BUTTON_QUIET = (48, 48, 58)  # a button that's on offer but not the main action
 BUTTON_OFF = (40, 40, 48)  # a button that can't be used right now
+BOSS_ALERT = 3.0  # seconds a boss's alert shows when it walks in
+GRAND_ALERT_EXTRA = 1.5  # and longer for a secret boss that follows another (monsters.json follows)
+BANKRUPT_NOTICE = 5.0  # seconds the bankruptcy notice shows (the Chairman got through)
+
+
+def boss_color(spec):
+    """A boss's colour for its name and health bar: its own, or, if that's too dark to read on the dark bands
+    (the Chairman's navy suit), its inner colour."""
+    r, g, b = spec["color"]
+    return spec["inner"][2] if 0.3 * r + 0.59 * g + 0.11 * b < 70 and "inner" in spec else spec["color"]
 CARD = (38, 38, 48)  # cards and option tiles on the overlay screens
 CARD_HOVER = (55, 55, 68)
 TIER_RIM = {1: (78, 80, 94), 2: (176, 116, 64), 3: (205, 205, 220), 4: GOLD}
@@ -161,6 +171,9 @@ class ScaledDraw:
 
     def polygon(self, surf, color, points, width=0):
         return pygame.draw.polygon(surf, color, [sp(p) for p in points], self.width(width))
+
+    def ellipse(self, surf, color, rect, width=0):
+        return pygame.draw.ellipse(surf, color, srect(rect), self.width(width))
 
     def fill(self, surf, color, rect):
         return surf.fill(color, srect(rect))
@@ -382,6 +395,8 @@ def draw_enemy(surf, enemy):
         draw_ward(surf, enemy, pos)
     if enemy.shield_timer > 0:
         sdraw.circle(surf, (240, 220, 120), pos, size + 7, 2)
+    if enemy.barrier > 0:
+        draw_barrier(surf, enemy, pos)
     if enemy.haste_timer > 0:
         tail = pos - enemy.heading * (size + 8)
         sdraw.line(surf, (255, 120, 60), pos - enemy.heading * size, tail, 3)
@@ -420,6 +435,20 @@ def draw_ward(surf, enemy, pos):
         arc = [pos + pygame.Vector2(0, -r).rotate(360 * charge * i / steps) for i in range(steps + 1)]
         for a, b in zip(arc, arc[1:]):
             sdraw.line(surf, mix(WARD_COLOR, (40, 60, 90), 0.35), a, b, 1.5)
+
+
+def draw_barrier(surf, enemy, pos):
+    """The Chairman's dividends: a ring of gold coins circling him, more of them the thicker his barrier
+    (one per 5% of his max hp, up to 16), each flipping edge-on and back as it goes round."""
+    size = enemy.spec["size"]
+    coins = max(1, min(16, round(20 * enemy.barrier / enemy.max_hp)))
+    r = size + 12
+    for i in range(coins):
+        a = enemy.phase_t * 60 + i * 360 / coins
+        c = pos + pygame.Vector2(r, 0).rotate(a)
+        w = max(1.5, 7 * abs(math.cos(enemy.phase_t * 4 + i)))
+        sdraw.ellipse(surf, (190, 135, 30), (c.x - w / 2, c.y - 3.5, w, 7))
+        sdraw.ellipse(surf, GOLD, (c.x - w / 2 + 0.6, c.y - 2.9, max(0.8, w - 1.2), 5.8))
 
 
 def draw_eyes(surf, enemy, pos):
@@ -613,6 +642,7 @@ class GameView:
             blit_text(screen, self.font, p.text, p.color, p.pos, "center", int(255 * (1 - p.t / 0.8)))
 
         self.draw_boss_bar()
+        self.draw_bankrupt_notice()
         overlay = self.overlay
         if overlay is None:
             self.draw_banner()
@@ -702,16 +732,77 @@ class GameView:
         bar = pygame.Rect(MAP_W / 2 - 220, 26, 440, 14)
         sdraw.rect(self.screen, (20, 20, 26), bar.inflate(6, 6), border_radius=5)
         sdraw.rect(self.screen, (60, 10, 14), bar)
-        sdraw.rect(self.screen, spec["color"], (*bar.topleft, bar.width * boss.hp / boss.max_hp, bar.height))
-        self.text(self.font, spec["boss"].upper(), spec["color"], (bar.centerx, bar.top - 5), "midbottom")
-        if self.boss_alert > 0:
+        sdraw.rect(self.screen, boss_color(spec), (*bar.topleft, bar.width * boss.hp / boss.max_hp, bar.height))
+        if boss.barrier > 0:  # the Chairman's dividends, a pale strip over his (gold) health
+            sdraw.rect(self.screen, (255, 248, 215), (*bar.topleft, bar.width * min(1.0, boss.barrier / boss.max_hp), 5))
+        self.text(self.font, spec["boss"].upper(), boss_color(spec), (bar.centerx, bar.top - 5), "midbottom")
+        if self.boss_alert > 0 and self.alert_kind:
+            alert = ENEMY_TYPES[self.alert_kind]
+            if "follows" in alert:
+                return self.draw_grand_alert(alert)
             band = pygame.Surface(sp((MAP_W, 90)), pygame.SRCALPHA)
             band.fill((0, 0, 0, 150))
-            title = f"{spec['boss'].upper()} APPROACHES"
-            blit_text(band, self.fit_font(title, MAP_W - 32, self.font_xl, self.font_l), title, spec["color"],
+            title = f"{alert['boss'].upper()} APPROACHES"
+            blit_text(band, self.fit_font(title, MAP_W - 32, self.font_xl, self.font_l), title, boss_color(alert),
                       (MAP_W / 2, 45), "center")
             band.set_alpha(int(255 * min(1.0, self.boss_alert)))
             self.screen.blit(band, sp((0, MAP_H / 2 - 45)))
+
+    def draw_bankrupt_notice(self):
+        """The Chairman got through: a foreclosure notice drops onto the map, slightly askew, and a red
+        BANKRUPT stamp slams onto it."""
+        if self.bankrupt_notice <= 0:
+            return
+        t = BANKRUPT_NOTICE - self.bankrupt_notice  # seconds since he got through
+        taken, boss = self.notice_taken
+        paper, ink, red = (238, 228, 200), (60, 50, 40), (200, 30, 40)
+        w, h = 420, 250
+        note = pygame.Surface(sp((w, h)), pygame.SRCALPHA)
+        sdraw.rect(note, paper, (0, 0, w, h), border_radius=4)
+        sdraw.rect(note, sprites.shade(paper, 0.7), (6, 6, w - 12, h - 12), 2, border_radius=3)
+        blit_text(note, self.font, "NOTICE OF FORECLOSURE", ink, (w / 2, 30), "center")
+        sdraw.line(note, sprites.shade(paper, 0.7), (40, 48), (w - 40, 48), 1)
+        blit_text(note, self.font, f"{boss} took every coin and every tower.", ink, (w / 2, 184), "center")
+        blit_text(note, self.font, f"Assets seized: {taken:,} gold", ink, (w / 2, 210), "center")
+        slam = min(1.0, max(0.0, (t - 0.5) / 0.15))  # the stamp comes down half a second in
+        if slam > 0:
+            stamp = pygame.Surface(sp((300, 76)), pygame.SRCALPHA)
+            sdraw.rect(stamp, red, (3, 3, 294, 70), 5, border_radius=8)
+            blit_text(stamp, self.font_xl, "BANKRUPT", red, (150, 40), "center")
+            k = 1 + 0.6 * (1 - slam)  # big, then down onto the paper
+            stamp = pygame.transform.rotozoom(stamp, 12, k)
+            stamp.set_alpha(round(230 * slam))
+            note.blit(stamp, stamp.get_rect(center=sp((w / 2, 104))))
+        drop = max(0.0, 1 - t / 0.3)  # the notice drops in from above
+        note = pygame.transform.rotozoom(note, -3, 1)
+        note.set_alpha(int(255 * min(1.0, self.bankrupt_notice)))
+        self.screen.blit(note, note.get_rect(center=sp((MAP_W / 2, MAP_H / 2 - 120 * drop ** 2))))
+
+    def draw_grand_alert(self, spec):
+        """A secret boss that follows another walks in: a taller band lit in its colour, edged in light, that
+        flashes as it opens; its name, bright and pulsing, over its `announce` line."""
+        t = BOSS_ALERT + GRAND_ALERT_EXTRA - self.boss_alert  # seconds since it came
+        color, h = boss_color(spec), 150
+        bright = tuple(min(255, c + 70) for c in color)
+        band = pygame.Surface(sp((MAP_W, h)), pygame.SRCALPHA)
+        band.fill((*[c // 4 for c in color], 200))
+        flash = max(0.0, 1 - t / 0.5)  # a white-gold flash as the band opens
+        if flash:
+            band.fill((255, 245, 210, round(200 * flash)), special_flags=pygame.BLEND_RGBA_MAX)
+        for y in (2, h - 4):
+            sdraw.rect(band, bright, (0, y, MAP_W, 3))
+        for i in range(24):  # rays fanning out from behind the name
+            d = pygame.Vector2(1, 0).rotate(i * 15 + t * 10)
+            center = pygame.Vector2(MAP_W / 2, h / 2)
+            sdraw.line(band, (*color, 50), center + d * 60, center + d * MAP_W, 2)
+        pulse = 0.5 + 0.5 * math.sin(t * 6)
+        title = f"{spec['boss'].upper()} HAS COME"
+        title_color = tuple(round(b + (255 - b) * pulse * 0.6) for b in bright)
+        blit_text(band, self.fit_font(title, MAP_W - 32, self.font_xl, self.font_l), title, title_color,
+                  (MAP_W / 2, h / 2 - 12), "center")
+        blit_text(band, self.font_l, spec["follows"]["announce"], bright, (MAP_W / 2, h / 2 + 32), "center")
+        band.set_alpha(int(255 * min(1.0, self.boss_alert)))
+        self.screen.blit(band, sp((0, MAP_H / 2 - h / 2)))
 
     def draw_banner(self):
         """Big level title shown when a level starts, in the level's accent color."""

@@ -73,6 +73,8 @@ class Enemy:
         self.flash = 0.0  # drawing only: see HIT_FLASH
         self.summon_timer = self.spec["summon"][2] if "summon" in self.spec else 0.0
         self.decoy_timer = self.spec["decoy"][0] if "decoy" in self.spec else 0.0
+        self.layoff_timer = self.spec["layoff"][0] if "layoff" in self.spec else 0.0
+        self.barrier = 0.0  # hp of damage soaked up before its own (the Chairman's dividends)
         self.illusion = False  # a Mirage's illusion: see cast_illusion
         self.fade = 0.0  # an illusion's seconds left
         self.alive = True
@@ -187,7 +189,8 @@ class Enemy:
         whether the hit landed: a ward that's up absorbs a whole hit (burns excluded) and goes down.
 
         Armor blocks a flat amount of every hit except burns, but at least ARMOR_MIN_SHARE of a
-        hit always gets through; a shield then blocks its share of what's left."""
+        hit always gets through; a shield then blocks its share of what's left, and a barrier soaks up what
+        it can of the rest."""
         if not self.alive:
             return False
         if self.illusion:  # popped by any hit; the shot was wasted
@@ -205,6 +208,10 @@ class Enemy:
             damage = max(damage - self.armor, damage * ARMOR_MIN_SHARE)
         if self.shield_timer > 0:
             damage *= 1 - self.shield
+        if self.barrier > 0:
+            soaked = min(damage, self.barrier)
+            self.barrier -= soaked
+            damage -= soaked
         if how != "burn":
             self.flash = HIT_FLASH
         effective = min(damage, self.hp)
@@ -297,6 +304,18 @@ def sabotage(enemy, towers, effects):
     for t in towers:
         if t.pos.distance_to(enemy.pos) <= radius:
             t.disabled_timer = max(t.disabled_timer, seconds)
+
+
+def lay_off(boss, towers):
+    """The Chairman's layoff: the costliest tower within its radius (gold put into it) stops firing for a
+    while. Returns that tower, or None if none is in reach."""
+    _, radius, seconds = boss.spec["layoff"]
+    near = [t for t in towers if t.pos.distance_to(boss.pos) <= radius]
+    if not near:
+        return None
+    target = max(near, key=lambda t: (t.spent, t.uid))
+    target.disabled_timer = max(target.disabled_timer, seconds)
+    return target
 
 
 def cast_ability(spec, pos, towers, enemies, effects, area_duration=1.0):

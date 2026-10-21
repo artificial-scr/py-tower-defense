@@ -196,6 +196,39 @@ class GooSpray:
             sdraw.circle(surf, (*shade(self.color, 0.7), alpha), self.b, 4 + 6 * (k - 0.5), 2)
 
 
+class PinkSlip:
+    """The Chairman's layoff notice: a pink slip fluttering from him to the tower he lays off, rocking as it
+    flies, then pinned there a moment, crossed out in red."""
+
+    duration = 0.9
+    FLIGHT = 0.45  # share of the time it's in the air
+    PAPER, INK = (255, 170, 190), (200, 30, 50)
+
+    def __init__(self, a, b):
+        self.a, self.b = pygame.Vector2(a), pygame.Vector2(b)
+        self.t = 0.0
+
+    def update(self, dt):
+        self.t += dt
+        return self.t < self.duration
+
+    def draw(self, surf):
+        k = self.t / self.duration
+        f = min(1.0, k / self.FLIGHT)
+        pos = self.a.lerp(self.b, f) - pygame.Vector2(0, 30 * math.sin(math.pi * f))  # an arc
+        tilt = 25 * math.sin(self.t * 18) * (1 - f)
+        alpha = int(255 * min(1.0, (1 - k) * 4))
+        corners = [pos + pygame.Vector2(x, y).rotate(tilt) for x, y in ((-7, -5), (7, -5), (7, 5), (-7, 5))]
+        sdraw.polygon(surf, (*self.PAPER, alpha), corners)
+        sdraw.polygon(surf, (*shade(self.PAPER, 0.6), alpha), corners, 1)
+        for y in (-2, 1):  # lines of print
+            sdraw.line(surf, (*shade(self.PAPER, 0.5), alpha), pos + pygame.Vector2(-5, y).rotate(tilt),
+                       pos + pygame.Vector2(4, y).rotate(tilt), 1)
+        if f >= 1:
+            sdraw.line(surf, (*self.INK, alpha), corners[0], corners[2], 2)
+            sdraw.line(surf, (*self.INK, alpha), corners[1], corners[3], 2)
+
+
 class GoldBurst:
     """A Looter's sack bursting at the end of the path: a golden flash, scraps of sacking, and a shower of
     coins thrown up and out that tumble (flipping edge-on and back), land, and fade. The throws come from

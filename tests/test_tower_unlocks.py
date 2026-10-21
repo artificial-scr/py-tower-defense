@@ -12,6 +12,7 @@ import achievements
 import main
 from achievements import (ACHIEVEMENTS, DISCOVERIES, PREREQUISITES, START_TOWERS, AchievementTracker,
                           load_achievements)
+from entities import Enemy
 from helpers import drag, free_tiles, key, mouse_down, put, px, run_wave
 from progress import Profile
 from towers import TOWERS
@@ -39,6 +40,11 @@ def test_every_tower_but_the_start_has_one_achievement():
     (lambda d: d["achievements"]["dragon"]["goals"][0].update(how="magic"), "how must be one of"),
     (lambda d: d["achievements"]["zero"]["goals"][0].update(only_line="laser"), "isn't a tower line"),
     (lambda d: d.update(start=["rifle"]), "isn't a tier 1 tower"),
+    (lambda d: d["bosses"]["pest_control"].update(boss="swarmling"), "isn't a boss"),
+    (lambda d: d["bosses"]["pest_control"].update(after="tuesday"), "after must be one of"),
+    (lambda d: d["bosses"]["pest_control"]["goals"][0].update(enemy=["dragon"]), "isn't a monster"),
+    (lambda d: d["bosses"].update(rifle=d["bosses"]["pest_control"]), "same id"),
+    (lambda d: d["bosses"]["pest_control"]["card"].pop("hint"), r"card: missing fields \['hint'\]"),
 ])
 def test_broken_achievements_file(tmp_path, change, message):
     with open(achievements.ACHIEVEMENTS_FILE, encoding="utf-8") as f:
@@ -164,6 +170,22 @@ def test_an_unlock_during_a_wave_waits_for_the_build_phase(locked):
     assert locked.state == "build" and locked.overlay == "unlock"
 
 
+def test_a_secret_boss_gets_its_own_card_at_the_build_phase(locked, monkeypatch):
+    """Not named on the card, and drawn with its own art (or the lurker's, for a boss without any)."""
+    locked.start_wave()
+    locked.boss_unlocked("pest_control")
+    assert locked.overlay is None and "Something stirs..." in [p.text for p in locked.popups]
+    locked.spawn_queue.clear()
+    locked.enemies.clear()
+    run_wave(locked)
+    assert locked.overlay == "unlock" and locked.pending_unlocks == [{"how": "boss", "achievement": "pest_control"}]
+    locked.draw()
+    monkeypatch.setitem(achievements.BOSS_ACHIEVEMENTS["pest_control"], "boss", "warden")
+    locked.draw()
+    locked.handle_event(key(pygame.K_SPACE))
+    assert locked.overlay is None
+
+
 def test_unlock_screens_draw(locked):
     """The lock in the panel, the tree, the branch screen and the unlock card draw without errors."""
     locked.draw()
@@ -219,6 +241,64 @@ def test_kills_over_all_time_add_up_across_levels_and_save(tracked):
     assert tracked.unlocked == ["frost"]
     tracked.tracker.flush()
     assert Profile.load(tracked.profile.path).achievements["frost/1"] == 40
+
+
+def test_pest_control_counts_only_after_a_won_towers_pass(tracked):
+    """500 Swarmlings unlock the Brood Mother, counted from the first Towers pass won on."""
+    bosses = []
+    tracked.tracker.on_boss = bosses.append
+    for _ in range(500):
+        tracked.tracker.on_death(dead("swarmling"), 0)
+    assert "pest_control/0" not in tracked.profile.achievements and not bosses
+    tracked.profile.milestones["monsters_side"] = True
+    for _ in range(499):
+        tracked.tracker.on_death(dead("swarmling"), 0)
+        tracked.tracker.on_death(dead("basic"), 0)
+    assert not bosses
+    tracked.tracker.on_death(dead("swarmling"), 0)
+    assert bosses == ["pest_control"] and Profile.load(tracked.profile.path).bosses_unlocked == ["brood"]
+    tracked.tracker.on_death(dead("swarmling"), 0)
+    assert bosses == ["pest_control"], "once"
+
+
+def test_usurper_counts_a_won_monsters_pass(tracked, screen):
+    bosses = []
+    tracked.tracker.on_boss = bosses.append
+    tracked.tracker.on_monsters_pass_won()
+    assert not bosses, "not before the Towers side was won"
+    tracked.profile.milestones["monsters_side"] = True
+    tracked.tracker.on_monsters_pass_won()
+    assert bosses == ["usurper"] and tracked.profile.has_boss("overlord")
+
+
+def test_winning_a_monsters_pass_unlocks_the_overlord(screen):
+    g = main.Game(screen, log_dir=None, side="monsters")
+    g.profile.milestones["monsters_side"] = True
+    g.win_attack_level(pass_won=True)
+    assert g.profile.has_boss("overlord") and g.pending_unlocks == [{"how": "boss", "achievement": "usurper"}]
+
+
+def test_hostile_takeover_counts_the_looters_loot_on_the_monsters_side(tracked):
+    bosses = []
+    tracked.tracker.on_boss = bosses.append
+    tracked.tracker.on_loot(1000)
+    assert not bosses and "hostile_takeover/0" not in tracked.profile.achievements, "not before a Towers pass won"
+    tracked.profile.milestones["monsters_side"] = True
+    tracked.tracker.on_loot(980)
+    tracked.tracker.flush()
+    assert not bosses and Profile.load(tracked.profile.path).achievements["hostile_takeover/0"] == 980
+    tracked.tracker.on_loot(20)
+    assert bosses == ["hostile_takeover"] and tracked.profile.has_boss("chairman")
+
+
+def test_a_looter_through_on_the_monsters_side_counts_toward_hostile_takeover(screen):
+    g = main.Game(screen, log_dir=None, side="monsters")
+    g.profile.milestones["monsters_side"] = True
+    budget = g.budget
+    looter = Enemy("looter", g.path_pts, 1)
+    g.loot(looter, None)
+    gain = g.budget - budget
+    assert gain > 0 and g.profile.achievements["hostile_takeover/0"] == gain
 
 
 def test_level_kills_restart_each_level(tracked):
