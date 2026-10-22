@@ -13,7 +13,7 @@ from collections import defaultdict
 import pygame
 
 from balance_log import new_kind_stats
-from effects import Beam, Explosion, Ring, Sparks
+from effects import Beam, Explosion, FlameBurst, Ring, Sparks
 from levels import tile_center
 from monsters import ENEMY_TYPES, WARD_BREAK
 from towers import NO_TOWER_MODS, TARGETING, TOWERS, card_damage, fusion_options
@@ -25,6 +25,7 @@ SPLIT_SPREAD = 10  # pixels between the monsters a Splitter breaks into
 HIT_FLASH = 0.08  # seconds an enemy is drawn whitened after a hit (burns don't flash)
 TURN_SPEED = 600  # degrees a second a turret is drawn turning toward its target, or an enemy round a corner
 RECOIL = 0.12  # seconds a turret is drawn kicked back after a shot
+FLAME_FADE = 0.15  # seconds a flame tower's stream takes to reach full length, or to die out
 
 
 def turn_toward(angle, target, step):
@@ -409,7 +410,8 @@ class Projectile:
         splash = spec.get("splash")
         if splash:
             victims = [e for e in enemies if e.alive and e.pos.distance_to(self.pos) <= splash]
-            effects.append(Explosion(self.pos, splash, self.color))
+            flame = spec["look"]["flame"]
+            effects.append(FlameBurst(self.pos, splash) if flame else Explosion(self.pos, splash, self.color))
         elif self.target.alive:
             victims = [self.target]
             if "slow" in spec:
@@ -448,6 +450,8 @@ class Tower:
         self.aim = -90.0
         self.facing = -90.0  # drawing only: where the turret is drawn pointing, turning toward aim
         self.recoil = 0.0  # drawing only: see RECOIL
+        self.flame = 0.0  # drawing only: 1 while it has a target, fading to 0 without one (see FLAME_FADE)
+        self.flame_reach = 0.0  # drawing only: how far its target is
         self.spent = TOWERS[kind]["cost"] if spent is None else spent
         self.uid = next(TOWER_IDS)
         self.stats = defaultdict(new_kind_stats)  # tower kind -> stats while it was that kind
@@ -534,6 +538,7 @@ class Tower:
         """Turn the drawn turret toward the aim, and let it settle back from a shot."""
         self.facing = turn_toward(self.facing, self.aim, TURN_SPEED * dt)
         self.recoil -= dt
+        self.flame = max(0.0, self.flame - dt / FLAME_FADE)
 
     def update(self, dt, enemies, projectiles, effects):
         self.turn(dt)
@@ -549,6 +554,8 @@ class Tower:
             return
         in_range.sort(key=self.priority)
         self.aim = (in_range[0].pos - self.pos).as_polar()[1]
+        self.flame = min(1.0, self.flame + 2 * dt / FLAME_FADE)  # turn() took one dt off
+        self.flame_reach = in_range[0].pos.distance_to(self.pos)
         if self.cooldown > 0:
             return
         self.cooldown = 1 / self.spec["rate"]

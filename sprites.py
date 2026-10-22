@@ -655,6 +655,32 @@ def steam_puff(r, scale):
     return cached(("steam", r, scale), make)
 
 
+FLAME_STEPS = 12  # how many ages a flame puff is drawn at
+FLAME_HEAT = ((0.0, (255, 250, 210)), (0.2, (255, 210, 80)), (0.55, (255, 100, 25)), (1.0, (120, 30, 20)))
+
+
+def flame_color(age):
+    """White-hot at the nozzle, yellow, orange, then dark red as a puff burns out (age 0 to 1)."""
+    for (a, c), (b, d) in zip(FLAME_HEAT, FLAME_HEAT[1:]):
+        if age <= b:
+            return mix(c, d, (age - a) / (b - a))
+    return FLAME_HEAT[-1][1]
+
+
+def flame_puff(step, scale):
+    """A soft ball of fire in a flame tower's stream, at age step / (FLAME_STEPS - 1): small and white-hot
+    leaving the nozzle, then wide, red and thin as it burns out. Its middle burns hotter than its edge."""
+    def make():
+        age = step / (FLAME_STEPS - 1)
+        r = 3 + 10 * age
+        cv = Canvas(2 * r + 2, scale)
+        for i in range(8):
+            k = i / 7
+            cv.circle((*flame_color(age * (1 - 0.6 * k)), round(50 + 170 * k)), (0, 0), r * (1 - 0.7 * k))
+        return cv.done()
+    return cached(("flame", step, scale), make)
+
+
 def rage_aura(size, frame, scale):
     """A Berserker's rage: a hot red glow with flame tongues licking out, one of FRAMES flickers."""
     def make():

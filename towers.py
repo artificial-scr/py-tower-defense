@@ -58,7 +58,8 @@ def load_towers(path):
         towers[kind] = dict(
             name=raw["name"], tier=raw["tier"], line=None, desc=raw["desc"], range=raw["range"],
             damage=raw["damage"], rate=raw["rate"], proj_speed=raw.get("proj_speed", 400), cost=raw.get("cost"),
-            look=dict(layers=layers, barrels=tuple(raw["look"].get("barrels", (0, 0, 0)))), color=layers[0][2],
+            look=dict(layers=layers, barrels=tuple(raw["look"].get("barrels", (0, 0, 0))),
+                      flame=raw["look"].get("flame", False)), color=layers[0][2],
             **{m: raw[m] for m in MECHANICS if m in raw})
     return towers
 

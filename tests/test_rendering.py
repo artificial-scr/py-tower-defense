@@ -207,6 +207,34 @@ def test_every_projectile_and_effect_draws(game):
     graphics.draw_tower(game.screen, fx, tesla, 1.0)
 
 
+def test_flame_towers_pour_a_stream_of_fire(game):
+    """An Incinerator's shells aren't drawn: a stream of fire grows toward its target, and dies out without one."""
+    fx = game.fx_layer
+    tower = put(game, "incinerator", (5, 5))
+    enemies = [dummy_enemy((tower.pos.x + 80, tower.pos.y))]
+    projectiles = []
+    tower.update(0.01, enemies, projectiles, game.effects)
+    assert projectiles and 0 < tower.flame < 1
+    fx.fill((0, 0, 0, 0))
+    graphics.draw_projectile(game.screen, fx, projectiles[0])
+    assert fx.get_bounding_rect().width == 0, "the shell flies inside the stream"
+    for _ in range(20):
+        tower.update(1 / 60, enemies, projectiles, game.effects)
+    assert tower.flame == 1 and tower.flame_reach == 80
+    while projectiles:
+        projectiles[0].update(1 / 60, enemies, game.effects)
+        projectiles = [p for p in projectiles if not p.done]
+    assert [type(e).__name__ for e in game.effects] == ["FlameBurst"], "fire spills over the target, no blast"
+    game.effects[0].draw(fx)
+    graphics.draw_tower(game.screen, fx, tower, 1.0)
+    fire = fx.get_bounding_rect()
+    assert fire.right > (tower.pos.x + 60) * graphics.SCALE, "it reaches the target"
+    enemies[0].alive = False
+    for _ in range(20):
+        tower.update(1 / 60, enemies, projectiles, game.effects)
+    assert tower.flame == 0
+
+
 def average(surf, rect):
     """The average color of a logical rect of a 1x surface."""
     return pygame.transform.average_color(surf, pygame.Rect(rect))[:3]

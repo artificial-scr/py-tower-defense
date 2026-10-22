@@ -8,7 +8,9 @@ import math
 
 import pygame
 
-from graphics import jagged, sdraw
+import graphics
+import sprites
+from graphics import blit_center, jagged, sdraw
 from sprites import mix, regular_polygon, shade
 
 
@@ -106,6 +108,33 @@ class Explosion:
             d = pygame.Vector2(1, 0).rotate(self.spin + i * 360 / 7 + (i * 29) % 20)
             reach = self.radius * (0.4 + 0.25 * (i % 3)) * ease
             sdraw.circle(surf, debris, self.pos + d * reach, 2.5 * (1 - k) + 0.5)
+
+
+class FlameBurst:
+    """Where a flame tower's fire lands: puffs of fire spilling out over the splash radius and burning out.
+    Their directions come from where it landed, like an Explosion's debris."""
+
+    duration = 0.3
+
+    def __init__(self, pos, radius):
+        self.pos = pygame.Vector2(pos)
+        self.radius = radius
+        self.t = 0.0
+        self.spin = (self.pos.x * 7.3 + self.pos.y * 3.1) % 360
+
+    def update(self, dt):
+        self.t += dt
+        return self.t < self.duration
+
+    def draw(self, surf):
+        k = self.t / self.duration
+        ease = 1 - (1 - k) ** 2
+        for i in range(6):
+            d = pygame.Vector2(1, 0).rotate(self.spin + i * 60 + (i * 29) % 20)
+            reach = self.radius * (0.35 + 0.15 * (i % 3)) * ease
+            img = sprites.flame_puff(round((0.3 + 0.7 * k) * (sprites.FLAME_STEPS - 1)), graphics.SCALE)
+            img.set_alpha(round(220 * (1 - k)))
+            blit_center(surf, img, self.pos + d * reach)
 
 
 class Sparks:

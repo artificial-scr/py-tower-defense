@@ -271,7 +271,7 @@ Stats and rules are data, not code. Every file is read and checked at startup, a
 the game stops with a message that says what's wrong.
 
 - **`towers.json`**: each tower's stats (`range`, `damage`, `rate`, `proj_speed`, `cost` for tier 1
-  towers) and its look (layered shapes and barrels). Optional mechanics are `splash`, `slow` +
+  towers) and its look (layered shapes and barrels, and `flame` for a stream of fire instead of shells). Optional mechanics are `splash`, `slow` +
   `slow_time`, `burn` + `burn_time`, `chain`, `multishot`, `instant`, `vs_slowed` and `vs_burning`.
 - **`evolution.json`**: the three tier 1 → 3 lines and the twelve tier 4 recipes.
 - **`monsters.json`**: every monster's stats, cost, look and mechanics (`armor`, `heal_aura`, `split`,

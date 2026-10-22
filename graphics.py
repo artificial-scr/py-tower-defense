@@ -235,9 +235,13 @@ def draw_tower(surf, fx, tower, clock):
     """A tower on the map: turning, kicking back and flashing when it fires; Tesla towers crackle and
     frost towers glint now and then (`clock` is the game time, so pauses freeze them)."""
     spec = tower.spec
-    draw_tower_shape(surf, spec, tower.pos, tower.facing, tower.kick)
+    flame = spec["look"]["flame"]
+    draw_tower_shape(surf, spec, tower.pos, tower.facing, 0.0 if flame else tower.kick)
     count, length, width = spec["look"]["barrels"]
-    if tower.kick > MUZZLE_KICK:
+    if flame:
+        if tower.flame > 0:
+            draw_flame_stream(fx, tower, clock)
+    elif tower.kick > MUZZLE_KICK:
         if count:
             d = pygame.Vector2(1, 0).rotate(tower.facing)
             tip = tower.pos + d * (length + 2 - KICK_BACK * tower.kick)
@@ -259,6 +263,30 @@ def draw_tower(surf, fx, tower, clock):
         s = (clock * 0.6 + seed * 0.37) % 1.0
         if s < 0.2:
             sparkle(fx, tower.pos + pygame.Vector2(8, 0).rotate(seed * 77 + 200), 5 * math.sin(math.pi * s / 0.2))
+
+
+FLAME_PUFFS = 30  # puffs of fire in a flame stream
+FLAME_SPREAD = 8  # how far a puff strays sideways by the time it reaches the target
+
+
+def draw_flame_stream(fx, tower, clock):
+    """A flame tower's fire: puffs pour from the nozzle to its target, widening, wavering and cooling as they
+    go. Where each puff is comes from the game clock, so pauses freeze it. It grows out from the nozzle as the
+    tower finds a target and draws back when it loses one (tower.flame). The fire pours as fast as the shells
+    hidden in it fly: a puff crosses the tower's range in the time a shell does."""
+    d = pygame.Vector2(1, 0).rotate(tower.facing)
+    side = d.rotate(90)
+    barrel = tower.spec["look"]["barrels"][1]
+    nozzle = tower.pos + d * (barrel + 1)
+    reach = max(0.0, tower.flame_reach - barrel) * tower.flame
+    seed = tower.tile[0] * 7 + tower.tile[1] * 13
+    life = tower.spec["range"] / tower.spec["proj_speed"]
+    puffs = sorted(((clock / life + i / FLAME_PUFFS) % 1.0, i) for i in range(FLAME_PUFFS))
+    for age, i in reversed(puffs):  # the oldest (widest, darkest) first, so the hot core stays on top
+        stray = ((i * 37 + seed) % 11 - 5) / 5 + 0.5 * math.sin(clock * 17 + i * 2.3 + seed)
+        img = sprites.flame_puff(round(age * (sprites.FLAME_STEPS - 1)), SCALE)
+        img.set_alpha(round(255 * (1 - age) ** 0.5 * tower.flame))
+        blit_center(fx, img, nozzle + d * reach * age + side * stray * FLAME_SPREAD * age)
 
 
 def sparkle(surf, pos, r):
@@ -481,8 +509,11 @@ def draw_eyes(surf, enemy, pos):
 
 
 def draw_projectile(surf, fx, projectile):
-    """Shells trail smoke, fire glows, frost flies as a shard of ice, bullets leave a tracer."""
+    """Shells trail smoke, fire glows, frost flies as a shard of ice, bullets leave a tracer. A flame tower's
+    shots aren't drawn: they fly inside its stream (draw_flame_stream)."""
     spec, color, pos = projectile.spec, projectile.color, projectile.pos
+    if spec["look"]["flame"]:
+        return
     to = projectile.dest - pos
     d = to.normalize() if to.length_squared() > 1e-6 else pygame.Vector2(1, 0)
     if spec.get("splash", 0) >= 50:
