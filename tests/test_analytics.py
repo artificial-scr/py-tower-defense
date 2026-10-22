@@ -13,7 +13,7 @@ from monsters import ENEMY_TYPES
 from towers import TOWERS
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "analytics"))
-import tower_stats  # noqa: E402
+import tower_stats
 
 
 def test_fusing_keeps_the_gold():

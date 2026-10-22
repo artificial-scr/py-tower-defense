@@ -7,15 +7,15 @@ import os
 os.environ["SDL_VIDEODRIVER"] = "dummy"  # before pygame is imported anywhere
 os.environ["SDL_AUDIODRIVER"] = "dummy"
 
-import json  # noqa: E402
-import random  # noqa: E402
+import json
+import random
 
-import pygame  # noqa: E402
-import pytest  # noqa: E402
+import pygame
+import pytest
 
-import graphics  # noqa: E402
-import main  # noqa: E402
-from towers import TOWERS  # noqa: E402
+import graphics
+import main
+from towers import TOWERS
 
 
 @pytest.fixture(autouse=True)

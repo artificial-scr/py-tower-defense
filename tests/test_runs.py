@@ -3,10 +3,10 @@ run, and saving / continuing a run in progress."""
 
 import pygame
 import pytest
+from helpers import SCALES, key, mouse_down, put, run_wave, scaled
 
 import graphics
 import main
-from helpers import SCALES, key, mouse_down, put, run_wave, scaled
 from progress import Profile
 
 LAST = len(main.LEVELS) - 1  # index of the last level of a pass

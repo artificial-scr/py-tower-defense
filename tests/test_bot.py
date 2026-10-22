@@ -5,9 +5,9 @@ import random
 from collections import Counter
 
 import pytest
-
 from bot import PROFILES, Bot, frost_share
 from helpers import put
+
 from towers import TOWERS
 
 

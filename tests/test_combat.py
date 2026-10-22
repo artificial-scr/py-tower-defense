@@ -1,9 +1,9 @@
 """Tower mechanics and boss behavior."""
 
 import pytest
+from helpers import dummy_enemy, put, run_wave
 
 from entities import Projectile
-from helpers import dummy_enemy, put, run_wave
 from towers import TOWERS
 
 

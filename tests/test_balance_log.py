@@ -7,11 +7,11 @@ import random
 
 import pygame
 import pytest
+from bot import bot_play
+from helpers import build, key, put, ranked_spots, run_wave
 
 import balance_log
 import main
-from bot import bot_play
-from helpers import build, key, put, ranked_spots, run_wave
 from waves import Wave
 
 

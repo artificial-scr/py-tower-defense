@@ -13,7 +13,7 @@ import pygame
 
 import sprites
 from levels import COLS, ROWS, TILE
-from sprites import V, Canvas, blob, gem, mix, shade, sphere
+from sprites import Canvas, V, blob, gem, mix, shade, sphere
 
 MAP_W, MAP_H = COLS * TILE, ROWS * TILE
 PATH_SUPERSAMPLE = 2

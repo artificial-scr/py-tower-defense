@@ -29,12 +29,13 @@ import sys
 from collections import Counter
 
 from helpers import mouse_down, px
+
 from levels import COLS, ROWS, TILE, tile_center
 from monsters import ENEMY_TYPES
 from towers import CROSS, LINES, TOWER_LINES, TOWERS, fusion_options
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "analytics"))
-import tower_stats  # noqa: E402
+import tower_stats
 
 PROFILES = {
     "damage": {"spacing": "wave", "pick": "per_gold"},

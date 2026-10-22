@@ -11,7 +11,6 @@ stays locked.
 import random
 
 import pytest
-
 from bot import bot_runs
 
 pytestmark = pytest.mark.slow

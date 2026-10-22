@@ -7,11 +7,11 @@ import wave
 
 import pygame
 import pytest
+from helpers import key, mouse_down
 
 import main
 import music
 from entities import Enemy
-from helpers import key, mouse_down
 from levels import ALL_LEVELS, LEVELS
 
 
@@ -35,7 +35,7 @@ def in_wave(game, *enemies):
 
 # ---- layers -------------------------------------------------------------------------
 def test_each_intensity_has_its_layers():
-    on = lambda i: [s for s, g in zip(music.STEMS, music.layer_gains(i)) if g == 1]  # noqa: E731
+    on = lambda i: [s for s, g in zip(music.STEMS, music.layer_gains(i)) if g == 1]
     assert on(0) == ["pads"]
     assert on(music.WAVE) == ["pads", "bass", "percussion"]
     assert on(music.BUILD) == on(music.PRESSED) == ["pads", "bass", "percussion", "lead"]

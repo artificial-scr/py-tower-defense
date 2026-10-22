@@ -56,16 +56,65 @@ from attack import DEFENDER_LIVES, AttackMixin
 from attack_view import AttackView
 from balance_log import LevelLog, LogSession
 from datafile import read_json_or, write_json_atomic
-from effects import Beam, CastWarning, GoldBurst, GooSpray, PinkSlip, Popup, Ring, Shards, Sparks
-from entities import Enemy, Tower, cast_ability, heal_auras, lay_off, sabotage, speed_auras, zap
-from graphics import (BAD, BANKRUPT_NOTICE, BOSS_ALERT, GOLD, GRAND_ALERT_EXTRA, MAP_H, MAP_W, TILE, GameView,
-                      mouse_pos, set_scale, to_logical, window_size)
-from levels import (BOSS_LEVELS, COLS, LEVELS, ROWS, START_GOLD, START_LIVES, WAVES_PER_LEVEL, build_path_cells,
-                    tile_center)
-from monsters import ABILITIES, ENEMY_TYPES, REWARDS, UPGRADES, summon_count, summon_kinds, summon_offsets
+from effects import (
+    Beam,
+    CastWarning,
+    GoldBurst,
+    GooSpray,
+    PinkSlip,
+    Popup,
+    Ring,
+    Shards,
+    Sparks,
+)
+from entities import (
+    Enemy,
+    Tower,
+    cast_ability,
+    heal_auras,
+    lay_off,
+    sabotage,
+    speed_auras,
+    zap,
+)
+from graphics import (
+    BAD,
+    BANKRUPT_NOTICE,
+    BOSS_ALERT,
+    GOLD,
+    GRAND_ALERT_EXTRA,
+    MAP_H,
+    MAP_W,
+    TILE,
+    GameView,
+    mouse_pos,
+    set_scale,
+    to_logical,
+    window_size,
+)
+from levels import (
+    BOSS_LEVELS,
+    COLS,
+    LEVELS,
+    ROWS,
+    START_GOLD,
+    START_LIVES,
+    WAVES_PER_LEVEL,
+    build_path_cells,
+    tile_center,
+)
+from monsters import (
+    ABILITIES,
+    ENEMY_TYPES,
+    REWARDS,
+    UPGRADES,
+    summon_count,
+    summon_kinds,
+    summon_offsets,
+)
 from progress import UNLOCKS, Profile, comp_snapshot, stronger
-from towers import TARGETING, TOWER_ORDER, TOWERS, fusion_options
 from tooltip_view import TooltipView
+from towers import TARGETING, TOWER_ORDER, TOWERS, fusion_options
 from unlock_view import UnlockView
 from waves import Wave, make_wave, scout, wave_value
 
@@ -1249,9 +1298,7 @@ class Game(AttackMixin, AttackView, UnlockView, TooltipView, GameView):
             tip = self.tooltip_at(event.pos) if event.button == 3 and not self.aiming else None
             if event.button in (1, 3):  # a right click on something opens its tooltip, any other click closes it
                 self.tooltip = tip
-            if tip:
-                pass
-            elif self.side == "monsters" and self.handle_attack_click(event.pos, event.button):
+            if tip or self.side == "monsters" and self.handle_attack_click(event.pos, event.button):
                 pass
             elif event.button == 3:
                 self.build_kind = None

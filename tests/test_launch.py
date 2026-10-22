@@ -7,12 +7,12 @@ import os
 
 import pygame
 import pytest
+from helpers import key
 
 import graphics
 import main
 import music
 import sfx
-from helpers import key
 
 
 @pytest.fixture(autouse=True)

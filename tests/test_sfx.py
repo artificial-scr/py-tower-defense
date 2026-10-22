@@ -8,10 +8,10 @@ import wave
 
 import pygame
 import pytest
+from helpers import dummy_enemy, free_tiles, key, mouse_down, put, px
 
 import main
 import sfx
-from helpers import dummy_enemy, free_tiles, key, mouse_down, put, px
 from monsters import ABILITIES
 from towers import TOWERS
 

@@ -14,6 +14,7 @@ import os
 
 import pygame
 import pytest
+from helpers import SCALES, dummy_enemy, free_tiles, put, scaled
 
 import ambience
 import graphics
@@ -23,7 +24,6 @@ import sprites
 import terrain
 from entities import Projectile
 from graphics import HEIGHT, MAP_H, MAP_W, PANEL_W, TILE
-from helpers import SCALES, dummy_enemy, free_tiles, put, scaled
 from levels import tile_center
 from monsters import ENEMY_TYPES
 from tooltip_view import Tip

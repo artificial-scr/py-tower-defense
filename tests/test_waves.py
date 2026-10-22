@@ -2,14 +2,25 @@
 
 
 import pytest
+from helpers import assert_rejects, put, ranked_spots
 
 import main
 import waves
-from helpers import assert_rejects, put, ranked_spots
 from levels import BOSS_LEVELS, LEVEL_COUNT, WAVES_PER_LEVEL, tile_center
 from monsters import ENEMY_TYPES
-from waves import (THREAT, add_counters, base_packs, counter_options, level_elite, load_waves, make_wave, roster,
-                   scout, threat, wave_budget)
+from waves import (
+    THREAT,
+    add_counters,
+    base_packs,
+    counter_options,
+    level_elite,
+    load_waves,
+    make_wave,
+    roster,
+    scout,
+    threat,
+    wave_budget,
+)
 
 LEVEL_WAVES = [(level, wave) for level in range(LEVEL_COUNT) for wave in range(WAVES_PER_LEVEL)]
 PATH = [(x * 40 + 20, 220) for x in range(20)]  # a straight path along row 5

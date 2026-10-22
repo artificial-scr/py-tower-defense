@@ -15,7 +15,7 @@ import pygame
 
 import sprites
 from levels import COLS, ROWS, TILE
-from sprites import V, Canvas, mix, shade, WHITE
+from sprites import WHITE, Canvas, V, mix, shade
 
 MAP_W, MAP_H = COLS * TILE, ROWS * TILE
 
@@ -228,7 +228,7 @@ def ends(waypoints):
     (a, b), (c, d) = waypoints[:2], waypoints[-2:]
     into, out = (V(b) - V(a)).normalize(), (V(d) - V(c)).normalize()
     first, last = V(a) + into, V(d) - out
-    center = lambda tile: V(tile.x * TILE + TILE / 2, tile.y * TILE + TILE / 2)  # noqa: E731
+    center = lambda tile: V(tile.x * TILE + TILE / 2, tile.y * TILE + TILE / 2)
     return (center(first), into), (center(last), out)
 
 

@@ -9,7 +9,7 @@ import pytest
 from levels import wave_hp_mult
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "analytics"))
-import matchups  # noqa: E402
+import matchups
 
 MID_HP = wave_hp_mult(4, 2)
 

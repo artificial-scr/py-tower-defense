@@ -16,12 +16,12 @@ from collections import Counter
 
 import pygame
 
-from levels import COLS, LEVELS, ROWS, TILE, WAVES_PER_LEVEL, tile_center
-from monsters import ABILITIES, ENEMY_TYPES, REWARDS, WARD_BREAK
-from progress import UNLOCKS
 import ambience
 import sprites
 import terrain
+from levels import COLS, LEVELS, ROWS, TILE, WAVES_PER_LEVEL, tile_center
+from monsters import ABILITIES, ENEMY_TYPES, REWARDS, WARD_BREAK
+from progress import UNLOCKS
 from sprites import mix, regular_polygon
 from towers import CROSS, EVOLVE, LINES, TARGETING, TOWER_ORDER, TOWERS
 
@@ -1153,8 +1153,8 @@ class GameView:
         if self.fullscreen:
             size = "Fullscreen {} x {}, game {} x {}".format(*pygame.display.get_surface().get_size(), w, h)
         self.text(self.font, size, TEXT, (MAP_W / 2, 255), "midtop")
-        on_off = lambda on: "On" if on else "Off"  # noqa: E731
-        percent = lambda v: f"{v}%" if v else "Off"  # noqa: E731
+        on_off = lambda on: "On" if on else "Off"
+        percent = lambda v: f"{v}%" if v else "Off"
         for rect, on, label in (
                 (self.ambient_button(), self.ambient, f"Ambient: {on_off(self.ambient)}  [A]"),
                 (self.fullscreen_button(), self.fullscreen, f"Fullscreen: {on_off(self.fullscreen)}  [F11]"),

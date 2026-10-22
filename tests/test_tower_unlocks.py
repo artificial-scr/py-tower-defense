@@ -7,13 +7,19 @@ from types import SimpleNamespace
 
 import pygame
 import pytest
+from helpers import assert_rejects, drag, free_tiles, key, mouse_down, put, px, run_wave
 
 import achievements
 import main
-from achievements import (ACHIEVEMENTS, DISCOVERIES, PREREQUISITES, START_TOWERS, AchievementTracker,
-                          load_achievements)
+from achievements import (
+    ACHIEVEMENTS,
+    DISCOVERIES,
+    PREREQUISITES,
+    START_TOWERS,
+    AchievementTracker,
+    load_achievements,
+)
 from entities import Enemy
-from helpers import assert_rejects, drag, free_tiles, key, mouse_down, put, px, run_wave
 from progress import Profile
 from towers import TOWERS
 

@@ -5,16 +5,16 @@ import os
 
 import pygame
 import pytest
+from helpers import SCALES, key, mouse_down, scaled
 
 import graphics
 import main
 from attack import DEFENDER_LIVES, QUEUE_MAX
 from entities import Enemy
-from helpers import SCALES, key, mouse_down, scaled
 from levels import LEVELS, WAVES_PER_LEVEL
-from waves import wave_value
 from monsters import BUDGET, ENEMY_TYPES, REWARDS, UPGRADES
 from progress import UNLOCKS
+from waves import wave_value
 
 
 def comp(*towers):

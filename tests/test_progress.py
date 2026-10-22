@@ -3,9 +3,9 @@
 import json
 
 import pygame
+from helpers import build, key, mouse_down, put, run_wave
 
 import main
-from helpers import build, key, mouse_down, put, run_wave
 
 
 def finish_level(game):

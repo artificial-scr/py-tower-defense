@@ -5,8 +5,21 @@ queue along the bottom of the map, and the aiming circle. Mixed into graphics.Ga
 import pygame
 
 from attack import DEFENDER_LIVES, ESCORT_KIND
-from graphics import (BAD, BUTTON, BUTTON_QUIET, GOLD, GOOD, MAP_H, MAP_W, PANEL_LINE, TEXT, TEXT_DIM, draw_enemy_icon,
-                      mouse_pos, sdraw)
+from graphics import (
+    BAD,
+    BUTTON,
+    BUTTON_QUIET,
+    GOLD,
+    GOOD,
+    MAP_H,
+    MAP_W,
+    PANEL_LINE,
+    TEXT,
+    TEXT_DIM,
+    draw_enemy_icon,
+    mouse_pos,
+    sdraw,
+)
 from levels import WAVES_PER_LEVEL, tile_center
 from monsters import ABILITIES, ENEMY_TYPES, UPGRADES
 

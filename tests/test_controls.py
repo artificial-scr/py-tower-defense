@@ -5,10 +5,10 @@ import os
 
 import pygame
 import pytest
+from helpers import SCALES, key, mouse_down, mouse_up, put, scaled
 
 import graphics
 import main
-from helpers import SCALES, key, mouse_down, mouse_up, put, scaled
 from levels import tile_center
 
 

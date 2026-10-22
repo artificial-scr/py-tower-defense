@@ -8,10 +8,10 @@ planner (profile cycle) and the planner kept to tiers 1-2 or to the Gun line fal
 import random
 
 import pytest
-
-import main
 from bot import bot_play
 from helpers import free_tiles, put, scripted_attack
+
+import main
 from towers import TOWERS
 
 pytestmark = pytest.mark.slow

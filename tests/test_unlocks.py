@@ -5,12 +5,12 @@ import random
 
 import pygame
 import pytest
+from helpers import SCALES, assert_rejects, key, mouse_down, put, run_wave, scaled
 
 import graphics
 import main
 import progress
 from entities import Enemy, Tower
-from helpers import SCALES, assert_rejects, key, mouse_down, put, run_wave, scaled
 from monsters import REWARDS
 from progress import UNLOCKS, Profile, load_unlocks
 from towers import NO_TOWER_MODS, TOWERS

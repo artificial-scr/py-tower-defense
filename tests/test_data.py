@@ -4,12 +4,30 @@ import itertools
 import json
 
 import pytest
+from helpers import assert_rejects
 
 import towers
-from helpers import assert_rejects
-from levels import (ALL_BOSS_LEVELS, ALL_LEVELS, BOSS_LEVELS, COLS, LEVEL_COUNT, LEVELS, ROWS, THEMES,
-                    build_path_cells)
-from towers import CROSS, EVOLVE, LINES, TOWER_ORDER, TOWERS, fusion_options, load_evolution, load_towers
+from levels import (
+    ALL_BOSS_LEVELS,
+    ALL_LEVELS,
+    BOSS_LEVELS,
+    COLS,
+    LEVEL_COUNT,
+    LEVELS,
+    ROWS,
+    THEMES,
+    build_path_cells,
+)
+from towers import (
+    CROSS,
+    EVOLVE,
+    LINES,
+    TOWER_ORDER,
+    TOWERS,
+    fusion_options,
+    load_evolution,
+    load_towers,
+)
 
 
 # ---- the shipped data ----------------------------------------------------

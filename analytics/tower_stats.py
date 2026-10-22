@@ -29,10 +29,10 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from entities import ARMOR_MIN_SHARE  # noqa: E402
-from levels import TILE, generated_hp_mult  # noqa: E402
-from monsters import ENEMY_TYPES  # noqa: E402
-from towers import CROSS, LINES, TOWERS  # noqa: E402
+from entities import ARMOR_MIN_SHARE
+from levels import TILE, generated_hp_mult
+from monsters import ENEMY_TYPES
+from towers import CROSS, LINES, TOWERS
 
 SPACINGS = {"1 target": math.inf, "wave": 50, "swarm": 15}
 CHAIN_HOP = 100  # px a chain can jump (Projectile.impact)

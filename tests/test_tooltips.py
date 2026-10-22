@@ -1,9 +1,9 @@
 """Tooltips (tooltip_view.py): what a right click opens, what closes them, and what they say."""
 
 import pygame
+from helpers import dummy_enemy, key, mouse_down, put, px
 
 import main
-from helpers import dummy_enemy, key, mouse_down, px, put
 from levels import tile_center
 
 

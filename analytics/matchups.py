@@ -39,12 +39,13 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from entities import Enemy, Tower, heal_auras, sabotage, speed_auras  # noqa: E402
-from levels import COLS, LAYOUTS, ROWS, build_path_cells, tile_center, wave_hp_mult  # noqa: E402
-from monsters import ENEMY_TYPES  # noqa: E402
-from tower_stats import percent, print_table, tower_gold  # noqa: E402
-from towers import TOWERS  # noqa: E402
-from waves import TAG_OF  # noqa: E402
+from tower_stats import percent, print_table, tower_gold
+
+from entities import Enemy, Tower, heal_auras, sabotage, speed_auras
+from levels import COLS, LAYOUTS, ROWS, build_path_cells, tile_center, wave_hp_mult
+from monsters import ENEMY_TYPES
+from towers import TOWERS
+from waves import TAG_OF
 
 # name -> (1-based level, 1-based wave, defender gold, tower tiers in play). The gold is about what the
 # strongest comps in the balance logs were worth there.

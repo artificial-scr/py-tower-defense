@@ -4,10 +4,10 @@ import json
 import os
 
 import pytest
+from helpers import build, put, run_wave
 
 import main
 from effects import CastWarning
-from helpers import build, put, run_wave
 from progress import Profile
 from towers import NO_TOWER_MODS
 
@@ -92,7 +92,7 @@ def test_losing_writes_no_record(game):
 
 def test_only_stronger_slots_replace_a_record(tmp_path):
     p = Profile(str(tmp_path / "p.json"))
-    comp = lambda value: {"value": value, "towers": [{"kind": "gun", "tile": [1, 1], "gold_spent": value}]}  # noqa: E731
+    comp = lambda value: {"value": value, "towers": [{"kind": "gun", "tile": [1, 1], "gold_spent": value}]}
     assert p.record_towers(3, {1: comp(100), 2: comp(100)}) == [1, 2]
     assert p.record_towers(3, {1: comp(100), 2: comp(150), 3: comp(10)}) == [2, 3], "a tie keeps the old one"
     assert p.record_towers(3, {1: comp(40)}) == []
