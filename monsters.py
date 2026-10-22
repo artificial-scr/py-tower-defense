@@ -5,8 +5,11 @@ Read and checked once, at import. A mistake stops the game with a message naming
 """
 
 import os
+from functools import partial
 
-from towers import SHAPES, read_json
+import datafile
+from datafile import read_json
+from towers import SHAPES
 
 MONSTERS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "monsters.json")
 
@@ -14,7 +17,7 @@ ENEMY_FIELDS = ("name", "hp", "speed", "cost", "damage", "gap", "draft", "size",
 # Optional fields; their meaning is in the comment at the top of monsters.json.
 ENEMY_EXTRAS = ("desc", "elite", "boss", "fatal", "shape", "inner", "armor", "heal_aura", "split", "phase", "slow_floor", "summon",
                 "summon_max", "ward", "decoy", "enrage", "rebound", "sabotage", "loot",
-                "speed_aura", "ambush", "follows", "layoff", "dividends", "severance", "bankrupts")
+                "speed_aura", "ambush", "follows", "layoff", "dividends", "severance", "bankrupts", "zap", "pause_trap")
 AMBUSH_FIELDS = ("from_level", "chance", "max")
 AMBUSH_GROWTH = (("angered_by", "per_kill"), ("per_gold",))  # what an ambush's odds grow with: one of these
 DRAFT = ("starter", "unlock", "boss", "never")
@@ -38,16 +41,8 @@ WARD_BREAK = 0.3  # seconds a Warded's ward is drawn shattering after it absorbs
 def load_monsters(path):
     """Return (enemy types, abilities, budget rules, stat upgrades, reward tiers) from monsters.json."""
     data = read_json(path)
-    name = os.path.basename(path)
-
-    def fail(what, message):
-        raise ValueError(f"{name}: {what}: {message}")
-
-    def check_fields(what, raw, required, extras):
-        missing = [f for f in required if f not in raw]
-        unknown = [f for f in raw if f not in required + extras]
-        if missing or unknown:
-            fail(what, f"missing fields {missing}" if missing else f"unknown fields {unknown}")
+    fail = partial(datafile.fail, path)
+    check_fields = partial(datafile.check_fields, path)
 
     enemies = {}
     for kind, raw in data["enemies"].items():
@@ -79,6 +74,9 @@ def load_monsters(path):
         if "layoff" in raw and not (len(raw["layoff"]) == 3 and all(isinstance(x, (int, float)) and x > 0
                                                                    for x in raw["layoff"])):
             fail(what, "layoff must be [every, radius, seconds], all positive")
+        if "zap" in raw and not (len(raw["zap"]) == 3 and all(isinstance(x, (int, float)) and x > 0 for x in raw["zap"])
+                                 and isinstance(raw["zap"][2], int)):
+            fail(what, "zap must be [every, radius, count], all positive, count a whole number")
         for f in ("dividends", "severance"):
             if f in raw and not (isinstance(raw[f], (int, float)) and raw[f] > 0):
                 fail(what, f"{f} must be a positive number")
@@ -97,7 +95,7 @@ def load_monsters(path):
             shape, r, color = raw["inner"]
             spec["inner"] = (shape, r, tuple(color))
         for f in ("heal_aura", "split", "phase", "summon", "decoy", "rebound", "sabotage", "loot",
-                  "speed_aura", "layoff"):
+                  "speed_aura", "layoff", "zap"):
             if f in raw:
                 spec[f] = tuple(raw[f])
         enemies[kind] = spec
@@ -118,6 +116,13 @@ def load_monsters(path):
                 fail(f"enemy {kind!r}", "only bosses follow, only another boss, with boss, chance and announce")
             if not 0 <= follows["chance"] <= 1:
                 fail(f"enemy {kind!r}", "follows: chance must be between 0 and 1")
+        if "pause_trap" in spec:
+            trap = spec["pause_trap"]
+            if not ("boss" in spec and sorted(trap) == ["chance", "lost_level"] and "ambush" not in spec
+                    and "follows" not in spec):
+                fail(f"enemy {kind!r}", "only bosses that don't ambush or follow have a pause_trap, with lost_level and chance")
+            if not (isinstance(trap["lost_level"], int) and trap["lost_level"] >= 1 and 0 <= trap["chance"] <= 1):
+                fail(f"enemy {kind!r}", "pause_trap: lost_level a whole number from 1, chance between 0 and 1")
         if "ambush" in spec:
             ambush = spec["ambush"]
             if "boss" not in spec or not any(sorted(ambush) == sorted(AMBUSH_FIELDS + g) for g in AMBUSH_GROWTH):

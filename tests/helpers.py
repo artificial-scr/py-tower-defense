@@ -1,6 +1,10 @@
 """Helpers for driving the game the way a player would (events, drags) or directly."""
 
+import json
+import os
+
 import pygame
+import pytest
 
 from entities import Enemy, Tower
 from levels import COLS, ROWS, tile_center
@@ -106,3 +110,16 @@ def scripted_attack(game, kinds, save_for_last):
         else:
             game.update(1 / 60)
     return game.state in ("level_complete", "victory")
+
+
+def assert_rejects(tmp_path, shipped_file, load, change, message):
+    """Load a copy of a shipped data file with change(data) applied, and expect load to reject it with an
+    error containing message."""
+    with open(shipped_file, encoding="utf-8") as f:
+        data = json.load(f)
+    change(data)
+    path = tmp_path / os.path.basename(shipped_file)
+    path.write_text(json.dumps(data), encoding="utf-8")
+    with pytest.raises(ValueError) as err:
+        load(str(path))
+    assert message in str(err.value)

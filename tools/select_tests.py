@@ -29,7 +29,7 @@ BALANCE = ("playthrough", "progression", "bot")
 # (file patterns, test files without "tests/test_" and ".py", or ALL); paths are relative to the repo root
 RULES = [
     # everything runs through these
-    (("main.py", "pyproject.toml", "uv.lock", "tests/conftest.py", "tests/helpers.py"), ALL),
+    (("main.py", "datafile.py", "pyproject.toml", "uv.lock", "tests/conftest.py", "tests/helpers.py"), ALL),
     # game rules and balance
     (("towers.py", "towers.json", "evolution.json"),
      ("data", "fusion", "combat", "records", "unlocks", "tower_unlocks", "rendering", "analytics", "matchups", "waves")

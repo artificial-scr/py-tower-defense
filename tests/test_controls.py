@@ -24,6 +24,20 @@ def test_speed_cycles_with_f(game, monkeypatch):
     assert game.speed == 10, "Shift+F goes back"
 
 
+def test_g_and_the_target_button_cycle_the_selected_towers_targeting(game):
+    gun = put(game, "gun", (1, 1))
+    game.handle_event(key(pygame.K_g))
+    assert gun.targeting == "first", "nothing selected"
+    game.selected = gun
+    seen = []
+    for _ in range(4):
+        game.handle_event(key(pygame.K_g))
+        seen.append(gun.targeting)
+    assert seen == ["last", "strong", "close", "first"]
+    game.handle_event(mouse_down(game.target_button.rect.center))
+    assert gun.targeting == "last" and game.selected is gun
+
+
 def test_speed_button(game):
     game.handle_event(mouse_down(game.speed_button.rect.center))
     game.handle_event(mouse_up(game.speed_button.rect.center))

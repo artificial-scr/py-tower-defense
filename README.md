@@ -60,6 +60,11 @@ them. Each enemy that gets through costs you lives, and you lose when your lives
 - You earn each monster's cost in gold when you kill it, plus a bonus for clearing a wave
   (`20 + 5 × wave number`).
 - Selling a tower gives back **70%** of everything spent on it, including the towers fused into it.
+- **Targeting:** each tower shoots the monster closest to escaping first. Select one and press **G** (or
+  its Target button) to switch it to **Last** (furthest from escaping), **Strong** (most HP left) or
+  **Close** (nearest to it). Ties go to the monster closest to escaping, and multishot towers take their
+  targets in the same order. A tower keeps its mode when it's moved, fused into or rebuilt, and tower
+  records keep it, so the defender on the Monsters side aims the way you did.
 - When you move to the next level the map changes, so all your towers are **refunded at full
   price**. Press **B** (or the Rebuild button) to buy them all back in one go: same towers, same
   price, most expensive first, each on the free tile that covers the most path. You can drag them
@@ -134,6 +139,7 @@ The towers on the map are your **tower record** for the level, and you have to g
 | *Plague Bloat* | Elite (level 6): bursts into 2 Splitters | Ends a level |
 | **The Warden** | Boss of level 10: summons Fast monsters and resists slows | Boss level, last wave; a Towers pass's finale wave |
 | **The Brood Mother** | Boss: every 2.5 s shoots out 3 Spiderlings (1 behind, 2 in front); resists slows | No level yet |
+| **Mr Feature** | Secret boss ("it's actually a bug, not a feature"): every 8 s zaps the 3 nearest towers within 130 to random free tiles; killed, it splits into 2 copies with half the HP, twice (2, then 4) | Secret, unlocked by the 100th pause (*Not Responding*). The pause button then can't pause until he's beaten. He ends the last wave of the first level without a boss (only level 5's after a run lost to him). Once beaten, each pause has a 4.04% chance to bring him into the next wave |
 
 If a boss gets through, its side loses every life at once.
 
@@ -227,6 +233,7 @@ holding 1,000 gold at the end of one, or killing the Warden within 20 s.
 | `Backspace` | — | Take the last monster off the queue |
 | `Q` / `W` / `E` | — | Draft phase: buy a rank of Vitality / Stride / Plating (right click its button to undo) |
 | `S` / `B` | Sell the selected tower / rebuild the previous level's towers | — |
+| `G` | Change what the selected tower shoots first (also its Target button, next to Sell) | — |
 
 Both sides:
 

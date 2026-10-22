@@ -55,15 +55,16 @@ from achievements import BOSS_ACHIEVEMENTS, UNLOCKED_BY, AchievementTracker
 from attack import DEFENDER_LIVES, AttackMixin
 from attack_view import AttackView
 from balance_log import LevelLog, LogSession
-from effects import CastWarning, GoldBurst, GooSpray, PinkSlip, Popup, Ring, Shards, Sparks
-from entities import Enemy, Tower, cast_ability, heal_auras, lay_off, sabotage, speed_auras
+from datafile import read_json_or, write_json_atomic
+from effects import Beam, CastWarning, GoldBurst, GooSpray, PinkSlip, Popup, Ring, Shards, Sparks
+from entities import Enemy, Tower, cast_ability, heal_auras, lay_off, sabotage, speed_auras, zap
 from graphics import (BAD, BANKRUPT_NOTICE, BOSS_ALERT, GOLD, GRAND_ALERT_EXTRA, MAP_H, MAP_W, TILE, GameView,
                       mouse_pos, set_scale, to_logical, window_size)
 from levels import (BOSS_LEVELS, COLS, LEVELS, ROWS, START_GOLD, START_LIVES, WAVES_PER_LEVEL, build_path_cells,
                     tile_center)
 from monsters import ABILITIES, ENEMY_TYPES, REWARDS, UPGRADES, summon_count, summon_kinds, summon_offsets
 from progress import UNLOCKS, Profile, comp_snapshot, stronger
-from towers import TOWER_ORDER, TOWERS, fusion_options
+from towers import TARGETING, TOWER_ORDER, TOWERS, fusion_options
 from tooltip_view import TooltipView
 from unlock_view import UnlockView
 from waves import Wave, make_wave, scout, wave_value
@@ -89,19 +90,13 @@ PROFILE_FILE = os.path.join(USER_DIR, "profile.json")
 # Settings
 # --------------------------------------------------------------------------
 def load_settings():
-    try:
-        with open(SETTINGS_FILE, encoding="utf-8") as f:
-            data = json.load(f)
-        return data if isinstance(data, dict) else {}
-    except (OSError, ValueError):
-        return {}
+    data = read_json_or(SETTINGS_FILE, {})
+    return data if isinstance(data, dict) else {}
 
 
 def save_settings(settings):
     try:
-        os.makedirs(os.path.dirname(SETTINGS_FILE), exist_ok=True)
-        with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
-            json.dump(settings, f, indent=1)
+        write_json_atomic(SETTINGS_FILE, settings)
     except OSError as err:
         print(f"Could not save settings: {err}")
 
@@ -132,7 +127,8 @@ def load_save():
                 or side not in ("towers", "monsters") or pass_no < 1 or levels_won < 0 or monster_wins < 0):
             return None
         # towers whose kind no longer exists in towers.json are dropped
-        layout = [{"kind": e["kind"], "spent": int(e["spent"]), "tile": tuple(int(v) for v in e["tile"][:2])}
+        layout = [{"kind": e["kind"], "spent": int(e["spent"]), "tile": tuple(int(v) for v in e["tile"][:2]),
+                   "targeting": e.get("targeting") if e.get("targeting") in TARGETING else "first"}
                   for e in data["layout"] if e["kind"] in TOWERS]
         upgrades = {k: max(0, int(r)) for k, r in data.get("upgrades", {}).items() if k in UPGRADES}
         escort = max(0, int(data.get("escort", 0)))
@@ -152,11 +148,7 @@ def load_save():
 
 def write_save(save):
     try:
-        os.makedirs(os.path.dirname(SAVE_FILE), exist_ok=True)
-        tmp = SAVE_FILE + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump({**save, "layout": [{**e, "tile": list(e["tile"])} for e in save["layout"]]}, f, indent=1)
-        os.replace(tmp, SAVE_FILE)  # never leaves a half-written save behind
+        write_json_atomic(SAVE_FILE, save)  # tiles are tuples: JSON writes them as lists
     except OSError as err:
         print(f"Could not save the game: {err}")
 
@@ -211,6 +203,7 @@ class Game(AttackMixin, AttackView, UnlockView, TooltipView, GameView):
         self.side_chosen = False  # this launch already chose how to start (side pick or Continue)
         self.pending_unlocks = []  # towers and secret bosses just unlocked, shown one card each at the next build phase
         self.tracker = AchievementTracker(self.profile, self.tower_unlocked, self.boss_unlocked)
+        self.summoned = []  # secret bosses a pause brought (monsters.json pause_trap), for the next Towers-side wave
         self.build_view()
         self.build_panel_buttons()
         self.reset()
@@ -280,6 +273,8 @@ class Game(AttackMixin, AttackView, UnlockView, TooltipView, GameView):
         self.aiming = None
         self.sound("game_over")
         self.finish_log("lost")
+        if self.trap_boss:
+            self.profile.lose_to(self.trap_boss)
         self.profile.note_run(self.levels_won)
         self.profile.calm()
         self.save = None
@@ -334,7 +329,7 @@ class Game(AttackMixin, AttackView, UnlockView, TooltipView, GameView):
         self.bankrupt_notice = 0.0  # seconds the bankruptcy notice still shows (Game.bankrupt)
         self.notice_taken = (0, "")  # (assets seized: gold taken + gold put into the towers, by which boss)
         self.wave_lock = 0.0
-        self.rebuild_layout = []  # towers refunded at the end of the last level: {"kind", "spent", "tile"}
+        self.rebuild_layout = []  # towers refunded at the end of the last level: {"kind", "spent", "tile", "targeting"}
         self.build_kind = None
         self.selected = None
         self.dragging = None
@@ -360,6 +355,7 @@ class Game(AttackMixin, AttackView, UnlockView, TooltipView, GameView):
         self.wave_counter = None  # Towers side: the current wave's counters (waves.add_counters)
         self.scout_report = None  # Towers side: what the scouts saw after the last wave (waves.scout)
         self.ambushed = False  # Towers side: a secret boss already ambushed a wave this level
+        self.trap_boss = None  # Towers side: the pause_trap boss that came in the current wave, if one did
         self.tracker.start_level()
         if self.log_session:
             path_length = sum(a.distance_to(b) for a, b in zip(self.path_pts, self.path_pts[1:]))
@@ -570,7 +566,8 @@ class Game(AttackMixin, AttackView, UnlockView, TooltipView, GameView):
             self.checkpoint()
             return
         # The map changes, so every tower is refunded at full price; Rebuild can buy them back.
-        layout = [{"kind": t.kind, "spent": t.spent, "tile": t.tile} for t in self.towers.values()]
+        layout = [{"kind": t.kind, "spent": t.spent, "tile": t.tile, "targeting": t.targeting}
+                  for t in self.towers.values()]
         self.gold += sum(t.spent for t in self.towers.values())
         self.load_level(self.level_idx + 1)
         self.rebuild_layout = layout
@@ -599,6 +596,7 @@ class Game(AttackMixin, AttackView, UnlockView, TooltipView, GameView):
             tile = max(free, key=lambda t: (coverage[rng][t], -((t[0] - ox) ** 2 + (t[1] - oy) ** 2)))
             tower = Tower(entry["kind"], tile, entry["spent"])
             tower.mods = self.card_mods
+            tower.targeting = entry.get("targeting", "first")
             self.gold -= tower.spent
             self.note(tower, "rebuilt", kind=tower.kind)
             if self.log:
@@ -624,7 +622,9 @@ class Game(AttackMixin, AttackView, UnlockView, TooltipView, GameView):
                                                                               dict(wave.pauses), wave.counter)
         self.add_followers()
         self.profile.audit(self.gold)
+        self.add_pause_trap()
         self.add_ambush()
+        self.trap_boss = None
         if recorded:  # the player's own strongest wave from the Monsters side, abilities included
             self.wave_mods = dict(recorded["mods"])
             self.replay = sorted((dict(c, warned=False) for c in recorded["casts"] if c["ability"] in ABILITIES),
@@ -765,6 +765,14 @@ class Game(AttackMixin, AttackView, UnlockView, TooltipView, GameView):
             t.move_to(tile)
             self.towers[tile] = t
 
+    def cycle_targeting(self):
+        """Switch the selected tower to its next targeting mode (entities.TARGETING)."""
+        t = self.selected
+        if t and self.side == "towers":
+            t.cycle_targeting()
+            self.sound("click")
+            self.log_event("target", tower=t.uid, kind=t.kind, mode=t.targeting)
+
     def sell_selected(self):
         t = self.selected
         if t and self.side == "towers":
@@ -814,21 +822,7 @@ class Game(AttackMixin, AttackView, UnlockView, TooltipView, GameView):
                 self.replay_casts()
 
         if self.state == "wave" and self.spawn_queue:
-            self.spawn_timer -= dt
-            if self.spawn_timer <= 0:
-                kind = self.spawn_queue.pop(0)
-                self.register_enemy(Enemy(kind, self.path_pts, self.hp_mult, self.wave_mods), "wave")
-                self.wave_spawned += 1
-                self.spawn_timer = self.wave_pauses.get(self.wave_spawned, ENEMY_TYPES[kind]["gap"])
-                self.sound("spawn")
-                if "boss" in ENEMY_TYPES[kind]:
-                    self.alert_kind = kind
-                    self.boss_alert = BOSS_ALERT + (GRAND_ALERT_EXTRA if "follows" in ENEMY_TYPES[kind] else 0)
-                    self.sound("boss_arrive")
-                    if self.side == "towers":
-                        self.profile.meet(kind)
-                if self.spawn_queue and "boss" in ENEMY_TYPES[self.spawn_queue[0]]:
-                    self.spawn_timer = 4.0  # a breather before the boss walks in (after its alert, behind a boss)
+            self.spawn_next(dt)
 
         for e in self.enemies:
             e.update(dt)
@@ -836,6 +830,7 @@ class Game(AttackMixin, AttackView, UnlockView, TooltipView, GameView):
         speed_auras(self.enemies)
         self.summon_minions(dt)
         self.lay_off_towers(dt)
+        self.zap_towers(dt)
         self.cast_decoys(dt)
         for t in self.towers.values():
             ready = t.cooldown
@@ -846,6 +841,45 @@ class Game(AttackMixin, AttackView, UnlockView, TooltipView, GameView):
             p.update(dt, self.enemies, self.effects)
         self.projectiles = [p for p in self.projectiles if not p.done]
 
+        self.clear_dead()
+        if self.side == "towers":
+            self.tracker.tick(self.towers.values(), [e for e in self.enemies if not e.illusion], self.state == "wave")
+
+        if self.side == "monsters":
+            if self.lives <= 0:
+                self.win_attack_level(pass_won=True)
+            elif self.state == "wave" and not self.spawn_queue and not self.enemies:
+                self.end_attack_wave()
+        elif self.lives <= 0:
+            self.lives = 0
+            self.run_over()
+        elif self.state == "wave" and not self.spawn_queue and not self.enemies:
+            self.end_towers_wave()
+
+    def spawn_next(self, dt):
+        """Count down to the next monster in the wave's queue, and send it in when it's time."""
+        self.spawn_timer -= dt
+        if self.spawn_timer > 0:
+            return
+        kind = self.spawn_queue.pop(0)
+        self.register_enemy(Enemy(kind, self.path_pts, self.hp_mult, self.wave_mods), "wave")
+        self.wave_spawned += 1
+        self.spawn_timer = self.wave_pauses.get(self.wave_spawned, ENEMY_TYPES[kind]["gap"])
+        self.sound("spawn")
+        if "boss" in ENEMY_TYPES[kind]:
+            self.alert_kind = kind
+            self.boss_alert = BOSS_ALERT + (GRAND_ALERT_EXTRA if "follows" in ENEMY_TYPES[kind] else 0)
+            self.sound("boss_arrive")
+            if self.side == "towers":
+                self.profile.meet(kind)
+                if "pause_trap" in ENEMY_TYPES[kind]:
+                    self.trap_boss = kind
+        if self.spawn_queue and "boss" in ENEMY_TYPES[self.spawn_queue[0]]:
+            self.spawn_timer = 4.0  # a breather before the boss walks in (after its alert, behind a boss)
+
+    def clear_dead(self):
+        """Take the monsters that died or escaped this update off the map, settling what each costs or pays and
+        bringing in what they split into."""
         wave_log = self.log.current_wave() if self.log else None
         splits = []
         for e in self.enemies:
@@ -865,37 +899,9 @@ class Game(AttackMixin, AttackView, UnlockView, TooltipView, GameView):
                 if not e.escaped:
                     self.profile.anger(e.kind)
             if e.escaped:
-                lost = self.lives if e.spec.get("fatal") else e.spec["damage"]
-                if self.side == "monsters":
-                    lost = max(0, min(lost, self.lives_in_reach))
-                self.lives -= lost
-                self.sound("boss_leak" if e.spec.get("fatal") or "bankrupts" in e.spec else "leak")
-                self.effects.append(Ring(e.pos, 30, BAD, 0.4))
-                if "loot" in e.spec:
-                    self.loot(e, wave_log)
-                if "bankrupts" in e.spec and self.side == "towers":
-                    self.bankrupt(e, wave_log)
-                if wave_log:
-                    wave_log["leaks"] += 1
-                    wave_log["lives_lost"] += lost
+                self.enemy_escaped(e, wave_log)
             else:
-                self.effects.append(Shards(e.pos, e.spec["color"], e.spec["size"], e.spin))
-                self.sound(sfx.death_sound(e.spec))
-                if "sabotage" in e.spec:
-                    sabotage(e, self.towers.values(), self.effects)
-                    self.sound("sabotage")
-                if self.side == "towers" and "severance" in e.spec:
-                    self.pay_severance(e, wave_log)
-                if self.side == "towers":
-                    reward = e.spec["cost"]  # a monster is worth what it costs to draft
-                    self.gold += reward
-                    self.sound("gold")
-                    self.popups.append(Popup(e.pos, f"+{reward}", GOLD))
-                    self.effects.append(Ring(e.pos, e.spec["size"] + 8, e.spec["color"], 0.3))
-                    if wave_log:
-                        wave_log["kills"] += 1
-                        wave_log["kill_gold"] += reward
-                        self.log.earned["kills"] += reward
+                self.enemy_killed(e, wave_log)
         self.enemies = [e for e in self.enemies if e.alive]
         for child, parent in splits:
             self.register_enemy(child, f"split:{parent}")
@@ -903,44 +909,75 @@ class Game(AttackMixin, AttackView, UnlockView, TooltipView, GameView):
             for e in self.enemies:  # their Mirages are gone: so are they
                 self.effects.append(Sparks(e.pos, e.spec["color"], 6, 16))
             self.enemies = []
-        if self.side == "towers":
-            self.tracker.tick(self.towers.values(), [e for e in self.enemies if not e.illusion], self.state == "wave")
 
+    def enemy_escaped(self, e, wave_log):
+        """A monster reached the end of the path: it takes lives, and its loot or bankruptcy."""
+        lost = self.lives if e.spec.get("fatal") else e.spec["damage"]
         if self.side == "monsters":
-            if self.lives <= 0:
-                self.win_attack_level(pass_won=True)
-            elif self.state == "wave" and not self.spawn_queue and not self.enemies:
-                self.end_attack_wave()
-        elif self.lives <= 0:
-            self.lives = 0
-            self.run_over()
-        elif self.state == "wave" and not self.spawn_queue and not self.enemies:
-            bonus = 20 + 5 * self.wave_idx
-            self.gold += bonus
-            if self.log:
-                self.log.earned["wave_bonus"] += bonus
-                self.log.end_wave(self.clock, self.lives, self.gold, bonus)
-            self.popups.append(Popup((MAP_W / 2, MAP_H / 2), f"Wave cleared! +{bonus}", GOLD))
-            self.projectiles.clear()
-            self.check_comp("wave_end")  # closes this wave's window
-            self.tracker.on_wave_cleared(self.wave_monsters)
-            self.profile.save()  # with the secret bosses' anger (Profile.anger)
-            if self.wave_idx < self.level_waves:
-                self.state = "build"
-                self.sound("wave_cleared")
-                self.scout_towers()
-            else:
-                self.state = "level_complete" if self.level_idx < self.last_level_idx else "victory"
-                self.sound("level_complete" if self.state == "level_complete" else "pass_won")
-                self.tracker.on_level_cleared(self.level_idx + 1)
-                if self.state == "victory":
-                    self.tracker.on_pass_won(self.finale_on, self.gold)
-                self.profile.record_towers(self.level_idx + 1, self.comps_by_wave, self.card_mods)
-                if self.state == "victory":
-                    self.profile.reach("monsters_side")
-                self.level_won()
-                self.offer_rewards("towers", self.record_tier)
-                self.finish_log("cleared")
+            lost = max(0, min(lost, self.lives_in_reach))
+        self.lives -= lost
+        self.sound("boss_leak" if e.spec.get("fatal") or "bankrupts" in e.spec else "leak")
+        self.effects.append(Ring(e.pos, 30, BAD, 0.4))
+        if "loot" in e.spec:
+            self.loot(e, wave_log)
+        if "bankrupts" in e.spec and self.side == "towers":
+            self.bankrupt(e, wave_log)
+        if wave_log:
+            wave_log["leaks"] += 1
+            wave_log["lives_lost"] += lost
+
+    def enemy_killed(self, e, wave_log):
+        """A monster was killed: its death throes, and on the Towers side its gold."""
+        self.effects.append(Shards(e.pos, e.spec["color"], e.spec["size"], e.spin))
+        self.sound(sfx.death_sound(e.spec))
+        if "sabotage" in e.spec:
+            sabotage(e, self.towers.values(), self.effects)
+            self.sound("sabotage")
+        if self.side != "towers":
+            return
+        if "severance" in e.spec:
+            self.pay_severance(e, wave_log)
+        reward = e.spec["cost"]  # a monster is worth what it costs to draft
+        self.gold += reward
+        self.sound("gold")
+        self.popups.append(Popup(e.pos, f"+{reward}", GOLD))
+        self.effects.append(Ring(e.pos, e.spec["size"] + 8, e.spec["color"], 0.3))
+        if wave_log:
+            wave_log["kills"] += 1
+            wave_log["kill_gold"] += reward
+            self.log.earned["kills"] += reward
+
+    def end_towers_wave(self):
+        """Towers side: the wave's last monster is gone. Pay the wave bonus, then back to building, or on to the
+        level's rewards after its last wave."""
+        bonus = 20 + 5 * self.wave_idx
+        self.gold += bonus
+        if self.log:
+            self.log.earned["wave_bonus"] += bonus
+            self.log.end_wave(self.clock, self.lives, self.gold, bonus)
+        self.popups.append(Popup((MAP_W / 2, MAP_H / 2), f"Wave cleared! +{bonus}", GOLD))
+        self.projectiles.clear()
+        self.check_comp("wave_end")  # closes this wave's window
+        self.tracker.on_wave_cleared(self.wave_monsters)
+        if self.trap_boss:
+            self.trap_beaten()
+        self.profile.save()  # with the secret bosses' anger (Profile.anger)
+        if self.wave_idx < self.level_waves:
+            self.state = "build"
+            self.sound("wave_cleared")
+            self.scout_towers()
+            return
+        self.state = "level_complete" if self.level_idx < self.last_level_idx else "victory"
+        self.sound("level_complete" if self.state == "level_complete" else "pass_won")
+        self.tracker.on_level_cleared(self.level_idx + 1)
+        if self.state == "victory":
+            self.tracker.on_pass_won(self.finale_on, self.gold)
+        self.profile.record_towers(self.level_idx + 1, self.comps_by_wave, self.card_mods)
+        if self.state == "victory":
+            self.profile.reach("monsters_side")
+        self.level_won()
+        self.offer_rewards("towers", self.record_tier)
+        self.finish_log("cleared")
 
     def replay_casts(self):
         """Towers side: fire the recorded wave's abilities at their recorded time and place, each
@@ -997,6 +1034,31 @@ class Game(AttackMixin, AttackView, UnlockView, TooltipView, GameView):
                 self.sound("sabotage")
                 self.log_event("layoff", tower=tower.uid, kind=tower.kind, wave=self.wave_idx)
 
+    def zap_towers(self, dt):
+        """Mr Feature, now and then, zaps the towers nearest him to free tiles anywhere on the map (entities.zap)."""
+        for boss in [e for e in self.enemies if e.alive and "zap" in e.spec]:
+            boss.zap_timer -= dt
+            if boss.zap_timer > 0:
+                continue
+            boss.zap_timer = boss.spec["zap"][0]
+            free = [(tx, ty) for tx in range(COLS) for ty in range(ROWS) if self.is_free((tx, ty))]
+            moves = zap(boss, self.towers.values(), free)
+            bits = boss.spec["inner"][2]
+            for tower, tile in moves:
+                self.log_event("zap", tower=tower.uid, kind=tower.kind, frm=list(tower.tile), to=list(tile),
+                               wave=self.wave_idx)
+                self.effects.append(Beam(boss.pos, tower.pos, bits, 0.35, 2, bolt=True))
+                self.effects.append(Sparks(tower.pos, bits, 8, 18))
+                del self.towers[tower.tile]
+                tower.move_to(tile)
+                self.towers[tile] = tower
+                if self.dragging is tower:
+                    self.dragging = None
+                self.effects.append(Ring(tower.pos, 30, bits, 0.5))
+                self.popups.append(Popup(tower.pos - pygame.Vector2(0, 20), "Zapped!", BAD))
+            if moves:
+                self.sound("shot_tesla")
+
     def bankrupt(self, boss, wave_log):
         """The Chairman got through (Towers side): he takes every coin, and every tower on the map is
         repossessed, gone with no refund. No lives are lost, but there's nothing left to fight with; a
@@ -1045,6 +1107,61 @@ class Game(AttackMixin, AttackView, UnlockView, TooltipView, GameView):
             if kind not in self.profile.bosses_met or random.random() < follows["chance"]:
                 self.spawn_queue.insert(self.spawn_queue.index(follows["boss"]) + 1, kind)
                 self.log_event("follower", kind=kind, wave=self.wave_idx + 1)
+
+    def add_pause_trap(self):
+        """Towers side: a secret boss the pause button brings (monsters.json pause_trap) may join the wave about to
+        start, if it has no boss yet. Unbeaten, it ends the last wave of the first level without a boss of its own
+        (after a run lost to it, only the last wave of its lost_level); beaten, it comes in the wave's second half
+        when a pause summoned it (press_pause)."""
+        if self.is_boss_level and self.wave_idx + 1 == self.level_waves or \
+                any("boss" in ENEMY_TYPES[k] for k in self.spawn_queue):
+            return
+        for kind in self.profile.bosses_unlocked:
+            trap = ENEMY_TYPES[kind].get("pause_trap")
+            if not trap:
+                continue
+            if kind in self.profile.bosses_beaten:
+                if kind not in self.summoned:
+                    continue
+                self.summoned.remove(kind)
+                self.spawn_queue.insert(random.randint(len(self.spawn_queue) // 2, len(self.spawn_queue)), kind)
+            elif self.wave_idx + 1 == self.level_waves and (kind not in self.profile.bosses_lost_to
+                                                            or self.level_idx + 1 == trap["lost_level"]):
+                self.spawn_queue.append(kind)
+            else:
+                continue
+            self.log_event("pause_trap", kind=kind, wave=self.wave_idx + 1)
+            return
+
+    def trap_beaten(self):
+        """The wave a pause_trap boss came in was cleared: it's beaten, and the pause button works again."""
+        first = self.trap_boss not in self.profile.bosses_beaten
+        self.profile.beat(self.trap_boss)
+        if first:
+            self.popups.append(Popup((MAP_W / 2, MAP_H / 2 + 40), "Pause button: fixed. Probably.", GOLD))
+        self.log_event("pause_trap_beaten", kind=self.trap_boss, first=first)
+        self.trap_boss = None
+
+    def press_pause(self):
+        """The pause button (or P). It always unpauses; it pauses unless a pause_trap boss locks it (Profile.
+        pause_locked). Every pause counts toward achievements (on_pause), and on the Towers side may summon a
+        beaten pause_trap boss into the next wave."""
+        if not self.paused and self.profile.pause_locked:
+            self.sound("denied")
+            self.popups.append(Popup((MAP_W / 2, MAP_H / 2), "404: Pause not found", BAD))
+            return
+        self.paused = not self.paused
+        self.sound("pause")
+        if not self.paused:
+            return
+        self.tracker.on_pause()
+        if self.side != "towers":
+            return
+        for kind in self.profile.bosses_beaten:
+            trap = ENEMY_TYPES[kind].get("pause_trap")
+            if trap and kind not in self.summoned and random.random() < trap["chance"]:
+                self.summoned.append(kind)
+                self.log_event("pause_summon", kind=kind)
 
     def add_ambush(self):
         """Towers side: a secret boss the profile unlocked may join the wave about to start, in its second half,
@@ -1288,8 +1405,7 @@ class Game(AttackMixin, AttackView, UnlockView, TooltipView, GameView):
         elif key == pygame.K_SPACE:
             self.advance()
         elif key == pygame.K_p:
-            self.paused = not self.paused
-            self.sound("pause")
+            self.press_pause()
         elif key == pygame.K_f:
             self.cycle_speed(-1 if pygame.key.get_mods() & pygame.KMOD_SHIFT else 1)
         elif key == pygame.K_ESCAPE:
@@ -1301,6 +1417,8 @@ class Game(AttackMixin, AttackView, UnlockView, TooltipView, GameView):
             self.dragging = None
         elif key == pygame.K_s:
             self.sell_selected()
+        elif key == pygame.K_g:
+            self.cycle_targeting()
         elif pygame.K_1 <= key <= pygame.K_3:
             self.pick_tower(TOWER_ORDER[key - pygame.K_1])
 
@@ -1347,6 +1465,8 @@ class Game(AttackMixin, AttackView, UnlockView, TooltipView, GameView):
                 self.pick_tower(kind)
         if self.sell_button.rect.collidepoint(pos) and self.selected and self.side == "towers":
             self.sell_selected()
+        elif self.target_button.rect.collidepoint(pos) and self.selected and self.side == "towers":
+            self.cycle_targeting()
         elif self.rebuild_button.rect.collidepoint(pos) and self.can_rebuild:
             self.rebuild()
         elif self.wave_button.rect.collidepoint(pos):
@@ -1354,8 +1474,7 @@ class Game(AttackMixin, AttackView, UnlockView, TooltipView, GameView):
         elif self.speed_button.rect.collidepoint(pos):
             self.cycle_speed(1)
         elif self.pause_button.rect.collidepoint(pos):
-            self.paused = not self.paused
-            self.sound("pause")
+            self.press_pause()
         elif self.tree_button.rect.collidepoint(pos):
             self.show_tree = True
 

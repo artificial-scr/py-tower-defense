@@ -226,6 +226,7 @@ class LevelLog:
     @staticmethod
     def tower_record(tw):
         return {"id": tw.uid, "kind": tw.kind, "tier": tw.tier, "tile": list(tw.tile), "status": tw.status,
+                "targeting": tw.targeting,
                 "gold_spent": tw.spent, "history": tw.history,
                 "stats_by_kind": {k: {**{f: (r(v) if isinstance(v, float) else v) for f, v in s.items()
                                          if f not in ("by_source", "vs_enemy")},

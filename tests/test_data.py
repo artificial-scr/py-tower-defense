@@ -6,6 +6,7 @@ import json
 import pytest
 
 import towers
+from helpers import assert_rejects
 from levels import (ALL_BOSS_LEVELS, ALL_LEVELS, BOSS_LEVELS, COLS, LEVEL_COUNT, LEVELS, ROWS, THEMES,
                     build_path_cells)
 from towers import CROSS, EVOLVE, LINES, TOWER_ORDER, TOWERS, fusion_options, load_evolution, load_towers
@@ -49,97 +50,52 @@ def test_tower_fields():
 
 
 # ---- validation: broken files fail at startup with a clear message ----------
-def real(name):
-    with open(towers.TOWERS_FILE if name == "towers" else towers.EVOLUTION_FILE, encoding="utf-8") as f:
-        return json.load(f)
+def load_tree(path):
+    return load_evolution(path, load_towers(towers.TOWERS_FILE))
 
 
-def write(tmp_path, name, data):
-    path = tmp_path / f"{name}.json"
-    path.write_text(data if isinstance(data, str) else json.dumps(data), encoding="utf-8")
-    return str(path)
+@pytest.mark.parametrize("change, message", [
+    (lambda d: d["towers"]["gun"].update(rnage=100), "towers.json: tower 'gun': unknown fields ['rnage']"),
+    (lambda d: d["towers"]["gun"].pop("damage"), "towers.json: tower 'gun': missing fields ['damage']"),
+    (lambda d: d["towers"]["gun"]["look"]["layers"][0].__setitem__(2, "nope"),
+     "towers.json: tower 'gun': unknown palette color 'nope'"),
+    (lambda d: d["towers"]["gun"]["look"]["layers"][0].__setitem__(0, "blob"),
+     "towers.json: tower 'gun': look needs layers with shapes from"),
+    (lambda d: d["towers"]["frost"].pop("slow_time"), "towers.json: tower 'frost': slow and slow_time go together"),
+])
+def test_broken_towers_file(tmp_path, change, message):
+    assert_rejects(tmp_path, towers.TOWERS_FILE, load_towers, change, message)
 
 
-def tower_error(tmp_path, change):
-    data = real("towers")
-    change(data["towers"])
-    with pytest.raises(ValueError) as err:
-        load_towers(write(tmp_path, "towers", data))
-    return str(err.value)
-
-
-def evolution_error(tmp_path, change):
-    data = real("evolution")
-    change(data)
-    with pytest.raises(ValueError) as err:
-        load_evolution(write(tmp_path, "evolution", data), load_towers(towers.TOWERS_FILE))
-    return str(err.value)
-
-
-def test_unknown_field(tmp_path):
-    msg = tower_error(tmp_path, lambda t: t["gun"].update(rnage=100))
-    assert msg == "towers.json: tower 'gun': unknown fields ['rnage']"
-
-
-def test_missing_field(tmp_path):
-    msg = tower_error(tmp_path, lambda t: t["gun"].pop("damage"))
-    assert msg == "towers.json: tower 'gun': missing fields ['damage']"
-
-
-def test_unknown_palette_color(tmp_path):
-    msg = tower_error(tmp_path, lambda t: t["gun"]["look"]["layers"][0].__setitem__(2, "nope"))
-    assert msg == "towers.json: tower 'gun': unknown palette color 'nope'"
-
-
-def test_unknown_shape(tmp_path):
-    msg = tower_error(tmp_path, lambda t: t["gun"]["look"]["layers"][0].__setitem__(0, "blob"))
-    assert msg.startswith("towers.json: tower 'gun': look needs layers with shapes from")
-
-
-def test_mechanic_pairs(tmp_path):
-    msg = tower_error(tmp_path, lambda t: t["frost"].pop("slow_time"))
-    assert msg == "towers.json: tower 'frost': slow and slow_time go together"
+@pytest.mark.parametrize("change, message", [
+    (lambda d: d["lines"]["gun"].update(tier2="rifel"), "evolution.json: line 'gun': 'rifel' is not in towers.json"),
+    (lambda d: d["lines"]["gun"].update(tier2="cannon"),
+     "evolution.json: line 'gun': 'cannon' is tier 1 in towers.json, expected tier 2"),
+    (lambda d: d["lines"]["gun"]["tier3"].pop(), "evolution.json: line 'gun': tier3 needs exactly two branches"),
+    (lambda d: d["finals"].update(flak=["minigun", "sniper"]),
+     "evolution.json: final 'flak': parents must come from different lines"),
+    (lambda d: d["finals"].update(flak=["sniper", "bombard"]),
+     "evolution.json: final 'railgun': sniper + bombard already makes 'flak'"),
+    (lambda d: d["finals"].pop("obsidian"), "evolution.json: towers that can never be built: ['obsidian']"),
+])
+def test_broken_evolution_file(tmp_path, change, message):
+    assert_rejects(tmp_path, towers.EVOLUTION_FILE, load_tree, change, message)
 
 
 def test_broken_json(tmp_path):
+    path = tmp_path / "towers.json"
+    path.write_text('{"towers": {,}}', encoding="utf-8")
     with pytest.raises(ValueError, match=r"^towers\.json: Expecting"):
-        load_towers(write(tmp_path, "towers", '{"towers": {,}}'))
-
-
-def test_tree_names_unknown_tower(tmp_path):
-    msg = evolution_error(tmp_path, lambda d: d["lines"]["gun"].update(tier2="rifel"))
-    assert msg == "evolution.json: line 'gun': 'rifel' is not in towers.json"
-
-
-def test_tree_tier_mismatch(tmp_path):
-    msg = evolution_error(tmp_path, lambda d: d["lines"]["gun"].update(tier2="cannon"))
-    assert msg == "evolution.json: line 'gun': 'cannon' is tier 1 in towers.json, expected tier 2"
-
-
-def test_tree_needs_two_branches(tmp_path):
-    msg = evolution_error(tmp_path, lambda d: d["lines"]["gun"]["tier3"].pop())
-    assert msg == "evolution.json: line 'gun': tier3 needs exactly two branches"
-
-
-def test_final_parents_from_one_line(tmp_path):
-    msg = evolution_error(tmp_path, lambda d: d["finals"].update(flak=["minigun", "sniper"]))
-    assert msg == "evolution.json: final 'flak': parents must come from different lines"
-
-
-def test_duplicate_final_pair(tmp_path):
-    msg = evolution_error(tmp_path, lambda d: d["finals"].update(flak=["sniper", "bombard"]))
-    assert msg == "evolution.json: final 'railgun': sniper + bombard already makes 'flak'"
-
-
-def test_unreachable_tower(tmp_path):
-    msg = evolution_error(tmp_path, lambda d: d["finals"].pop("obsidian"))
-    assert msg == "evolution.json: towers that can never be built: ['obsidian']"
+        load_towers(str(path))
 
 
 def test_line_order_sets_buy_order(tmp_path):
-    data = real("evolution")
+    with open(towers.EVOLUTION_FILE, encoding="utf-8") as f:
+        data = json.load(f)
     data["lines"] = dict(reversed(list(data["lines"].items())))
-    order, *_ = load_evolution(write(tmp_path, "evolution", data), load_towers(towers.TOWERS_FILE))
+    path = tmp_path / "evolution.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+    order, *_ = load_tree(str(path))
     assert order == ["frost", "cannon", "gun"]
 
 

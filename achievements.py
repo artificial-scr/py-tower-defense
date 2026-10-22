@@ -2,7 +2,7 @@
 
 A new profile owns only the start towers (the Gun). Every other tower is unlocked for good by its
 achievement, or, for the first few tier 4 towers ever fused, by the fusion itself (a discovery). Only
-the Towers side counts toward achievements, but for Monsters passes won and Looters' loot. See DESIGN.md section 11.
+the Towers side counts toward achievements, but for Monsters passes won, Looters' loot and pauses. See DESIGN.md section 11.
 Secret bosses are unlocked the same way, by the achievements' `bosses`, once the profile reached their
 milestone.
 
@@ -12,10 +12,13 @@ message naming the achievement and the problem.
 
 import os
 from collections import defaultdict, deque
+from functools import partial
 
+import datafile
 from balance_log import DAMAGE_SOURCES
+from datafile import read_json
 from monsters import ENEMY_TYPES
-from towers import CROSS, EVOLVE, LINES, TOWER_LINES, TOWERS, read_json
+from towers import CROSS, EVOLVE, LINES, TOWER_LINES, TOWERS
 
 ACHIEVEMENTS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "achievements.json")
 
@@ -34,6 +37,7 @@ CONDITIONS = {
     "pass_won": ((), ("finale", "min_gold")),
     "monsters_pass_won": ((), ()),
     "looted": ((), ()),
+    "paused": ((), ()),
 }
 # Conditions measured as a peak (the best seen counts) rather than added up over time. A multi_kill goal with
 # `kills` is added up instead (see is_peak).
@@ -50,10 +54,7 @@ def load_achievements(path):
     """Return (start towers, discoveries, {achievement id: achievement}, {achievement id: boss achievement})
     from achievements.json."""
     data = read_json(path)
-    name = os.path.basename(path)
-
-    def fail(message):
-        raise ValueError(f"{name}: {message}")
+    fail = partial(datafile.fail, path)
 
     start = list(data["start"])
     for kind in start:
@@ -111,12 +112,12 @@ def load_achievements(path):
             bad("a tower's achievement has the same id")
         if "boss" not in ENEMY_TYPES.get(raw.get("boss"), {}):
             bad(f"boss {raw.get('boss')!r} isn't a boss in monsters.json")
-        if raw.get("after") not in MILESTONES:
+        if raw.get("after", MILESTONES[0]) not in MILESTONES:
             bad(f"after must be one of {MILESTONES}")
         missing = [f for f in BOSS_CARD_FIELDS if f not in raw.get("card", {})]
         if missing:
             bad(f"card: missing fields {missing}")
-        bosses[key] = {"name": raw["name"], "boss": raw["boss"], "after": raw["after"], "card": raw["card"],
+        bosses[key] = {"name": raw["name"], "boss": raw["boss"], "after": raw.get("after"), "card": raw["card"],
                        "goals": check_goals(raw.get("goals"), bad)}
     never = [k for k in TOWERS if k not in start and k not in unlocked_by]
     if never:
@@ -159,6 +160,7 @@ class AchievementTracker:
         self.on_unlock = on_unlock
         self.on_boss = on_boss
         self.dirty = False
+        self._open_state, self._open_goals = None, {}  # open_goals' cache, and the profile state it's for
         self.start_level()
 
     def start_level(self):
@@ -175,9 +177,9 @@ class AchievementTracker:
         return not self.profile.has_tower(kind) and all(self.profile.has_tower(p) for p in PREREQUISITES[kind])
 
     def boss_available(self, achievement):
-        """Whether a secret boss's achievement counts: the boss is locked and its milestone reached."""
+        """Whether a secret boss's achievement counts: the boss is locked and its milestone (if any) reached."""
         ach = BOSS_ACHIEVEMENTS[achievement]
-        return not self.profile.has_boss(ach["boss"]) and self.profile.milestones[ach["after"]]
+        return not self.profile.has_boss(ach["boss"]) and (ach["after"] is None or self.profile.milestones[ach["after"]])
 
     def missing_prerequisites(self, kind):
         """The towers `kind` is fused from that the player doesn't own yet."""
@@ -186,11 +188,19 @@ class AchievementTracker:
     def open_goals(self, condition):
         """(key, goal) for every goal of `condition` whose tower is locked but available, or whose secret boss
         counts (boss_available). A list, made before
-        any of them count, so a tower unlocked by this event doesn't let its children count the same event."""
-        open_ = [(aid, ach) for aid, ach in ACHIEVEMENTS.items() if self.available(ach["unlocks"])]
-        open_ += [(aid, ach) for aid, ach in BOSS_ACHIEVEMENTS.items() if self.boss_available(aid)]
-        return [(goal_key(aid, i), goal) for aid, ach in open_
-                for i, goal in enumerate(ach["goals"]) if goal["condition"] == condition]
+        any of them count, so a tower unlocked by this event doesn't let its children count the same event.
+        They're worked out again only when the profile's towers, bosses or milestones change (they're asked for
+        several times every update)."""
+        p = self.profile
+        state = (tuple(p.towers_unlocked), tuple(p.bosses_unlocked), tuple(p.milestones.values()))
+        if state != self._open_state:
+            open_ = [(aid, ach) for aid, ach in ACHIEVEMENTS.items() if self.available(ach["unlocks"])]
+            open_ += [(aid, ach) for aid, ach in BOSS_ACHIEVEMENTS.items() if self.boss_available(aid)]
+            self._open_state, self._open_goals = state, defaultdict(list)
+            for aid, ach in open_:
+                for i, goal in enumerate(ach["goals"]):
+                    self._open_goals[goal["condition"]].append((goal_key(aid, i), goal))
+        return self._open_goals[condition]
 
     def reach(self, key, goal, value):
         """`value` is the goal's progress now: keep the best, and unlock the tower once it's met."""
@@ -323,6 +333,12 @@ class AchievementTracker:
         the wave ends: AttackMixin.end_attack_wave)."""
         for key, goal in self.open_goals("looted"):
             self.add(key, goal, amount)
+
+    def on_pause(self):
+        """The pause button paused the game (either side)."""
+        for key, goal in self.open_goals("paused"):
+            self.add(key, goal)
+        self.flush()
 
     def on_pass_won(self, finale, gold):
         """A Towers pass was won; `finale` if it ended early on a finale wave."""

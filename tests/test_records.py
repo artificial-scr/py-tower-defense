@@ -54,13 +54,30 @@ def test_comps_by_wave_are_logged(logged_game):
 
 
 # ---- tower records ---------------------------------------------------------------
+def test_targeting_is_kept_by_the_record_the_save_and_the_rebuild(game):
+    put(game, "railgun", (1, 1)).targeting = "strong"
+    clear_level(game)
+    assert game.profile.tower_record(1)[1]["towers"][0]["targeting"] == "strong"
+    game.advance()
+    assert main.load_save()["layout"][0]["targeting"] == "strong"
+    game.rebuild()
+    (tower,) = game.towers.values()
+    assert tower.targeting == "strong"
+
+
+def test_an_unknown_targeting_mode_in_a_save_shoots_first(game):
+    main.write_save({"level": 2, "gold": 10, "lives": 5,
+                     "layout": [{"kind": "gun", "spent": 50, "tile": [2, 2], "targeting": "sideways"}]})
+    assert main.load_save()["layout"][0]["targeting"] == "first"
+
+
 def test_clearing_a_level_writes_its_tower_record(game):
     put(game, "railgun", (1, 1)).spent = 1000
     clear_level(game)
     record = game.profile.tower_record(1)
     assert sorted(record) == [1, 2, 3, 4, 5]
     assert record[1]["value"] == 1000 and record[1]["mods"] == NO_TOWER_MODS
-    assert record[1]["towers"] == [{"kind": "railgun", "tile": [1, 1], "gold_spent": 1000}]
+    assert record[1]["towers"] == [{"kind": "railgun", "tile": [1, 1], "gold_spent": 1000, "targeting": "first"}]
     with open(main.PROFILE_FILE, encoding="utf-8") as f:
         assert json.load(f)["tower_records"]["1"]["5"]["value"] == 1000
 

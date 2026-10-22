@@ -11,12 +11,13 @@ The cues' seeds are picked in music.json and copied into assets/music by tools/s
 mixer (no audio device) or missing files, Music stays silent and the game plays on.
 """
 
-import json
 import os
 import threading
 from dataclasses import dataclass
 
 import pygame
+
+from datafile import read_json_or
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 MUSIC_DIR = os.path.join(HERE, "assets", "music")
@@ -59,12 +60,7 @@ class Plan:
 
 
 def load_config(path=CONFIG_FILE):
-    try:
-        with open(path, encoding="utf-8") as f:
-            return json.load(f)
-    except (OSError, ValueError) as err:
-        print(f"No music: {err}")
-        return {"levels": {}, "boss": {}}
+    return read_json_or(path, {"levels": {}, "boss": {}}, warn="No music")
 
 
 CONFIG = load_config()

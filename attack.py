@@ -26,7 +26,7 @@ from entities import Tower, cast_ability
 from graphics import MAP_W, TILE
 from levels import BOSS_LEVELS, LEVELS, WAVES_PER_LEVEL, wave_hp_mult
 from monsters import ABILITIES, BUDGET, ENEMY_TYPES, REWARDS, UPGRADES
-from towers import NO_TOWER_MODS
+from towers import NO_TOWER_MODS, TARGETING
 from waves import wave_value
 
 DEFENDER_LIVES = 20  # for the whole pass
@@ -112,6 +112,7 @@ class AttackMixin:
         for entry in comp["towers"] if comp else []:
             t = Tower(entry["kind"], tuple(entry["tile"]), entry["gold_spent"])
             t.mods = self.defender_mods
+            t.targeting = entry.get("targeting") if entry.get("targeting") in TARGETING else "first"
             self.note(t, "defending", wave=wave)
             self.towers[t.tile] = t
 

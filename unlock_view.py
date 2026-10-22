@@ -163,7 +163,38 @@ def chairman_art(surf, w, h, spec, kind, t):
         glowing_eye(surf, head + (k * 4, -21), 1.8, 210, gold)  # eyes under the brim
 
 
-BOSS_ART = {"brood": brood_art, "overlord": overlord_art, "chairman": chairman_art}
+def feature_art(surf, w, h, spec, kind, t):
+    """Mr Feature: a dark terminal, columns of 0s and 1s raining down it, a bug ticket stamped CLOSED pinned in
+    a corner, and his outline in the middle, his big eyes glowing and his grin lit in green."""
+    bits = spec["inner"][2]
+    for col in range(14):  # the rain: each column falls at its own pace, its head brightest
+        x = 14 + col * (w - 28) / 13
+        head = (t * (40 + col * 7 % 23) + col * 37) % (h + 60)
+        for i in range(7):
+            y = head - i * 11
+            if 0 <= y <= h:
+                alpha = round(200 * (1 - i / 7))
+                if (col + i + int(t * 3)) % 2:
+                    sdraw.line(surf, (*bits, alpha), (x, y - 4), (x, y + 4), 1)
+                else:
+                    sdraw.ellipse(surf, (*bits, alpha), (x - 2.5, y - 4, 5, 8), 1)
+    ticket = pygame.Rect(w - 92, 14, 76, 44)
+    sdraw.rect(surf, (36, 38, 46), ticket, border_radius=3)
+    for i in range(3):
+        sdraw.line(surf, (90, 94, 110), (ticket.left + 8, ticket.top + 10 + i * 9), (ticket.right - 8 - i * 12,
+                                                                                    ticket.top + 10 + i * 9), 2)
+    sdraw.rect(surf, (200, 60, 70), ticket.inflate(-18, -24).move(4, 8), 2, border_radius=3)  # the stamp
+    c = pygame.Vector2(w / 2, h / 2 + 6)
+    blit_center(surf, silhouette(kind, 32), c)
+    for k in (-1, 1):
+        glowing_eye(surf, c + (k * 9, 2), 3.2, 210 + 45 * math.sin(t * 2), bits)
+    grin = [c + (math.cos(a) * 13, 12 + math.sin(a) * 6 * (0.6 + 0.4 * math.sin(t * 5))) for a in
+            (math.pi * i / 10 for i in range(11))]
+    for a, b in zip(grin, grin[1:]):
+        sdraw.line(surf, (*bits, 220), a, b, 2)
+
+
+BOSS_ART = {"brood": brood_art, "overlord": overlord_art, "chairman": chairman_art, "feature": feature_art}
 
 
 class UnlockView:

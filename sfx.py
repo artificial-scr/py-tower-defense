@@ -7,12 +7,12 @@ at once) keep a fast game or a crowd from piling it up. With no mixer (no audio 
 sfx.json or missing files, Sfx stays silent and the game plays on, so sounds can be added one at a time.
 """
 
-import json
 import os
 
 import pygame
 
 import music
+from datafile import read_json_or
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SFX_DIR = os.path.join(HERE, "assets", "sfx")
@@ -27,12 +27,7 @@ SMALL, MEDIUM = 11, 14
 
 
 def load_config(path=CONFIG_FILE):
-    try:
-        with open(path, encoding="utf-8") as f:
-            return json.load(f)
-    except (OSError, ValueError) as err:
-        print(f"No sound effects: {err}")
-        return {"sounds": {}, "towers": {}}
+    return read_json_or(path, {"sounds": {}, "towers": {}}, warn="No sound effects")
 
 
 CONFIG = load_config()

@@ -9,10 +9,13 @@ import os
 import random
 from collections import Counter
 from dataclasses import dataclass, field
+from functools import partial
 
+import datafile
+from datafile import read_json
 from levels import BOSS_LEVELS, WAVES_PER_LEVEL, generated_hp_mult
 from monsters import ENEMY_TYPES
-from towers import TOWERS, read_json
+from towers import TOWERS
 
 WAVES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "waves.json")
 
@@ -27,16 +30,8 @@ PATTERN_REACH = 1.25  # a pattern fits a slot when its threat is at most this ma
 def load_waves(path):
     """Return the wave rules from waves.json, checked (see the comment at the top of the file)."""
     data = read_json(path)
-    name = os.path.basename(path)
-
-    def fail(what, message):
-        raise ValueError(f"{name}: {what}: {message}")
-
-    def check_fields(what, raw, required):
-        missing = [f for f in required if f not in raw]
-        unknown = [f for f in raw if f not in required + ("_comment",)]
-        if missing or unknown:
-            fail(what, f"missing fields {missing}" if missing else f"unknown fields {unknown}")
+    fail = partial(datafile.fail, path)
+    check_fields = partial(datafile.check_fields, path, extras=("_comment",))
 
     def check_groups(what, groups):
         if not (isinstance(groups, list) and groups):

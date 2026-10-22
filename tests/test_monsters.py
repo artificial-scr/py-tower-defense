@@ -1,14 +1,14 @@
 """monsters.json loading and validation, and the monster mechanics and abilities."""
 
-import json
 import random
 
 import pygame
 import pytest
 
+import main
 import monsters
-from entities import Enemy, Projectile, Tower, cast_ability, heal_auras, lay_off, speed_auras
-from helpers import dummy_enemy, free_tiles, put, run_wave
+from entities import Enemy, Projectile, Tower, cast_ability, heal_auras, lay_off, speed_auras, zap
+from helpers import assert_rejects, dummy_enemy, free_tiles, put, run_wave
 from levels import ALL_BOSS_LEVELS
 from monsters import ABILITIES, ENEMY_TYPES, load_monsters
 from towers import TOWERS
@@ -39,17 +39,6 @@ def test_original_costs_match_the_old_kill_rewards():
 
 
 # ---- broken files --------------------------------------------------------------
-def write(tmp_path, data):
-    path = tmp_path / "monsters.json"
-    path.write_text(json.dumps(data))
-    return str(path)
-
-
-def shipped():
-    with open(monsters.MONSTERS_FILE, encoding="utf-8") as f:
-        return json.load(f)
-
-
 @pytest.mark.parametrize("change, message", [
     (lambda d: d["enemies"]["basic"].pop("hp"), "missing fields ['hp']"),
     (lambda d: d["enemies"]["basic"].update(wings=2), "unknown fields ['wings']"),
@@ -80,6 +69,12 @@ def shipped():
     (lambda d: d["enemies"]["chairman"]["ambush"].update(per_gold=-1), "can't be negative"),
     (lambda d: d["enemies"]["chairman"]["summon"][0].append("dragon"), "summon makes 'dragon'"),
     (lambda d: d["enemies"]["chairman"].update(layoff=[7, 170]), "layoff must be"),
+    (lambda d: d["enemies"]["feature"].update(zap=[8, 130, 1.5]), "zap must be"),
+    (lambda d: d["enemies"]["feature"].update(zap=[8, 0, 3]), "zap must be"),
+    (lambda d: d["enemies"]["feature"]["pause_trap"].pop("chance"), "have a pause_trap, with lost_level and chance"),
+    (lambda d: d["enemies"]["feature"].update(ambush=d["enemies"]["brood"]["ambush"]), "that don't ambush or follow"),
+    (lambda d: d["enemies"]["feature"]["pause_trap"].update(lost_level=0), "pause_trap: lost_level"),
+    (lambda d: d["enemies"]["feature"]["pause_trap"].update(chance=1.5), "pause_trap: lost_level"),
     (lambda d: d["enemies"]["chairman"].update(dividends=0), "dividends must be a positive number"),
     (lambda d: d["enemies"]["chairman"].update(severance=1.5), "severance is a share"),
     (lambda d: d["enemies"]["chairman"].update(fatal=True), "bankrupts must be true, on a boss that isn't fatal"),
@@ -98,10 +93,7 @@ def shipped():
     (lambda d: d["upgrades"]["stride"].update(max=6), "speed can go up by 50% at most"),
 ])
 def test_broken_monsters_file(tmp_path, change, message):
-    data = shipped()
-    change(data)
-    with pytest.raises(ValueError, match=message.replace("[", r"\[").replace("]", r"\]")):
-        load_monsters(write(tmp_path, data))
+    assert_rejects(tmp_path, monsters.MONSTERS_FILE, load_monsters, change, message)
 
 
 # ---- monster mechanics -----------------------------------------------------------
@@ -674,3 +666,135 @@ def test_the_chairman_through_takes_no_lives_but_every_coin_and_every_tower(game
     game.update(1.0)
     game.draw()
 
+
+
+# ---- Mr Feature ---------------------------------------------------------------------------
+def test_mr_feature_splits_twice_into_copies_with_half_the_hp_and_the_same_zap():
+    boss = Enemy("feature", line(), 2)
+    boss.advance(400)
+    boss.alive = False
+    halves = boss.split()
+    assert [h.kind for h in halves] == ["feature_lite"] * 2
+    assert all(h.max_hp == boss.max_hp / 2 and h.spec["zap"] == boss.spec["zap"] for h in halves)
+    assert halves[1].travelled - halves[0].travelled >= halves[0].spec["size"], "a body apart, not on top"
+    quarters = halves[0].split()
+    assert [q.kind for q in quarters] == ["feature_mini"] * 2 and quarters[0].max_hp == boss.max_hp / 4
+    assert quarters[0].spec["zap"] == boss.spec["zap"] and quarters[0].split() == [], "only twice"
+    assert all("boss" in ENEMY_TYPES[k] and ENEMY_TYPES[k]["fatal"] for k in ("feature", "feature_lite", "feature_mini"))
+
+
+def test_a_zap_sends_the_nearest_towers_in_reach_to_free_tiles():
+    _, radius, count = ENEMY_TYPES["feature"]["zap"]
+    boss = Enemy("feature", line(), 1)
+    boss.advance(400)
+    near = [Tower("gun", (10, y)) for y in (2, 3, 4, 1)]  # the boss is at (400, 100): tile (10, 2)
+    far = Tower("gun", (19, 2))
+    assert far.pos.distance_to(boss.pos) > radius
+    random.seed(4)
+    moves = zap(boss, near + [far], [(0, 10), (1, 10), (2, 10), (3, 10)])
+    assert [t for t, _ in moves] == [near[0], near[1], near[3]], "nearest first (a tie: the older), at most `count`"
+    assert len({tile for _, tile in moves}) == count, "each to its own tile"
+    assert zap(boss, near, [(0, 10)]) == [(near[0], (0, 10))], "no room: fewer"
+    assert zap(boss, [far], [(0, 10)]) == []
+
+
+def test_mr_feature_zaps_towers_across_the_map_every_few_seconds(game):
+    every = ENEMY_TYPES["feature"]["zap"][0]
+    game.load_level(3)
+    game.start_wave()
+    game.spawn_queue = []
+    boss = Enemy("feature", game.path_pts, 1000)
+    boss.advance(200)
+    game.register_enemy(boss, "wave")
+    tile = (int(boss.pos.x // 40), int(boss.pos.y // 40))
+    tower = next(put(game, "gun", (tile[0] + dx, tile[1] + dy)) for dx, dy in ((0, -1), (0, 1), (-1, 0), (1, 0))
+                 if game.is_free((tile[0] + dx, tile[1] + dy)))
+    before = tower.tile
+    game.dragging = tower
+    boss.zap_timer = 1 / 120
+    game.update(1 / 60)
+    assert tower.tile != before and game.towers[tower.tile] is tower and before not in game.towers
+    assert tower.pos == pygame.Vector2(tower.tile[0] * 40 + 20, tower.tile[1] * 40 + 20)
+    assert game.dragging is None and "Zapped!" in [p.text for p in game.popups]
+    assert boss.zap_timer == pytest.approx(every)
+    game.draw()
+
+
+def test_mr_feature_killed_comes_back_as_two_then_four(game):
+    game.load_level(3)
+    game.start_wave()
+    game.spawn_queue = []
+    game.register_enemy(Enemy("feature", game.path_pts, 1), "wave")
+    for kinds in (["feature_lite"] * 2, ["feature_mini"] * 4, []):
+        for e in game.enemies:
+            e.zap_timer = 1000
+            e.hit(e.hp)
+        game.update(1 / 60)
+        assert sorted(e.kind for e in game.enemies) == kinds
+        assert all(e.origin.startswith("split:feature") for e in game.enemies)
+    assert game.state != "wave" or not game.enemies
+
+
+def send_last_wave(game, level_idx):
+    """Start the last wave of a level (0-based) on the Towers side; returns its queue."""
+    game.load_level(level_idx)
+    game.wave_idx = game.level_waves - 1
+    game.start_wave()
+    return list(game.spawn_queue)
+
+
+def test_unbeaten_mr_feature_ends_the_first_level_without_a_boss(game):
+    assert "feature" not in send_last_wave(game, 0), "locked"
+    game.profile.unlock_boss("feature")
+    game.load_level(0)
+    game.start_wave()
+    assert "feature" not in game.spawn_queue, "not the first wave"
+    assert send_last_wave(game, 0)[-1] == "feature", "the last wave of level 1, at its end"
+    assert "feature" not in send_last_wave(game, 9), "not on the Warden's level"
+
+
+def test_a_run_lost_to_mr_feature_sends_him_to_level_5_until_hes_beaten(game):
+    game.profile.unlock_boss("feature")
+    send_last_wave(game, 1)
+    game.spawn_queue = ["feature"]
+    game.update(1 / 60)
+    assert game.trap_boss == "feature"
+    game.run_over()
+    assert game.profile.bosses_lost_to == ["feature"]
+    assert "feature" not in send_last_wave(game, 1)
+    assert send_last_wave(game, 4)[-1] == "feature", "level 5"
+
+
+def test_beating_mr_feature_fixes_the_pause_button_and_then_pauses_may_summon_him(game, monkeypatch):
+    game.profile.unlock_boss("feature")
+    send_last_wave(game, 1)
+    game.spawn_queue = ["feature"]
+    game.update(1 / 60)
+    game.enemies = []
+    game.update(1 / 60)
+    assert game.profile.bosses_beaten == ["feature"] and not game.profile.pause_locked
+    game.load_level(2)
+    monkeypatch.setattr(random, "random", lambda: 0.0405)
+    game.press_pause()
+    game.press_pause()
+    game.start_wave()
+    assert "feature" not in game.spawn_queue, "4.04%: missed"
+    assert "feature" not in send_last_wave(game, 3), "beaten: no longer at the end of every level"
+    game.load_level(2)
+    monkeypatch.setattr(random, "random", lambda: 0.0403)
+    game.press_pause()
+    game.press_pause()
+    game.start_wave()
+    assert game.spawn_queue.count("feature") == 1 and game.summoned == []
+    game.load_level(2)
+    game.start_wave()
+    assert "feature" not in game.spawn_queue, "once per summon"
+
+
+def test_the_monsters_side_pause_never_summons_him(screen, monkeypatch):
+    g = main.Game(screen, log_dir=None, side="monsters")
+    g.profile.unlock_boss("feature")
+    g.profile.beat("feature")
+    monkeypatch.setattr(random, "random", lambda: 0.0)
+    g.press_pause()
+    assert g.paused and g.summoned == []

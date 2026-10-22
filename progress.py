@@ -10,10 +10,13 @@ Records are kept per level and per wave, and a slot is only replaced by somethin
 import json
 import os
 from collections import defaultdict
+from functools import partial
 
+import datafile
 from achievements import DISCOVERIES, START_TOWERS
+from datafile import read_json, write_json_atomic
 from monsters import ABILITIES, ENEMY_TYPES
-from towers import LINES, NO_TOWER_MODS, TOWERS, read_json
+from towers import LINES, NO_TOWER_MODS, TOWERS
 
 PROFILE_VERSION = 1
 UNLOCKS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "unlocks.json")
@@ -37,17 +40,12 @@ BUFF_MODS = ("hp", "speed", "burn", "thaw")
 def load_unlocks(path):
     """Return {side: {card id: card}} from unlocks.json, with max and rare filled in."""
     data = read_json(path)
-    name = os.path.basename(path)
     pools = {}
     for side, effects in CARD_EFFECTS.items():
         pools[side] = {}
         for key, raw in data[side].items():
-            def fail(message):
-                raise ValueError(f"{name}: {side} card {key!r}: {message}")
-            missing = [f for f in CARD_FIELDS if f not in raw]
-            unknown = [f for f in raw if f not in CARD_FIELDS + CARD_EXTRAS]
-            if missing or unknown:
-                fail(f"missing fields {missing}" if missing else f"unknown fields {unknown}")
+            fail = partial(datafile.fail, path, f"{side} card {key!r}")
+            datafile.check_fields(path, f"{side} card {key!r}", raw, CARD_FIELDS, CARD_EXTRAS)
             if raw["effect"] not in effects:
                 fail(f"effect must be one of {tuple(effects)}")
             needs = [f for f in effects[raw["effect"]] if f not in raw]
@@ -77,8 +75,8 @@ def comp_snapshot(towers, t, trigger, wave, during_wave):
     return {
         "value": sum(tw.spent for tw in towers), "t": round(t, 2), "trigger": trigger, "wave": wave,
         "during_wave": during_wave, "tower_count": len(towers), "by_kind": dict(by_kind),
-        "towers": [{"id": tw.uid, "kind": tw.kind, "tier": tw.tier, "gold_spent": tw.spent, "tile": list(tw.tile)}
-                   for tw in towers],
+        "towers": [{"id": tw.uid, "kind": tw.kind, "tier": tw.tier, "gold_spent": tw.spent, "tile": list(tw.tile),
+                    "targeting": tw.targeting} for tw in towers],
     }
 
 
@@ -121,6 +119,10 @@ class Profile:
         self.bosses_met = [k for k in data.get("bosses_met", ()) if k in self.bosses_unlocked]  # came at least once
         saved_anger = data.get("boss_anger", {})
         self.boss_anger = {k: int(saved_anger.get(k, 0)) for k in self.bosses_unlocked}
+        # bosses with a pause_trap (monsters.json): the ones beaten at least once, and the unbeaten ones a run was
+        # lost to (they wait on their lost_level from then on)
+        self.bosses_beaten = [k for k in data.get("bosses_beaten", ()) if k in self.bosses_unlocked]
+        self.bosses_lost_to = [k for k in data.get("bosses_lost_to", ()) if k in self.bosses_unlocked]
 
     @classmethod
     def load(cls, path):
@@ -141,7 +143,8 @@ class Profile:
                 "unlocks": self.unlocks, "towers_unlocked": self.towers_unlocked, "new_towers": self.new_towers,
                 "achievements": self.achievements, "discoveries_left": self.discoveries_left,
                 "bosses_unlocked": self.bosses_unlocked, "boss_anger": self.boss_anger,
-                "bosses_met": self.bosses_met,
+                "bosses_met": self.bosses_met, "bosses_beaten": self.bosses_beaten,
+                "bosses_lost_to": self.bosses_lost_to,
                 "tower_records": self.tower_records, "monster_records": self.monster_records}
 
     def reach(self, milestone):
@@ -201,6 +204,23 @@ class Profile:
         """A secret boss came onto the map (Towers side)."""
         if kind in self.bosses_unlocked and kind not in self.bosses_met:
             self.bosses_met.append(kind)
+            self.save()
+
+    @property
+    def pause_locked(self):
+        """Whether the pause button can't pause: a boss with a pause_trap is unlocked and not beaten yet."""
+        return any("pause_trap" in ENEMY_TYPES[k] and k not in self.bosses_beaten for k in self.bosses_unlocked)
+
+    def beat(self, kind):
+        """A wave with this secret boss in it was cleared."""
+        if kind not in self.bosses_beaten:
+            self.bosses_beaten.append(kind)
+            self.save()
+
+    def lose_to(self, kind):
+        """A run was lost in a wave with this secret boss in it (counts only until it's beaten)."""
+        if kind not in self.bosses_beaten and kind not in self.bosses_lost_to:
+            self.bosses_lost_to.append(kind)
             self.save()
 
     def anger(self, killed):
@@ -297,17 +317,14 @@ class Profile:
         if not self.path:
             return
         try:
-            os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
-            tmp = self.path + ".tmp"
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump(self.to_dict(), f, indent=1)
-            os.replace(tmp, self.path)
+            write_json_atomic(self.path, self.to_dict())
         except OSError as err:
             print(f"Could not save the profile: {err}")
 
     # ---- records --------------------------------------------------------------
     def tower_record(self, level):
-        """{wave number: {"value", "mods", "towers": [{"kind", "tile", "gold_spent"}]}} for a level (1-based)."""
+        """{wave number: {"value", "mods", "towers": [{"kind", "tile", "gold_spent", "targeting"}]}} for a level
+        (1-based). Records from before targeting modes have no "targeting": those towers shoot "first"."""
         return {int(w): slot for w, slot in self.tower_records.get(str(level), {}).items()}
 
     def record_towers(self, level, comps_by_wave, mods=None):
@@ -318,7 +335,8 @@ class Profile:
         for wave, comp in sorted(comps_by_wave.items()):
             if stronger(comp, slots.get(str(wave))):
                 slots[str(wave)] = {"value": comp["value"], "mods": mods or NO_TOWER_MODS,
-                                    "towers": [{"kind": tw["kind"], "tile": tw["tile"], "gold_spent": tw["gold_spent"]}
+                                    "towers": [{"kind": tw["kind"], "tile": tw["tile"], "gold_spent": tw["gold_spent"],
+                                                "targeting": tw.get("targeting", "first")}
                                                for tw in comp["towers"]]}
                 changed.append(wave)
         if changed:

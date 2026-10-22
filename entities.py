@@ -16,7 +16,7 @@ from balance_log import new_kind_stats
 from effects import Beam, Explosion, Ring, Sparks
 from levels import tile_center
 from monsters import ENEMY_TYPES, WARD_BREAK
-from towers import NO_TOWER_MODS, TOWERS, card_damage, fusion_options
+from towers import NO_TOWER_MODS, TARGETING, TOWERS, card_damage, fusion_options
 
 ENEMY_IDS = itertools.count(1)
 TOWER_IDS = itertools.count(1)
@@ -74,6 +74,7 @@ class Enemy:
         self.summon_timer = self.spec["summon"][2] if "summon" in self.spec else 0.0
         self.decoy_timer = self.spec["decoy"][0] if "decoy" in self.spec else 0.0
         self.layoff_timer = self.spec["layoff"][0] if "layoff" in self.spec else 0.0
+        self.zap_timer = self.spec["zap"][0] if "zap" in self.spec else 0.0
         self.barrier = 0.0  # hp of damage soaked up before its own (the Chairman's dividends)
         self.illusion = False  # a Mirage's illusion: see cast_illusion
         self.fade = 0.0  # an illusion's seconds left
@@ -269,15 +270,17 @@ class Enemy:
             self.healed += self.hp - before
 
     def split(self):
-        """The monsters a Splitter breaks into when it's killed, spread a little along the path."""
+        """The monsters a Splitter breaks into when it's killed, spread a little along the path (a boss's copies
+        of itself a body apart, so they don't hide each other)."""
         if "split" not in self.spec or self.escaped:
             return []
         kind, count = self.spec["split"]
+        spread = ENEMY_TYPES[kind]["size"] * 1.5 if "boss" in ENEMY_TYPES[kind] else SPLIT_SPREAD
         children = []
         for i in range(count):
             child = Enemy(kind, self.path, self.hp_mult, self.mods)
             child.follow(self)
-            child.advance(SPLIT_SPREAD * i)
+            child.advance(spread * i)
             children.append(child)
         return children
 
@@ -322,6 +325,15 @@ def lay_off(boss, towers):
     target = max(near, key=lambda t: (t.spent, t.uid))
     target.disabled_timer = max(target.disabled_timer, seconds)
     return target
+
+
+def zap(boss, towers, free_tiles):
+    """Mr Feature's zap: the towers nearest it within its radius (`count` at most), each to its own free tile
+    picked at random from `free_tiles`. Returns [(tower, its new tile)]; the caller moves them."""
+    _, radius, count = boss.spec["zap"]
+    near = sorted((t for t in towers if t.pos.distance_to(boss.pos) <= radius),
+                  key=lambda t: (t.pos.distance_to(boss.pos), t.uid))[:count]
+    return list(zip(near, random.sample(free_tiles, min(len(near), len(free_tiles)))))
 
 
 def cast_ability(spec, pos, towers, enemies, effects, area_duration=1.0):
@@ -446,6 +458,7 @@ class Tower:
         self.smoke = 0.0  # Smokescreen: share of range lost while smoke_timer runs
         self.smoke_timer = 0.0
         self.mods = NO_TOWER_MODS  # tower card bonuses (towers.NO_TOWER_MODS)
+        self.targeting = "first"  # what it shoots first (towers.TARGETING)
 
     def record_hit(self, kind, enemy, raw, effective, how, bonus_frac):
         s = self.stats[kind]
@@ -487,6 +500,20 @@ class Tower:
     def can_target(self, enemy):
         return not enemy.phased or self.mods["detector"]
 
+    def priority(self, enemy):
+        """Sort key: the enemy the targeting mode shoots first sorts first (ties: the one closest to escaping)."""
+        if self.targeting == "last":
+            return enemy.travelled
+        if self.targeting == "strong":
+            return -enemy.hp, -enemy.travelled
+        if self.targeting == "close":
+            return enemy.pos.distance_to(self.pos), -enemy.travelled
+        return -enemy.travelled
+
+    def cycle_targeting(self):
+        modes = list(TARGETING)
+        self.targeting = modes[(modes.index(self.targeting) + 1) % len(modes)]
+
     @property
     def sell_value(self):
         return int(self.spent * self.mods["refund"])
@@ -515,11 +542,12 @@ class Tower:
         if self.disabled_timer > 0:
             self.disabled_timer -= dt
             return
+        reach = self.range
         in_range = [e for e in enemies
-                    if e.alive and e.pos.distance_to(self.pos) <= self.range and self.can_target(e)]
+                    if e.alive and e.pos.distance_to(self.pos) <= reach and self.can_target(e)]
         if not in_range:
             return
-        in_range.sort(key=lambda e: e.travelled, reverse=True)  # closest to escaping first
+        in_range.sort(key=self.priority)
         self.aim = (in_range[0].pos - self.pos).as_polar()[1]
         if self.cooldown > 0:
             return

@@ -13,7 +13,7 @@ import main
 from achievements import (ACHIEVEMENTS, DISCOVERIES, PREREQUISITES, START_TOWERS, AchievementTracker,
                           load_achievements)
 from entities import Enemy
-from helpers import drag, free_tiles, key, mouse_down, put, px, run_wave
+from helpers import assert_rejects, drag, free_tiles, key, mouse_down, put, px, run_wave
 from progress import Profile
 from towers import TOWERS
 
@@ -44,16 +44,10 @@ def test_every_tower_but_the_start_has_one_achievement():
     (lambda d: d["bosses"]["pest_control"].update(after="tuesday"), "after must be one of"),
     (lambda d: d["bosses"]["pest_control"]["goals"][0].update(enemy=["dragon"]), "isn't a monster"),
     (lambda d: d["bosses"].update(rifle=d["bosses"]["pest_control"]), "same id"),
-    (lambda d: d["bosses"]["pest_control"]["card"].pop("hint"), r"card: missing fields \['hint'\]"),
+    (lambda d: d["bosses"]["pest_control"]["card"].pop("hint"), "card: missing fields ['hint']"),
 ])
 def test_broken_achievements_file(tmp_path, change, message):
-    with open(achievements.ACHIEVEMENTS_FILE, encoding="utf-8") as f:
-        data = json.load(f)
-    change(data)
-    path = tmp_path / "achievements.json"
-    path.write_text(json.dumps(data))
-    with pytest.raises(ValueError, match=message):
-        load_achievements(str(path))
+    assert_rejects(tmp_path, achievements.ACHIEVEMENTS_FILE, load_achievements, change, message)
 
 
 # ---- the profile ------------------------------------------------------------------------------
@@ -299,6 +293,24 @@ def test_a_looter_through_on_the_monsters_side_counts_toward_hostile_takeover(sc
     g.loot(looter, None)
     gain = g.budget - budget
     assert gain > 0 and g.profile.achievements["hostile_takeover/0"] == gain
+
+
+def test_the_100th_pause_unlocks_mr_feature_and_locks_the_pause_button(game):
+    """Any profile counts (no milestone), the button or P alike; only presses that pause count."""
+    game.profile.milestones["monsters_side"] = False
+    for _ in range(99):
+        game.press_pause()
+        game.handle_event(key(pygame.K_p))
+    assert not game.paused and not game.profile.has_boss("feature") and not game.profile.pause_locked
+    game.press_pause()
+    assert game.paused and game.profile.has_boss("feature") and game.profile.pause_locked
+    assert game.pending_unlocks == [{"how": "boss", "achievement": "not_responding"}]
+    game.press_pause()
+    assert not game.paused, "it still unpauses"
+    game.press_pause()
+    assert not game.paused and "404: Pause not found" in [p.text for p in game.popups], "but can't pause"
+    assert game.profile.achievements["not_responding/0"] == 100
+    game.draw()
 
 
 def test_level_kills_restart_each_level(tracked):

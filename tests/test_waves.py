@@ -1,12 +1,11 @@
 """waves.json loading and validation, the generated waves, and the scouts' counters (waves.py), in the game too."""
 
-import json
 
 import pytest
 
 import main
 import waves
-from helpers import put, ranked_spots
+from helpers import assert_rejects, put, ranked_spots
 from levels import BOSS_LEVELS, LEVEL_COUNT, WAVES_PER_LEVEL, tile_center
 from monsters import ENEMY_TYPES
 from waves import (THREAT, add_counters, base_packs, counter_options, level_elite, load_waves, make_wave, roster,
@@ -267,11 +266,6 @@ def test_monster_records_get_no_counters(game):
 
 
 # ---- a broken file ---------------------------------------------------------------
-def shipped():
-    with open(waves.WAVES_FILE, encoding="utf-8") as f:
-        return json.load(f)
-
-
 @pytest.mark.parametrize("change, message", [
     (lambda d: d.pop("budget"), "missing fields ['budget']"),
     (lambda d: d["threat"].update(ghost=3), "'ghost' isn't a monster"),
@@ -295,9 +289,4 @@ def shipped():
     (lambda d: d["counters"]["hoard"].update(kind="ghost"), "'ghost' has no threat"),
 ])
 def test_broken_waves_file(tmp_path, change, message):
-    data = shipped()
-    change(data)
-    path = tmp_path / "waves.json"
-    path.write_text(json.dumps(data))
-    with pytest.raises(ValueError, match=message.replace("[", r"\[").replace("]", r"\]")):
-        load_waves(str(path))
+    assert_rejects(tmp_path, waves.WAVES_FILE, load_waves, change, message)

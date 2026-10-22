@@ -10,7 +10,7 @@ import graphics
 import main
 import progress
 from entities import Enemy, Tower
-from helpers import SCALES, key, mouse_down, put, run_wave, scaled
+from helpers import SCALES, assert_rejects, key, mouse_down, put, run_wave, scaled
 from monsters import REWARDS
 from progress import UNLOCKS, Profile, load_unlocks
 from towers import NO_TOWER_MODS, TOWERS
@@ -51,13 +51,7 @@ def test_pools():
     ("tower", "salvage", {"colour": 1}, "unknown fields"),
 ])
 def test_broken_unlocks_file(tmp_path, side, card, change, message):
-    with open(progress.UNLOCKS_FILE, encoding="utf-8") as f:
-        data = json.load(f)
-    data[side][card].update(change)
-    path = tmp_path / "unlocks.json"
-    path.write_text(json.dumps(data))
-    with pytest.raises(ValueError, match=message):
-        load_unlocks(str(path))
+    assert_rejects(tmp_path, progress.UNLOCKS_FILE, load_unlocks, lambda d: d[side][card].update(change), message)
 
 
 # ---- drawing cards -----------------------------------------------------------------------

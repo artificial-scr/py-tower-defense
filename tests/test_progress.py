@@ -99,7 +99,7 @@ def test_level_change_saves_a_checkpoint(game):
     with open(main.SAVE_FILE, encoding="utf-8") as f:
         data = json.load(f)
     assert data == {"side": "towers", "pass": 1, "levels_won": 0, "monster_wins": 0, "level": 1, "gold": game.gold, "lives": game.lives,
-                    "layout": [{"kind": "rifle", "spent": 100, "tile": [1, 1]}],
+                    "layout": [{"kind": "rifle", "spent": 100, "tile": [1, 1], "targeting": "first"}],
                     "upgrades": {"vitality": 0, "stride": 0, "plating": 0}, "escort": 0, "share_growth": 0.0,
                     "finale": None}
 
@@ -165,4 +165,4 @@ def test_unknown_tower_kinds_are_dropped_from_a_save():
     main.write_save({"level": 2, "gold": 10, "lives": 5,
                      "layout": [{"kind": "removed", "spent": 9, "tile": [1, 1]},
                                 {"kind": "gun", "spent": 50, "tile": [2, 2]}]})
-    assert main.load_save()["layout"] == [{"kind": "gun", "spent": 50, "tile": (2, 2)}]
+    assert main.load_save()["layout"] == [{"kind": "gun", "spent": 50, "tile": (2, 2), "targeting": "first"}]

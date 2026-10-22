@@ -396,9 +396,20 @@ def test_no_tower_actions_on_the_monsters_side(attack, mouse):
     assert g.selected is gun and g.dragging is None
     g.handle_event(key(pygame.K_s))
     assert (6, 4) in g.towers, "can't sell the defender's towers"
+    g.handle_event(key(pygame.K_g))
+    assert gun.targeting == "first", "nor change what they shoot"
     for b in g.tower_buttons.values():
         g.handle_event(mouse_down((b.rect.right - 2, b.rect.bottom - 2)))
     assert g.build_kind is None
+
+
+def test_the_defender_targets_as_it_was_recorded(attack):
+    g = attack
+    g.profile.tower_records["1"]["1"]["towers"][0]["targeting"] = "close"
+    g.place_defender(1)
+    assert g.towers[(6, 4)].targeting == "close"
+    g.place_defender(3)
+    assert {t.targeting for t in g.towers.values()} == {"first"}, "records from before targeting modes"
 
 
 def test_monsters_side_logs(screen, tmp_path):

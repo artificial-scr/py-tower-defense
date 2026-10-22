@@ -4,8 +4,11 @@ Both files are read and checked once, at import. A mistake in either stops the g
 a message naming the file and the problem.
 """
 
-import json
 import os
+from functools import partial
+
+import datafile
+from datafile import read_json
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TOWERS_FILE = os.path.join(HERE, "towers.json")
@@ -28,21 +31,13 @@ TOWER_FIELDS = ("name", "tier", "desc", "range", "damage", "rate", "proj_speed",
 REQUIRED_TOWER_FIELDS = ("name", "tier", "desc", "range", "damage", "rate", "look")
 
 
-def read_json(path):
-    with open(path, encoding="utf-8") as f:
-        try:
-            return json.load(f)
-        except json.JSONDecodeError as err:
-            raise ValueError(f"{os.path.basename(path)}: {err}") from None
-
-
 def load_towers(path):
     """Read tower stats and looks (see the comment at the top of towers.json)."""
     data = read_json(path)
     palette = {name: tuple(rgb) for name, rgb in data.get("palette", {}).items()}
 
     def fail(kind, message):
-        raise ValueError(f"{os.path.basename(path)}: tower {kind!r}: {message}")
+        datafile.fail(path, f"tower {kind!r}", message)
 
     def color(kind, c):
         if isinstance(c, str):
@@ -53,10 +48,7 @@ def load_towers(path):
 
     towers = {}
     for kind, raw in data["towers"].items():
-        missing = [f for f in REQUIRED_TOWER_FIELDS if f not in raw]
-        unknown = [f for f in raw if f not in TOWER_FIELDS + MECHANICS]
-        if missing or unknown:
-            fail(kind, f"missing fields {missing}" if missing else f"unknown fields {unknown}")
+        datafile.check_fields(path, f"tower {kind!r}", raw, REQUIRED_TOWER_FIELDS, TOWER_FIELDS + MECHANICS)
         for mechanic, partner in (("slow", "slow_time"), ("burn", "burn_time")):
             if (mechanic in raw) != (partner in raw):
                 fail(kind, f"{mechanic} and {partner} go together")
@@ -80,9 +72,7 @@ def load_evolution(path, towers):
       cross   frozenset of two tier 3 kinds -> the final they fuse into
     """
     data = read_json(path)
-
-    def fail(message):
-        raise ValueError(f"{os.path.basename(path)}: {message}")
+    fail = partial(datafile.fail, path)
 
     def check(kind, tier, where):
         if kind not in towers:
@@ -136,6 +126,12 @@ for parents, final in CROSS.items():
 NO_TOWER_MODS = {"damage": {line: 1.0 for line in LINES}, "range": 1.0, "gold": 0, "lives": 0, "refund": 0.7,
                  "detector": False, "armor": 1.0, "grounding": 1.0,
                  "burn": 1.0}
+
+# What a tower shoots first: mode -> label, in the order the Target button cycles through them ("first" is
+# every tower's to begin with), and what each mode picks (entities.Tower.priority).
+TARGETING = {"first": "First", "last": "Last", "strong": "Strong", "close": "Close"}
+TARGET_DESC = {"first": "closest to escaping", "last": "furthest from escaping", "strong": "most HP left",
+               "close": "nearest to it"}
 
 
 def card_damage(kind, mods):

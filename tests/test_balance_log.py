@@ -120,7 +120,7 @@ def test_strongest_comp_at_level_end(logged_game):
     comp = d["strongest_comp"]
     assert comp["value"] == 100 and comp["trigger"] == "level_end"
     assert comp["towers"] == [{"id": g.towers[(1, 1)].uid, "kind": "rifle", "tier": 2, "gold_spent": 100,
-                               "tile": [1, 1]}]
+                               "tile": [1, 1], "targeting": "first"}]
 
 
 def test_no_towers_no_comp(logged_game):

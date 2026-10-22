@@ -865,6 +865,108 @@ def paint_chairman(cv, size, color, inner, f, p):
     sphere(cv, SHOE, hat, size * 0.3, 0.6)
 
 
+def _digit(cv, color, c, h, one):
+    """A binary digit `h` tall, upright on screen whichever way its owner faces: a 1 or a 0."""
+    c, w = V(c), max(0.5, h * 0.16)
+    if one:
+        cv.line(color, c + (0, -h / 2), c + (0, h / 2), w)
+        cv.line(color, c + (0, -h / 2), c + (-h * 0.22, -h * 0.28), w)
+    else:
+        cv.polygon(color, ellipse_points(c, V(0, 1), h / 2, h * 0.3, 12), w)
+
+
+FEATURE_PIXEL = 0.16  # the side of one of Mr Feature's pixels, as a share of his size
+
+
+def _pixel_noise(*ints):
+    """A repeatable pseudo-random number in [0, 1) from a few whole numbers (the same ones give the same number)."""
+    h = 2166136261
+    for n in ints:
+        h = ((h ^ (n & 0xFFFFFFFF)) * 16777619) & 0xFFFFFFFF
+    h ^= h >> 15
+    h = (h * 2246822519) & 0xFFFFFFFF
+    return (h ^ (h >> 13)) / 2 ** 32
+
+
+def feature_palette(color, inner):
+    """The colours Mr Feature's pixels flicker between: mostly shades of his own, now and then a glitch."""
+    return [color, color, mix(color, WHITE, 0.25), shade(color, 0.8), mix(color, inner, 0.35),
+            mix(color, (255, 130, 210), 0.35), inner, mix(inner, WHITE, 0.5)]
+
+
+def _top_hat(cv, base, size, band):
+    """A black top hat standing on `base`, seen a little from the front: it stands up the screen whichever way
+    its wearer faces (like the bits). A brim, the crown's tall side with a `band` round its foot, and its top."""
+    rb, rc, tall = size * 0.42, size * 0.26, size * 0.45
+    top, belt = base + V(0, -tall), base + V(0, -tall * 0.25)
+
+    def front(c):  # the near half of the crown's round edge at height c, left to right
+        return [c + V(-rc * math.cos(a), rc * 0.5 * math.sin(a)) for a in (math.pi * i / 12 for i in range(13))]
+
+    cv.polygon(shade(SHOE, 0.8), ellipse_points(base, V(1, 0), rb, rb * 0.5))  # the brim
+    cv.polygon(mix(SHOE, WHITE, 0.2), ellipse_points(base, V(1, 0), rb, rb * 0.5), max(0.5, size * 0.03))
+    cv.polygon(SHOE, front(base) + [top + (rc, 0), top + (-rc, 0)])  # the crown's side
+    cv.polygon(mix(SHOE, WHITE, 0.12), [base + (-rc, 0), top + (-rc, 0), top + (-rc * 0.55, 0),
+                                        base + (-rc * 0.55, rc * 0.4)])  # lit from the left
+    cv.polygon(band, front(base) + front(belt)[::-1])
+    cv.polygon(mix(SHOE, WHITE, 0.22), ellipse_points(top, V(1, 0), rc, rc * 0.5))  # the top
+    cv.polygon(mix(SHOE, WHITE, 0.35), ellipse_points(top, V(1, 0), rc, rc * 0.5), max(0.5, size * 0.025))
+
+
+def paint_feature(cv, size, color, inner, f, p):
+    """Mr Feature: a cloud of bits. A churning, bobbing cloud of square pixels, each one flickering to a
+    random colour on its own beat, lit from the top left and outlined in dark ones; 0s and 1s swirling round it,
+    behind his top hat (he is a Mister), and a big cartoon grin, chattering away. His face and hat don't turn as
+    he goes (`upright`); his big round eyes are drawn on top, by graphics.draw_eyes."""
+    t = math.tau * p
+    cv.circle((*inner, 35), (0, 0), size * 1.2)  # a faint haze of data
+    puffs = [(V(), size * 0.64)]
+    for i in range(7):
+        d = f.rotate(i * 360 / 7 + 8 * math.sin(t + i))
+        puffs.append((d * size * (0.55 + 0.06 * math.sin(t + i * 1.9)), size * (0.42 + 0.05 * math.sin(t + i * 2.3))))
+    px = size * FEATURE_PIXEL  # the grid stays square to the screen whichever way he faces
+    n = math.ceil(size * 1.1 / px)
+
+    def inside(i, j):
+        c = V((i + 0.5) * px, (j + 0.5) * px)
+        return any(c.distance_to(pc) <= r for pc, r in puffs)
+
+    cells = {(i, j) for i in range(-n, n) for j in range(-n, n) if inside(i, j)}
+    palette = feature_palette(color, inner)
+    frame = round(p * FRAMES) % FRAMES
+    for i, j in cells:
+        # each pixel keeps its colour for 1, 2 or 4 frames, starting on its own frame, then picks another
+        hold = (1, 2, 4)[int(_pixel_noise(i, j, 1) * 3)]
+        beat = (frame + int(_pixel_noise(i, j, 2) * FRAMES)) % FRAMES // hold
+        pick = _pixel_noise(i, j, 3, beat, hold)
+        base = palette[int(pick * len(palette))]
+        c = V((i + 0.5) * px, (j + 0.5) * px)
+        if any(nb not in cells for nb in ((i + 1, j), (i - 1, j), (i, j + 1), (i, j - 1))):
+            base = shade(base, 0.45)  # the outline
+        else:
+            lit = c.normalize().dot(LIGHT) * min(1.0, c.length() / size) if c.length_squared() else 0.0
+            base = mix(base, WHITE, 0.25 * lit) if lit > 0 else shade(base, 1 + 0.3 * lit)
+        cv.polygon(base, [c + (x * px / 2, y * px / 2) for x, y in ((-1, -1), (1, -1), (1, 1), (-1, 1))])  # no seams
+    # the grin, under the eyes and upright like them (see `upright`): a D, its flat top toward the eyes,
+    # opening and shutting as he talks
+    down, across = V(0, 1), V(-1, 0)
+    m = down * size * 0.3
+    open_ = 0.5 + 0.5 * math.sin(t * 2)
+    w, h = size * 0.42, size * (0.12 + 0.16 * open_)
+    grin = [m + across * w * math.cos(a) + down * h * math.sin(a) for a in (math.pi * i / 14 for i in range(15))]
+    cv.polygon(INK, grin)
+    if open_ > 0.3:
+        cv.polygon((230, 95, 120), ellipse_points(m + down * h * 0.6, down, h * 0.3, w * 0.45, 12))  # the tongue
+    cv.polygon(WHITE, [m + across * w * 0.8, m - across * w * 0.8, m - across * w * 0.72 + down * h * 0.3,
+                       m + across * w * 0.72 + down * h * 0.3])  # the teeth
+    cv.polygon(shade(color, 0.35), grin, max(0.5, size * 0.03))
+    for i in range(8):  # the bits, swirling round it one way and the other, behind the hat
+        a = i * 45 + 360 * p * (1 if i % 2 else -1)
+        c = V(size * (1.05 + 0.12 * math.sin(t * 2 + i)), 0).rotate(a)
+        _digit(cv, (*inner, 190 + 60 * (i % 2)), c, max(2.5, size * 0.27), i % 3 != 0)
+    _top_hat(cv, V(size * 0.03 * math.sin(t), -size * 0.62) + f * size * 0.08, size, inner)  # leaning where he goes
+
+
 # --------------------------------------------------------------------------
 # Elites: the one monster that ends a level, a different one each level (waves.json)
 # --------------------------------------------------------------------------
@@ -1015,6 +1117,9 @@ def paint_bloat(cv, size, color, inner, f, p):
 #   corona    a painter for a ring turning against the spin (drawn underneath)
 #   orbs      [(color, radius)] of gems circling it, `orbit` sizes out
 #   reach     how far out from its middle it can reach (feet, spikes, tentacles), as a share of its size
+#   eye_max   the largest its eyes get, in units (EYE_MAX if not given)
+#   upright   its face doesn't turn: the eyes stay side by side facing the screen (only the pupils look where it
+#             goes), as a cartoon would draw it; its painter draws the rest of the face the same way
 CREATURES = {
     "basic": {"paint": paint_walker, "clock": "walk", "stride": 2.6, "move": "hop", "reach": 1.25,
               "eyes": (0.4, 0.34, 0.27, "round")},
@@ -1072,8 +1177,14 @@ CREATURES = {
                  "eyes": (0.08, 0.17, 0.1, "angry")},
     "chairman": {"paint": paint_chairman, "clock": "walk", "stride": 1.8, "move": "hop", "reach": 1.65, "halo": True,
                  "eyes": (0.48, 0.14, 0.08, "angry")},  # glaring from under the brim
+    "feature": {"paint": paint_feature, "clock": "time", "rate": 1.2, "move": "hover", "reach": 1.4, "halo": True,
+                "eyes": (-0.1, 0.28, 0.22, "round"), "eye_max": 7,
+                "upright": True},
 }
+for _kind in ("feature_lite", "feature_mini"):  # Mr Feature split in two, then in two again
+    CREATURES[_kind] = CREATURES["feature"]
 DEFAULT_EYES = (0.4, 0.34, 0.27, "round")  # for kinds added without a design here
+EYE_MAX = 4.5
 
 
 def _paint_shape(cv, spec, size, rot, color, inner):
@@ -1177,7 +1288,9 @@ def eye_layout(kind, size, ahead):
     forward, apart, r, style = CREATURES.get(kind, {}).get("eyes", DEFAULT_EYES)
     if kind not in CREATURES and spec["sides"] == 3:
         forward = 0.15
-    r = min(4.5, max(1.6, size * r))
+    if CREATURES.get(kind, {}).get("upright"):
+        ahead = V(0, 1)  # side by side, facing the screen, wherever it goes
+    r = min(CREATURES.get(kind, {}).get("eye_max", EYE_MAX), max(1.6, size * r))
     gap = max(r * 1.15, size * apart)
     return r, style, [(ahead * size * forward + ahead.rotate(90) * gap * k, k) for k in (-1, 1)]
 

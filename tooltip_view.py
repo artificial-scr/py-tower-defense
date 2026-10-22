@@ -17,7 +17,7 @@ from entities import NO_MODS
 from graphics import BAD, CARD, GOLD, GOOD, MAP_H, MAP_W, TEXT, TEXT_DIM, TIER_RIM, boss_color, sdraw
 from levels import TILE, wave_hp_mult
 from monsters import ENEMY_TYPES, summon_kinds
-from towers import CROSS, EVOLVE, TOWERS, card_damage
+from towers import CROSS, EVOLVE, TARGET_DESC, TARGETING, TOWERS, card_damage
 
 TIP_W = 250  # a tooltip's width, in logical units
 TIP_PAD = 8
@@ -85,6 +85,9 @@ def monster_traits(spec, side):
     if "layoff" in spec:
         every, r, duration = spec["layoff"]
         lines.append(f"Every {every:g} s the costliest tower within {r} stops for {duration:g} s")
+    if "zap" in spec:
+        every, r, count = spec["zap"]
+        lines.append(f"Every {every:g} s zaps the {count} nearest towers within {r} to random spots")
     if "dividends" in spec:
         lines.append("Looters that get through give it a barrier")
     if "severance" in spec and side == "towers":
@@ -202,6 +205,8 @@ class TooltipView:
         dps = f"  DPS {damage * spec['rate']:.0f}" if spec["damage"] else ""
         lines.append([(f"Rate {spec['rate']:g}/s{dps}", TEXT)])
         lines.append(stat("Range", t.range if t else spec["range"] * mods["range"], spec["range"]))
+        if t:
+            lines.append([(f"Target: {TARGETING[t.targeting]} ({TARGET_DESC[t.targeting]})", TEXT)])
         if "splash" in spec:
             lines.append(stat("Splash", spec["splash"]))
         if "chain" in spec:

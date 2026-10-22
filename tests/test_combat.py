@@ -27,6 +27,41 @@ def test_bonus_vs_slowed(game):
     assert second == pytest.approx(TOWERS["lance"]["vs_slowed"] * first)
 
 
+# (travelled, hp, distance from the tower): first A, last C, strong B, close D
+TARGET_FIELD = {"A": (300, 500, 200), "B": (100, 900, 150), "C": (50, 400, 100), "D": (200, 300, 40)}
+
+
+@pytest.mark.parametrize("mode, shot", [("first", "A"), ("last", "C"), ("strong", "B"), ("close", "D")])
+def test_targeting_modes(game, mode, shot):
+    sniper = put(game, "sniper", (5, 5))
+    sniper.targeting = mode
+    enemies = {}
+    for name, (travelled, hp, dist) in TARGET_FIELD.items():
+        e = enemies[name] = dummy_enemy((sniper.pos.x, sniper.pos.y + dist), hp=hp)
+        e.travelled = travelled
+    sniper.update(0.01, list(enemies.values()), [], [])
+    assert [n for n, e in enemies.items() if e.hp < e.max_hp] == [shot]
+
+
+def test_ties_go_to_the_monster_closest_to_escaping(game):
+    gun = put(game, "gun", (5, 5))
+    gun.targeting = "strong"
+    behind, ahead = (dummy_enemy((gun.pos.x + 30, gun.pos.y), hp=500) for _ in range(2))
+    ahead.travelled = 50
+    projectiles = []
+    gun.update(0.01, [behind, ahead], projectiles, [])
+    assert projectiles[0].target is ahead
+
+
+def test_multishot_follows_the_targeting_mode(game):
+    flak = put(game, "flak", (5, 5))
+    flak.targeting = "strong"
+    enemies = [dummy_enemy((flak.pos.x + 20 + i * 25, flak.pos.y + 20), hp=100 * (i + 1)) for i in range(5)]
+    projectiles = []
+    flak.update(0.01, enemies, projectiles, [])
+    assert [p.target for p in projectiles] == enemies[:1:-1], "the three with the most HP"
+
+
 def test_multishot(game):
     flak = put(game, "flak", (5, 5))
     enemies = [dummy_enemy((flak.pos.x + 20 + i * 25, flak.pos.y + 20)) for i in range(5)]

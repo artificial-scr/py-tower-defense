@@ -23,7 +23,7 @@ import ambience
 import sprites
 import terrain
 from sprites import mix, regular_polygon
-from towers import CROSS, EVOLVE, LINES, TOWER_ORDER, TOWERS
+from towers import CROSS, EVOLVE, LINES, TARGETING, TOWER_ORDER, TOWERS
 
 # --------------------------------------------------------------------------
 # Layout and colors
@@ -543,7 +543,8 @@ class GameView:
         w = PANEL_W - 24
         third = (w - 8) // 3
         self.tower_buttons = {k: Button((x, 196 + i * 58, w, 52), k) for i, k in enumerate(TOWER_ORDER)}
-        self.sell_button = Button((x, 470, w, 36), "Sell")
+        self.sell_button = Button((x, 470, w - 84, 36), "Sell")
+        self.target_button = Button((x + w - 80, 470, 80, 36), "Target")  # the selected tower's targeting mode
         self.rebuild_button = Button((x, 470, w, 36), "Rebuild")  # shown in the Sell spot when nothing is selected
         self.wave_button = Button((x, HEIGHT - 98, w, 40), "Next wave")
         self.speed_button = Button((x, HEIGHT - 50, third, 38), "Speed")
@@ -1216,6 +1217,7 @@ class GameView:
                       TEXT_DIM, (x, 419))
             self.text(self.font_s, self.evolve_hint(t), GOLD, (x, 441))
             self.draw_button(self.sell_button, f"Sell {t.sell_value}g  [S]", True)
+            self.draw_button(self.target_button, f"{TARGETING[t.targeting]} [G]", True)
         elif self.draw_next_goal(x, 374):
             pass  # a tower still to unlock: its goal takes the hints' place
         else:
@@ -1305,5 +1307,7 @@ class GameView:
             label, enabled = f"{left} {'enemy' if left == 1 else 'enemies'} left", False
         self.draw_button(self.wave_button, label, enabled, active=enabled)
         self.draw_button(self.speed_button, f"F:{self.speed}x", True, active=self.speed > 1, font=self.font_s)
-        self.draw_button(self.pause_button, "P:Pause", True, active=self.paused, font=self.font_s)
+        locked = self.profile.pause_locked and not self.paused  # a pause_trap boss (main.Game.press_pause)
+        self.draw_button(self.pause_button, "P:Locked" if locked else "P:Pause", not locked, active=self.paused,
+                         font=self.font_s)
         self.draw_button(self.tree_button, "T:Tree", True, active=self.show_tree, font=self.font_s)

@@ -3,7 +3,7 @@
     "Tower unlocks, loaded when the game starts (see DESIGN.md section 11). A new profile owns the `start` towers;",
     "every other tower is unlocked for good by its achievement. The first `discoveries` tier 4 towers ever fused",
     "are unlocked by the fusion itself, so their achievements are never needed. Only the Towers side counts",
-    "(but for monsters_pass_won and looted).",
+    "(but for monsters_pass_won, looted and paused).",
     "Each achievement: name, the tower it unlocks, and goals (one, or two when either one will do). Each goal:",
     "desc (what the player reads), condition, target, plus what the condition needs:",
     "  towers_on_map    optional kind: that many towers (of `kind`) on the map at once",
@@ -24,9 +24,10 @@
     "                   counts Towers passes won that way, over all runs",
     "  monsters_pass_won  counts Monsters passes won, over all runs (a goal the Monsters side counts)",
     "  looted           the budget Looters bring back on the Monsters side, added up over all runs",
-    "Bosses: secret bosses unlocked the same way (the boss's ambush in monsters.json says where it shows up),",
-    "  each with name, boss, after (a profile milestone: monsters_side, reached by winning a Towers pass;",
-    "  nothing counts before it), goals, and card: what the card shown on unlocking says (title, deed: what",
+    "  paused           presses of the pause button that paused the game, either side, over all runs",
+    "Bosses: secret bosses unlocked the same way (the boss's ambush or pause_trap in monsters.json says where it",
+    "  shows up), each with name, boss, optional after (a profile milestone: monsters_side, reached by winning a",
+    "  Towers pass; nothing counts before it), goals, and card: what the card shown on unlocking says (title, deed: what",
     "  earned it, lore, hint: of what happens next; the boss isn't named). They're never shown until unlocked."
   ],
   "start": ["gun"],
@@ -107,6 +108,11 @@
       {"desc": "Looters bring back 1,000 gold (Monsters side)", "condition": "looted", "target": 1000}],
       "card": {"title": "YOUR ACCOUNT HAS BEEN FLAGGED", "deed": "Your Looters carried off 1,000 gold",
                "lore": "Someone upstairs has been reading the ledgers. They like how you do business.",
-               "hint": "Hoard your gold, and someone will come to count it."}}
+               "hint": "Hoard your gold, and someone will come to count it."}},
+    "not_responding": {"name": "Not Responding", "boss": "feature", "goals": [
+      {"desc": "Pause the game 100 times", "condition": "paused", "target": 100}],
+      "card": {"title": "PAUSE NOT RESPONDING", "deed": "You pressed pause 100 times",
+               "lore": "Every pause leaves a gap in the code. Something has been living in the gaps.",
+               "hint": "The pause button is broken. Someone calls that a feature."}}
   }
 }
