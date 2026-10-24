@@ -1295,7 +1295,8 @@ class Game(AttackMixin, AttackView, UnlockView, TooltipView, GameView):
             if self.show_tree:
                 self.handle_tree_click(event.pos, event.button)
                 return
-            tip = self.tooltip_at(event.pos) if event.button == 3 and not self.aiming else None
+            placing = self.build_kind or self.dragging  # then a right click only cancels, wherever it is
+            tip = self.tooltip_at(event.pos) if event.button == 3 and not (self.aiming or placing) else None
             if event.button in (1, 3):  # a right click on something opens its tooltip, any other click closes it
                 self.tooltip = tip
             if tip or self.side == "monsters" and self.handle_attack_click(event.pos, event.button):

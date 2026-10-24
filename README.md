@@ -229,7 +229,7 @@ holding 1,000 gold at the end of one, or killing the Warden within 20 s.
 | Left click | Place the picked tower / select a tower | Draft from the panel, remove a queued monster, cast an aimed ability, see a tower's range |
 | Drag a tower | Move it to any free tile, even during a wave. Drop it on a matching tower to fuse them | — |
 | Right click a thing | A tower or monster on the map, a build button, a monster in the wave preview: its tooltip | A monster or tower on the map, a monster in the draft list: its tooltip |
-| Right click elsewhere / `Esc` | Cancel placement / deselect | Cancel aiming |
+| Right click elsewhere / `Esc` | Cancel placement (a right click anywhere while placing) / deselect | Cancel aiming |
 | `Backspace` | — | Take the last monster off the queue |
 | `Q` / `W` / `E` | — | Draft phase: buy a rank of Vitality / Stride / Plating (right click its button to undo) |
 | `S` / `B` | Sell the selected tower / rebuild the previous level's towers | — |

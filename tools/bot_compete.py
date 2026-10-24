@@ -29,10 +29,10 @@ def play(job):
     or with locked, (job, bot_runs' runs)."""
     profile, lines, seed, locked = job
     import pygame
+    from bot import bot_play, bot_runs
 
     import graphics
     import main
-    from bot import bot_play, bot_runs
     from towers import TOWERS
     tmp = tempfile.mkdtemp()
     main.SETTINGS_FILE, main.SAVE_FILE, main.PROFILE_FILE = (os.path.join(tmp, f) for f in

@@ -24,10 +24,17 @@ def test_right_click_on_nothing_closes_it_and_still_cancels(game):
     put(game, "gun", (2, 5))
     right_click(game, px((2, 5)))
     game.pick_tower("gun")
-    right_click(game, px((2, 5)))
-    assert game.build_kind == "gun", "a right click on a tower opens its tooltip instead of cancelling"
     right_click(game, (5, 5))
     assert game.tooltip is None and game.build_kind is None
+
+
+def test_right_click_while_placing_cancels_even_over_a_tower(game):
+    put(game, "gun", (2, 5))
+    game.pick_tower("gun")
+    right_click(game, px((2, 5)))
+    assert game.build_kind is None and game.tooltip is None, "placing: a right click cancels, no tooltip"
+    right_click(game, px((2, 5)))
+    assert game.tooltip.what == "tower", "not placing: it opens the tooltip again"
 
 
 def test_keys_close_it_and_esc_does_nothing_else(game):
