@@ -97,6 +97,15 @@ def test_a_sold_towers_tooltip_goes(game):
     assert game.active_tooltip is None
 
 
+def test_a_towers_wave_damage_shows_its_share_of_all_the_towers(game):
+    a, b = put(game, "gun", (2, 5)), put(game, "gun", (4, 5))
+    right_click(game, px((2, 5)))
+    texts = lambda: [text for line in game.tower_tip(game.tooltip)[-1] for text, _ in line]
+    assert "Dealt 0 damage this wave" in texts(), "no damage yet: no share"
+    a.wave_damage, b.wave_damage = 75, 225
+    assert "Dealt 75 damage this wave (25%)" in texts()
+
+
 def test_wave_preview_icons_open_monster_tooltips(game):
     kind, n, center = game.preview_icons()[0]
     right_click(game, center)

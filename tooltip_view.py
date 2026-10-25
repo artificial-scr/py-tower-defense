@@ -234,7 +234,9 @@ class TooltipView:
             if key in spec:
                 lines.append([(f"x{spec[key]:g} damage vs {against} enemies", GOOD)])
         if t and self.side == "towers":
-            lines.append([(f"Dealt {t.wave_damage:.0f} damage this wave", TEXT_DIM)])
+            total = sum(other.wave_damage for other in self.towers.values())
+            share = f" ({t.wave_damage / total:.0%})" if total else ""  # of all the towers' damage
+            lines.append([(f"Dealt {t.wave_damage:.0f} damage this wave{share}", TEXT_DIM)])
         if self.side == "towers" or tip.where == "tree":
             lines.append([(self.tower_path(kind), GOLD)])
             if not owned:

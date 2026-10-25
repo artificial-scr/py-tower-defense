@@ -7,7 +7,12 @@ dependency. Run them through uv so they use the project's environment (`.venv`):
 uv run pytest
 ```
 
-Plain `python3 -m pytest` only works if pytest and pygame-ce are installed in that interpreter.
+Plain `python3 -m pytest` only works if pytest, pytest-xdist and pygame-ce are installed in that interpreter.
+
+The suite runs in parallel on every CPU ([pytest-xdist](https://pytest-xdist.readthedocs.io/), `-n auto` in
+`pyproject.toml`): about 20 s instead of 50 s for all of it. Every test already works in its own temporary
+folder (`conftest.py`), so they don't step on each other. Pass `-n0` to run in one process, for `--pdb`,
+`-s` (print output) or a single quick file, where starting the workers costs more than it saves.
 
 ## Running only what a change touches
 
@@ -39,6 +44,7 @@ uv run pytest -k boss                    # tests whose name matches an expressio
 uv run pytest -x                         # stop at the first failure
 uv run pytest -rs                        # show why tests were skipped
 uv run pytest --durations=10             # list the slowest tests
+uv run pytest -n0 tests/test_combat.py   # in one process (debugging, or one quick file)
 ```
 
 ## What the tests cover

@@ -11,10 +11,12 @@ dependencies = [
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
+    "pytest-xdist>=3.8.0",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-n auto"  # pytest-xdist: spread the tests over every CPU; -n0 runs them in one process
 pythonpath = ["."]
 markers = ["slow: long simulations (full playthrough, 10x stress run); skip with -m 'not slow'"]
 
