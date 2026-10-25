@@ -10,8 +10,10 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "prek>=0.5.7",
     "pytest>=9.1.1",
     "pytest-xdist>=3.8.0",
+    "ruff==0.17.2",
 ]
 
 [tool.pytest.ini_options]

@@ -14,30 +14,12 @@ The suite runs in parallel on every CPU ([pytest-xdist](https://pytest-xdist.rea
 folder (`conftest.py`), so they don't step on each other. Pass `-n0` to run in one process, for `--pdb`,
 `-s` (print output) or a single quick file, where starting the workers costs more than it saves.
 
-## Running only what a change touches
-
-`tools/select_tests.py` looks at what changed (with git) and picks the test files that cover it, so a
-soundtrack change doesn't rerun the rendering snapshots or the long balance playthroughs:
-
-```bash
-uv run tools/select_tests.py                  # show the pick for what changed since the last commit
-uv run tools/select_tests.py --run            # ... and run it
-uv run tools/select_tests.py --base main --run   # include what was committed since the branch left main
-uv run tools/select_tests.py music.py --run   # pick for these files instead of asking git
-uv run tools/select_tests.py --run -- -x -q   # pytest's own options go after --
-```
-
-The map from files to tests is `RULES` at the top of the script. A changed test file runs itself; a
-file no rule covers runs every test (as do `main.py`, `tests/helpers.py`, `tests/conftest.py` and the
-project files), so the pick errs on the side of running more. The playthroughs (`slow`) only run for
-changes to the rules and balance: towers, monsters, levels, waves, entities, the Monsters side. When you
-add a module or data file, give it a rule: `test_select_tests.py` fails until every file has one. Before
-a commit, run the whole suite anyway.
+To run only the tests a change touches, and for writing new tests, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Running a subset
 
 ```bash
-uv run pytest -m "not slow"              # skip the long simulations (seconds instead of ~40 s)
+uv run pytest -m "not slow"              # skip the long simulations
 uv run pytest -m slow                    # only the long simulations
 uv run pytest tests/test_combat.py       # one file
 uv run pytest -k boss                    # tests whose name matches an expression
@@ -164,11 +146,3 @@ UPDATE_SNAPSHOTS=1 uv run pytest tests/test_rendering.py
 Text renders slightly differently between pygame-ce versions, so the file records the version it
 was made with, and the snapshot test is skipped (not failed) under any other version. Re-record
 the snapshots after upgrading pygame-ce.
-
-## Writing new tests
-
-- Put the test in the file for its area (see the table above), or a new `test_<area>.py`.
-- Use the `game` fixture and the helpers in `tests/helpers.py` rather than building state by
-  hand, and prefer sending events over calling internals when testing controls.
-- Mark anything that takes more than a second or two with `@pytest.mark.slow`.
-- Never write to the repo; use pytest's `tmp_path` fixture for files.

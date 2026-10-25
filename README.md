@@ -13,7 +13,7 @@ switching sides every 10 levels, until you lose a level.
 You need Python 3.13+ and [uv](https://docs.astral.sh/uv/).
 
 ```bash
-uv sync              # create .venv and install pygame-ce (plus pytest for development)
+uv sync              # create .venv and install pygame-ce (plus the dev tools, see CONTRIBUTING.md)
 uv run main.py       # play
 ```
 
@@ -336,7 +336,7 @@ These logs are meant for tuning the data files. Pass `--no-log` to turn them off
 | `assets/sfx/` | The sound effects, `<name>.ogg` or `<name>.wav` (names from `sfx.json`) |
 | `tests/` | The pytest suite |
 | `analytics/tower_stats.py` | Tower balance numbers from the data files: DPS, DPS per gold, fusion gains, damage per pass against each monster (`uv run analytics/tower_stats.py --help`) |
-| `tools/select_tests.py` | Picks the tests that cover what changed (see [TESTING.md](TESTING.md)) |
+| `tools/select_tests.py` | Picks the tests that cover what changed (see [CONTRIBUTING.md](CONTRIBUTING.md)) |
 
 Fullscreen, the ambient effects and the music and sound volumes are saved in `user/settings.json`. The `user/`
 folder (settings, profile, save and their `.bak` copies) and `logs/` are git-ignored.
@@ -389,10 +389,11 @@ soundtrack-maker project. Everything else is drawn in code.
 ## Testing
 
 ```bash
-uv run pytest                 # full suite (~55 s)
+uv run pytest                 # full suite (~20 s, in parallel)
 uv run pytest -m "not slow"   # skip the long bot playthroughs
 uv run tools/select_tests.py --run   # only the tests that cover what changed
 ```
 
 The tests run headless, so they need no display. See [TESTING.md](TESTING.md) for what they cover,
-the fixtures, and how to update the pixel snapshots.
+the fixtures, and how to update the pixel snapshots, and [CONTRIBUTING.md](CONTRIBUTING.md) for setting up
+the dev tools, linting and writing tests.
