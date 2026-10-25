@@ -450,7 +450,7 @@ class Tower:
         self.aim = -90.0
         self.facing = -90.0  # drawing only: where the turret is drawn pointing, turning toward aim
         self.recoil = 0.0  # drawing only: see RECOIL
-        self.flame = 0.0  # drawing only: 1 while it has a target, fading to 0 without one (see FLAME_FADE)
+        self.flame = 0.0  # drawing (and a laser's hum): 1 while it has a target, fading to 0 without one (see FLAME_FADE)
         self.flame_reach = 0.0  # drawing only: how far its target is
         self.spent = TOWERS[kind]["cost"] if spent is None else spent
         self.uid = next(TOWER_IDS)

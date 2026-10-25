@@ -8,6 +8,8 @@
   "core: part of the first set to make (the game feels finished with these alone).",
   "hooked: false for the ones the game doesn't play yet (they need hooks inside entities.py or the views).",
   "towers: the firing sound of each tower. Monster deaths are picked by size (sfx.death_sound).",
+  "beams: for a laser tower instead, the sound held while its beam is on: a seamless loop, played over and",
+  "over (sfx.Sfx.hold) and faded out when no beam of it is left.",
   "seed: which soundtrack-maker seed tools/sync_sfx.py copies into assets/sfx (default 1)."
  ],
  "sounds": {
@@ -19,9 +21,10 @@
   "shot_flame": {"group": "towers", "desc": "Flame whoosh: Incinerator, Dragon", "volume": 0.45, "gap": 0.1},
   "shot_frost": {"group": "towers", "desc": "Icy pew: Frost, Chiller, Shatter", "volume": 0.4, "gap": 0.06, "max": 3, "core": true},
   "shot_volley": {"group": "towers", "desc": "Scatter of several shots at once: Hailstorm, Flak Battery", "volume": 0.45, "gap": 0.1},
-  "shot_beam": {"group": "towers", "desc": "Charged beam release: Railgun, Solar Laser, Frost Lance", "volume": 0.5, "gap": 0.12},
+  "shot_beam": {"group": "towers", "desc": "Charged beam release: Railgun, Frost Lance", "volume": 0.5, "gap": 0.12},
   "shot_tesla": {"group": "towers", "desc": "Electric zap jumping between targets: Tesla Coil", "volume": 0.45, "gap": 0.1, "core": true},
   "shot_blast": {"group": "towers", "desc": "Wide, low freezing blast: Blizzard, Frostbite", "volume": 0.5, "gap": 0.12},
+  "beam_solar_loop": {"group": "towers", "desc": "Seamless 1 s hum, looped while a Solar Laser's beam is on", "volume": 0.4, "seed": 5},
   "shot_hybrid": {"group": "towers", "desc": "Fire and ice together, hiss and crackle: Thermal Shock, Obsidian, Glacier Breaker", "volume": 0.5, "gap": 0.1},
 
   "hit": {"group": "hits", "desc": "Small thud of a bullet landing", "volume": 0.3, "gap": 0.04, "max": 3, "core": true, "hooked": false},
@@ -96,8 +99,11 @@
   "incinerator": "shot_flame", "dragon": "shot_flame",
   "frost": "shot_frost", "chiller": "shot_frost", "shatter": "shot_frost",
   "hailstorm": "shot_volley", "flak": "shot_volley",
-  "railgun": "shot_beam", "solar": "shot_beam", "lance": "shot_beam",
+  "railgun": "shot_beam", "lance": "shot_beam",
   "tesla": "shot_tesla", "blizzard": "shot_blast", "zero": "shot_blast",
   "thermal": "shot_hybrid", "obsidian": "shot_hybrid", "breaker": "shot_hybrid"
+ },
+ "beams": {
+  "solar": "beam_solar_loop"
  }
 }

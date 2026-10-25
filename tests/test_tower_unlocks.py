@@ -21,7 +21,7 @@ from achievements import (
 )
 from entities import Enemy
 from progress import Profile
-from towers import TOWERS
+from towers import TOWER_LINES, TOWERS
 
 
 # ---- achievements.json ---------------------------------------------------------------------
@@ -45,6 +45,7 @@ def test_every_tower_but_the_start_has_one_achievement():
     (lambda d: d["achievements"]["frost"]["goals"][1].update(scope="week"), "scope must be one of"),
     (lambda d: d["achievements"]["dragon"]["goals"][0].update(how="magic"), "how must be one of"),
     (lambda d: d["achievements"]["zero"]["goals"][0].update(only_line="laser"), "isn't a tower line"),
+    (lambda d: d["achievements"]["incinerator"]["goals"][0].update(by_line="laser"), "isn't a tower line"),
     (lambda d: d.update(start=["rifle"]), "isn't a tier 1 tower"),
     (lambda d: d["bosses"]["pest_control"].update(boss="swarmling"), "isn't a boss"),
     (lambda d: d["bosses"]["pest_control"].update(after="tuesday"), "after must be one of"),
@@ -337,6 +338,18 @@ def test_level_kills_restart_each_level(tracked):
     assert "shatter" in tracked.unlocked
 
 
+def test_the_whole_sniper_branch_counts_for_the_frost_lance(tracked):
+    """Snipers and every tier 4 fused from one; another gun-line tower doesn't count."""
+    own_parents(tracked.profile, "lance")
+    tracked.tracker.on_death(dead("champion", by="minigun"), 0)
+    tracked.tracker.on_death(dead("basic", by="sniper"), 0)
+    assert "lance/0" not in tracked.profile.achievements, "an Elite, by the sniper branch"
+    for kind in ("sniper", "railgun", "solar", "zero", "lance"):
+        tracked.tracker.on_death(dead("champion", by=kind), 0)
+        tracked.tracker.on_death(dead("wraith", by=kind), 0)
+    assert "lance" in tracked.unlocked
+
+
 def test_mortar_kills_add_up_across_levels_for_the_incinerator(tracked):
     own_parents(tracked.profile, "incinerator")
     for _ in range(30):
@@ -346,6 +359,20 @@ def test_mortar_kills_add_up_across_levels_for_the_incinerator(tracked):
         tracked.tracker.on_death(dead(by="mortar"), 0)
     assert "incinerator" not in tracked.unlocked
     tracked.tracker.on_death(dead(by="mortar"), 0)
+    assert "incinerator" in tracked.unlocked
+
+
+def test_the_whole_cannon_line_counts_for_the_incinerator(tracked):
+    """Every cannon-line tower, and every tier 4 fused from one, counts; other lines don't."""
+    own_parents(tracked.profile, "incinerator")
+    for kind in ("gun", "sniper", "frost", "hailstorm"):  # hailstorm: minigun + blizzard, no cannon
+        tracked.tracker.on_death(dead(by=kind), 0)
+    tracked.tracker.on_death(dead(), 0)  # no tower at all
+    assert "incinerator/0" not in tracked.profile.achievements
+    cannon_line = [k for k, lines in TOWER_LINES.items() if "cannon" in lines]
+    assert {"cannon", "bombard", "flak", "railgun", "obsidian"} <= set(cannon_line)
+    for i in range(50):
+        tracked.tracker.on_death(dead(by=cannon_line[i % len(cannon_line)]), 0)
     assert "incinerator" in tracked.unlocked
 
 
@@ -385,9 +412,9 @@ def test_kill_filters(tracked):
     t.on_death(dead(slowed=True, by="frost"), 0)
     assert "shatter" in tracked.unlocked
     tracked.profile.achievements["dragon/0"] = 499
-    t.on_death(dead(by="incinerator", how="splash"), 0)
+    t.on_death(dead(by="mortar", how="splash"), 0)  # not a burn tower
     assert "dragon" not in tracked.unlocked
-    t.on_death(dead(by="incinerator", how="burn"), 0)
+    t.on_death(dead(by="incinerator", how="direct"), 0)  # a burn tower's hit counts, not just its burns
     assert "dragon" in tracked.unlocked
 
 

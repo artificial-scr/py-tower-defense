@@ -2,7 +2,7 @@
 a wave starting...). sfx.json lists them all, with what each should sound like; the files go in
 assets/sfx as <name>.ogg (or .wav).
 
-play(name) is fire and forget. A sound's `gap` (real-time seconds between two plays) and `max` (copies
+play(name) is fire and forget; hold(names) keeps looping sounds (a laser's hum) going from frame to frame. A sound's `gap` (real-time seconds between two plays) and `max` (copies
 at once) keep a fast game or a crowd from piling it up. With no mixer (no audio device), a missing
 sfx.json or missing files, Sfx stays silent and the game plays on, so sounds can be added one at a time.
 """
@@ -22,12 +22,13 @@ VOLUMES = music.VOLUMES  # the Sound setting, in %, same steps as the Music one
 DEFAULT_VOLUME = 75
 CHANNELS = 16  # sounds at once, on top of the soundtrack's reserved channels
 DEFAULT_MAX = 2
+LOOP_FADE_MS = 120  # a held loop fades in and out over this, so it never clicks on or off
 # Monster deaths by size (monsters.json `size`): up to SMALL, up to MEDIUM, larger; bosses have their own.
 SMALL, MEDIUM = 11, 14
 
 
 def load_config(path=CONFIG_FILE):
-    return read_json_or(path, {"sounds": {}, "towers": {}}, warn="No sound effects")
+    return read_json_or(path, {"sounds": {}, "towers": {}, "beams": {}}, warn="No sound effects")
 
 
 CONFIG = load_config()
@@ -36,6 +37,11 @@ CONFIG = load_config()
 def fire_sound(kind, config=CONFIG):
     """The sound a tower kind makes when it fires, or None."""
     return config["towers"].get(kind)
+
+
+def beam_sound(kind, config=CONFIG):
+    """The sound a laser tower kind holds while its beam is on, or None."""
+    return config.get("beams", {}).get(kind)
 
 
 def death_sound(spec):
@@ -56,6 +62,7 @@ class Sfx:
         self.clock = clock or (lambda: pygame.time.get_ticks() / 1000)
         self.sounds = {}  # name -> pygame.mixer.Sound, for the files that exist
         self.last = {}  # name -> when it last played
+        self.looping = {}  # name -> the channel a held sound loops on
         try:
             if not pygame.mixer.get_init():
                 pygame.mixer.init(music.FREQUENCY)
@@ -92,3 +99,23 @@ class Sfx:
         self.last[name] = now
         channel.set_volume(self.volume / 100 * spec.get("volume", 1.0))
         channel.play(sound)
+
+    def hold(self, names):
+        """Keep exactly the looping sounds `names` going (call it every frame): start the ones that aren't,
+        fade out the rest, and follow the Sound setting."""
+        if not self.on:
+            return
+        for name in list(self.looping):
+            if name not in names or not self.volume:
+                self.looping.pop(name).fadeout(LOOP_FADE_MS)
+        for name in names:
+            sound = self.sounds.get(name)
+            if name in self.looping or sound is None or not self.volume:
+                continue
+            channel = pygame.mixer.find_channel()
+            if channel is None:
+                continue
+            channel.play(sound, loops=-1, fade_ms=LOOP_FADE_MS)
+            self.looping[name] = channel
+        for name, channel in self.looping.items():
+            channel.set_volume(self.volume / 100 * self.config["sounds"][name].get("volume", 1.0))

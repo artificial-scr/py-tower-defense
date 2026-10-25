@@ -12,7 +12,8 @@
     "  multi_kill       by: one tower of kind `by` kills that many monsters at once (in the same instant); or, with",
   "                   kills, it kills at least `kills` at once that many times; scope: level or ever",
     "  burst            seconds: that many kills within `seconds`",
-    "  kills            optional by (tower kinds), enemy (monster kinds), how (direct, splash, chain or burn),",
+    "  kills            optional by (tower kinds), by_line (a line from evolution.json: towers of that line, fused",
+    "                   from it included), enemy (monster kinds), how (direct, splash, chain or burn),",
     "                   slowed (true: only monsters slowed when they died); scope: level (in one level) or ever",
     "  leaks            optional enemy (monster kinds); scope: level or ever",
     "  boss_kill        boss, seconds: kill that boss within `seconds` of it spawning",
@@ -56,7 +57,8 @@
       {"desc": "Kill 25 monsters with splash damage", "condition": "kills", "how": "splash", "scope": "ever",
        "target": 25}]},
     "incinerator": {"name": "Scorched Earth", "unlocks": "incinerator", "goals": [
-      {"desc": "Mortars kill 50 monsters", "condition": "kills", "by": ["mortar"], "scope": "ever", "target": 50}]},
+      {"desc": "Cannon-line towers kill 50 monsters (fusions included)", "condition": "kills", "by_line": "cannon",
+       "scope": "ever", "target": 50}]},
     "blizzard": {"name": "Whiteout", "unlocks": "blizzard", "goals": [
       {"desc": "Keep 10 monsters slowed at once", "condition": "slowed_at_once", "target": 10}]},
     "shatter": {"name": "Brittle", "unlocks": "shatter", "goals": [
@@ -75,7 +77,8 @@
     "flak": {"name": "Meat Grinder", "unlocks": "flak", "goals": [
       {"desc": "Kill 300 monsters in one level", "condition": "kills", "scope": "level", "target": 300}]},
     "dragon": {"name": "Pyromaniac", "unlocks": "dragon", "goals": [
-      {"desc": "Burns kill 500 monsters", "condition": "kills", "how": "burn", "scope": "ever", "target": 500}]},
+      {"desc": "Burn towers (Incinerator, Thermal, Dragon) kill 500 monsters", "condition": "kills",
+       "by": ["incinerator", "thermal", "dragon"], "scope": "ever", "target": 500}]},
     "hailstorm": {"name": "Flawless", "unlocks": "hailstorm", "goals": [
       {"desc": "Clear a level from level 5 on without losing a life", "condition": "level_cleared",
        "min_level": 5, "no_leaks": true, "target": 1}]},
@@ -85,7 +88,8 @@
       {"desc": "Clear a level where only Frost towers deal damage", "condition": "level_cleared", "only_line": "frost",
        "target": 1}]},
     "lance": {"name": "Elite Hunter", "unlocks": "lance", "goals": [
-      {"desc": "Snipers kill 10 Elites", "condition": "kills", "by": ["sniper"],
+      {"desc": "Snipers or their tier 4 fusions kill 10 Elites", "condition": "kills",
+       "by": ["sniper", "railgun", "solar", "zero", "lance"],
        "enemy": ["champion", "bastion", "hierophant", "warlord", "wraith", "bloat"], "scope": "ever", "target": 10}]},
     "breaker": {"name": "Hold the Line", "unlocks": "breaker", "goals": [
       {"desc": "Clear a wave of 60 or more monsters", "condition": "wave_cleared", "min_monsters": 60,

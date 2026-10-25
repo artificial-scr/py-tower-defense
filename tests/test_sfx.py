@@ -25,9 +25,13 @@ class Recorder:
     def __init__(self):
         self.volume = None
         self.played = []
+        self.held = set()
 
     def play(self, name):
         self.played.append(name)
+
+    def hold(self, names):
+        self.held = set(names)
 
 
 @pytest.fixture
@@ -88,6 +92,25 @@ def test_volume_is_the_setting_times_the_sounds_own(folder):
     assert player.sounds["boom"].get_num_channels() == 0, "Off plays nothing"
 
 
+def test_a_held_sound_loops_until_let_go(folder):
+    player = sfx.Sfx(100, str(folder), CONFIG)
+    player.hold({"boom", "unmade"})
+    channel = player.looping["boom"]
+    assert channel.get_sound() is player.sounds["boom"] and set(player.looping) == {"boom"}, "no file, no loop"
+    player.hold({"boom"})
+    assert player.looping["boom"] is channel and player.sounds["boom"].get_num_channels() == 1, "not restarted"
+    assert round(channel.get_volume(), 2) == 0.5
+    player.volume = 50
+    player.hold({"boom"})
+    assert round(channel.get_volume(), 2) == 0.25, "follows the Sound setting"
+    player.hold(set())
+    assert player.looping == {}
+    player.volume = 0
+    player.hold({"boom"})
+    assert player.looping == {}, "Off holds nothing"
+    player.sounds["boom"].stop()
+
+
 def test_deaths_go_by_size():
     assert sfx.death_sound({"size": 7}) == "death_small"
     assert sfx.death_sound({"size": 13}) == "death_medium"
@@ -120,6 +143,27 @@ def test_a_wave_fires_kills_and_pays(heard):
         game.update(1 / 60)
     assert "shot_light" in played
     assert "death_small" in played and "gold" in played, "a Basic is small"
+
+
+def test_a_solar_laser_hums_while_its_beam_is_on(heard):
+    game, played = heard
+    tower = put(game, "solar", free_tiles(game)[0])
+    game.start_wave()
+    game.spawn_queue = []
+    game.enemies = [dummy_enemy(tower.pos + pygame.Vector2(20, 0), hp=10**6)]
+    for _ in range(30):
+        game.update(1 / 60)
+    game.update_beams()
+    assert game.sounds.held == {"beam_solar_loop"} and "shot_beam" not in played, "a hum, not shots"
+    game.paused = True
+    game.update_beams()
+    assert game.sounds.held == set(), "quiet while paused"
+    game.paused = False
+    game.enemies = []
+    for _ in range(30):
+        game.update(1 / 60)
+    game.update_beams()
+    assert game.sounds.held == set(), "and once the beam dies out"
 
 
 def test_n_cycles_the_sound_volume_anywhere_and_its_saved(heard, screen):
@@ -161,7 +205,8 @@ def test_every_sound_played_is_listed_and_hooked():
         "a sound the game plays isn't marked unhooked (click only samples the Sound setting)"
 
 
-def test_every_tower_has_a_listed_firing_sound():
+def test_every_tower_has_a_listed_firing_or_beam_sound():
     config = sfx.load_config()
-    assert set(config["towers"]) == set(TOWERS)
-    assert set(config["towers"].values()) <= set(config["sounds"])
+    assert set(config["towers"]) | set(config["beams"]) == set(TOWERS)
+    assert not set(config["towers"]) & set(config["beams"]), "a laser hums instead of firing sounds"
+    assert set(config["towers"].values()) | set(config["beams"].values()) <= set(config["sounds"])

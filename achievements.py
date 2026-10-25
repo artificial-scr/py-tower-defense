@@ -29,7 +29,7 @@ CONDITIONS = {
     "slowed_at_once": ((), ()),
     "multi_kill": (("by",), ("kills", "scope")),
     "burst": (("seconds",), ()),
-    "kills": ((), ("by", "enemy", "how", "slowed", "scope")),
+    "kills": ((), ("by", "by_line", "enemy", "how", "slowed", "scope")),
     "leaks": ((), ("enemy", "scope")),
     "boss_kill": (("boss", "seconds"), ()),
     "wave_cleared": (("min_monsters",), ()),
@@ -87,8 +87,9 @@ def load_achievements(path):
                 bad(f"goal {i + 1}: kills must be a whole number, at least 2")
             if goal.get("scope", "ever") not in SCOPES:
                 bad(f"goal {i + 1}: scope must be one of {SCOPES}")
-            if goal.get("only_line", next(iter(LINES))) not in LINES:
-                bad(f"goal {i + 1}: {goal['only_line']!r} isn't a tower line")
+            for field in ("only_line", "by_line"):
+                if goal.get(field, next(iter(LINES))) not in LINES:
+                    bad(f"goal {i + 1}: {goal[field]!r} isn't a tower line")
         return [{"scope": "ever", **g} for g in goals]
 
     achievements, unlocked_by = {}, {}
@@ -262,6 +263,7 @@ class AchievementTracker:
         by = enemy.killed_by or {}
         for key, goal in self.open_goals("kills"):
             if (by.get("kind") in goal.get("by", [by.get("kind")]) and enemy.kind in goal.get("enemy", [enemy.kind])
+                    and ("by_line" not in goal or goal["by_line"] in TOWER_LINES.get(by.get("kind"), ()))
                     and by.get("how") == goal.get("how", by.get("how"))
                     and enemy.slowed == goal.get("slowed", enemy.slowed)):
                 self.add(key, goal)

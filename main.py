@@ -1428,6 +1428,13 @@ class Game(AttackMixin, AttackView, UnlockView, TooltipView, GameView):
         if self.sounds and name:
             self.sounds.play(name)
 
+    def update_beams(self):
+        """Every frame: each laser tower's hum (sfx.json beams) is held while its beam is on in a running wave."""
+        if self.sounds:
+            running = self.state == "wave" and not self.frozen
+            self.sounds.hold({sfx.beam_sound(t.kind) for t in self.towers.values() if running and t.flame > 0}
+                             - {None})
+
     def update_music(self, dt):
         """Every frame, paused or not: fade the soundtrack toward what's on screen (music.plan)."""
         if self.soundtrack:
@@ -1585,6 +1592,7 @@ def main():
         if not game.frozen:
             game.tick(dt)
         game.update_overlay(dt)
+        game.update_beams()
         game.update_music(dt)
         game.draw()
         pygame.display.flip()

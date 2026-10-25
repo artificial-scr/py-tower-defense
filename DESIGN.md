@@ -482,7 +482,7 @@ only ever holds towers the player owned.
 | Minigun | One Rifle kills 60 monsters in a level | Rapid fire is about volume |
 | Sniper | A Rifle lands the killing shot on a Tank or an Elite | Big hits are about precision |
 | Bombard | One Mortar shot kills 4 monsters | Burst splash |
-| Incinerator | Mortars hit 200 monsters in a level | Spread damage over time |
+| Incinerator | Cannon-line towers, fusions included, kill 50 monsters (over all runs) | Spread damage over time |
 | Blizzard | Keep 10 monsters slowed at once | Area control |
 
 The first playtest of the reworked waves (2026-10-20) changed the first three: the Cannon now comes after
@@ -499,11 +499,11 @@ and the Mortar after 7 towers of any kind (it was 3 Cannons).
 | Thermal Shock | Hold 1,000 gold at the end of the last wave of Towers level 10 |
 | Avalanche | Win the finale Towers pass (after a Monsters pass) |
 | Flak Battery | Kill 300 monsters in one level |
-| Dragon | Burns kill 500 monsters (over all runs) |
+| Dragon | Burn towers (Incinerator, Thermal, Dragon) kill 500 monsters, by any damage (over all runs) |
 | Hailstorm | Clear a level without losing a life, from level 5 on |
 | Tesla Coil | Kill 25 monsters within 2 s |
 | Frostbite | Clear a level where only Frost towers (fusions with a Frost parent included) deal damage |
-| Frost Lance | Snipers kill 10 Elites (over all runs) |
+| Frost Lance | Snipers or their tier 4 fusions (Railgun, Solar Laser, Frostbite, Frost Lance) kill 10 Elites (over all runs) |
 | Glacier Breaker | Survive a wave with 60 or more monsters in it |
 | Obsidian | Win 3 Towers passes |
 
