@@ -125,6 +125,7 @@ FPS = 60
 SPEEDS = (1, 2, 4, 10)  # game steps per frame
 CAST_WARNING = 1.0  # seconds a replayed ability is shown before it lands
 WAVE_LOCK = 1.0  # seconds after a level change before Space can send a wave (stops double presses)
+BOSS_CARD_LOCK = 2.0  # seconds a secret boss's unlock card ignores input (so a stray click doesn't skip it)
 FINALE_BOSS = "warden"  # joins the last wave of a Towers pass that ends early (see Game.finale)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -251,6 +252,7 @@ class Game(AttackMixin, AttackView, UnlockView, TooltipView, GameView):
         self.picking_side = False  # the new-run screen: choose Towers or Monsters
         self.side_chosen = False  # this launch already chose how to start (side pick or Continue)
         self.pending_unlocks = []  # towers and secret bosses just unlocked, shown one card each at the next build phase
+        self.unlock_shown = 0.0  # seconds the front unlock card has been on screen
         self.tracker = AchievementTracker(self.profile, self.tower_unlocked, self.boss_unlocked)
         self.summoned = []  # secret bosses a pause brought (monsters.json pause_trap), for the next Towers-side wave
         self.build_view()
@@ -574,6 +576,19 @@ class Game(AttackMixin, AttackView, UnlockView, TooltipView, GameView):
 
     def dismiss_unlock(self):
         self.pending_unlocks.pop(0)
+        self.unlock_shown = 0.0
+
+    @property
+    def unlock_locked(self):
+        """A secret boss's card ignores input for its first BOSS_CARD_LOCK seconds, so it isn't skipped by a
+        click or key meant for the game."""
+        return (self.overlay == "unlock" and self.pending_unlocks[0]["how"] == "boss"
+                and self.unlock_shown < BOSS_CARD_LOCK)
+
+    def update_overlay(self, dt):
+        """Every frame, paused or not: time how long the unlock card has been up."""
+        if self.overlay == "unlock":
+            self.unlock_shown += dt
 
     def can_make(self, kind):
         """Whether the player can have this tower: they own it, or it's a tier 4 tower and discoveries are left."""
@@ -1273,6 +1288,8 @@ class Game(AttackMixin, AttackView, UnlockView, TooltipView, GameView):
     def handle_event(self, event):
         if event.type in (pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP):
             event = pygame.event.Event(event.type, {**event.dict, "pos": to_logical(event.pos)})
+        if self.unlock_locked:
+            return  # a secret boss's card just came up: no input yet
         if event.type == pygame.KEYDOWN and event.key == pygame.K_F11:
             return self.toggle_fullscreen()  # anywhere, whatever is on screen
         if event.type == pygame.KEYDOWN and event.key == pygame.K_m:
@@ -1567,6 +1584,7 @@ def main():
             game.handle_event(event)
         if not game.frozen:
             game.tick(dt)
+        game.update_overlay(dt)
         game.update_music(dt)
         game.draw()
         pygame.display.flip()

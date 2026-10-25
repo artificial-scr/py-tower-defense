@@ -3,8 +3,8 @@
     "Tower stats and looks, loaded when the game starts. How towers fuse is in evolution.json.",
     "Colors are [r, g, b] or a name from the palette. Look: layers are [shape, radius, color] drawn",
     "bottom-up (shape: circle, square, diamond, triangle, hexagon, octagon, star); barrels are",
-    "[count, length, width]; \"flame\": true draws the shots as a stream of fire. Towers bought from",
-    "the panel (tier 1 in evolution.json) need a cost.",
+    "[count, length, width]; \"flame\": true draws the shots as a stream of fire, \"laser\": true (for instant",
+    "towers) as one unbroken beam. Towers bought from the panel (tier 1 in evolution.json) need a cost.",
     "Optional mechanics: splash, slow + slow_time, burn + burn_time, chain, multishot, instant, vs_slowed, vs_burning.",
     "Burns don't stack: a stronger burn replaces the current one for its own burn_time, a weaker one is lost."
   ],
@@ -204,16 +204,16 @@
       "splash": 60
     },
     "solar": {
-      "name": "Solar Lance",
+      "name": "Solar Laser",
       "tier": 4,
-      "desc": "Instant beam, heavy burn",
+      "desc": "Laser, 2x damage to burning",
       "range": 230,
-      "damage": 180,
-      "rate": 1.0,
-      "look": {"layers": [["triangle", 14, [255, 200, 60]], ["circle", 6, "incinerator"]], "barrels": [1, 20, 4]},
+      "damage": 55,
+      "rate": 4.0,
+      "look": {"layers": [["diamond", 14, [255, 200, 60]], ["circle", 6, [255, 245, 200]]], "barrels": [1, 19, 3],
+               "laser": true},
       "instant": true,
-      "burn": 60,
-      "burn_time": 4
+      "vs_burning": 2
     },
     "hailstorm": {
       "name": "Hailstorm",

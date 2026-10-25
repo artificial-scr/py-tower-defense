@@ -297,6 +297,8 @@ class UnlockView:
         for i, line in enumerate(wrap(card["lore"], 56)[:2]):
             self.text(self.font_s, line, TEXT_DIM, (rect.centerx, rect.top + 234 + i * 18), "midtop")
         self.text(self.font_s, card["hint"], glow, (rect.centerx, rect.bottom - 26), "midtop")
+        if self.unlock_locked:
+            return  # no hint until it can be put away
         more = len(self.pending_unlocks) - 1
         hint = "Press any key or click to continue" + (f"  (+{more} more)" if more else "")
         self.text(self.font_s, hint, TEXT_DIM, (MAP_W / 2, rect.bottom + 20), "midtop")

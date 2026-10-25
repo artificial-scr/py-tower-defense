@@ -71,11 +71,11 @@ def test_multishot(game):
 
 
 def test_burn_kills(game):
-    solar = put(game, "solar", (5, 5))
-    e = dummy_enemy((solar.pos.x + 50, solar.pos.y), hp=200)
-    solar.update(0.01, [e], [], [])
+    incinerator = put(game, "incinerator", (5, 5))
+    e = dummy_enemy((0, 0), hp=60)
+    Projectile(incinerator, e).strike(e, 0, "direct")
     assert e.burn_timer > 0
-    for _ in range(120):
+    for _ in range(180):
         e.update(1 / 60)
     assert not e.alive and not e.escaped
 
@@ -141,6 +141,20 @@ def test_turrets_turn_toward_their_target_and_kick_back_when_firing(game):
     assert gun.kick == 0.0
 
 
+def test_solar_laser_doubles_on_burning_without_burning_itself(game):
+    solar = put(game, "solar", (5, 5))
+    e = dummy_enemy((solar.pos.x + 50, solar.pos.y), hp=10_000)
+    effects = []
+    solar.update(0.01, [e], [], effects)
+    first = e.max_hp - e.hp
+    assert first == pytest.approx(TOWERS["solar"]["damage"]) and not e.burning
+    assert not any(type(fx).__name__ == "Beam" for fx in effects), "its beam is drawn all along, not as a flash"
+    e.apply_burn(1, 5)
+    solar.cooldown = 0
+    solar.update(0.01, [e], [], [])
+    assert e.max_hp - e.hp - first == pytest.approx(TOWERS["solar"]["vs_burning"] * first, abs=0.1)
+
+
 def test_obsidian_bonuses_stack(game):
     obsidian = TOWERS["obsidian"]
     hits = []
@@ -157,7 +171,7 @@ def test_obsidian_bonuses_stack(game):
 
 def test_a_short_strong_burn_doesnt_inherit_a_long_one():
     e = dummy_enemy((0, 0), hp=10_000)
-    e.apply_burn(60, 4)  # a Solar Lance
+    e.apply_burn(60, 4)  # a long burn
     e.apply_burn(190, 0.1)  # a Dragon's flash takes over, for 0.1 s only
     assert (e.burn_dps, e.burn_timer) == (190, 0.1)
     e.apply_burn(60, 4)  # weaker: lost, and it doesn't stretch the flash either

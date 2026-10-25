@@ -182,6 +182,11 @@ def test_a_secret_boss_gets_its_own_card_at_the_build_phase(locked, monkeypatch)
     locked.draw()
     monkeypatch.setitem(achievements.BOSS_ACHIEVEMENTS["pest_control"], "boss", "warden")
     locked.draw()
+    locked.handle_event(key(pygame.K_SPACE))  # too soon: the card ignores input for a moment
+    locked.handle_event(mouse_down((400, 300)))
+    assert locked.overlay == "unlock"
+    locked.update_overlay(main.BOSS_CARD_LOCK)
+    locked.draw()
     locked.handle_event(key(pygame.K_SPACE))
     assert locked.overlay is None
 

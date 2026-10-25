@@ -494,7 +494,7 @@ and the Mortar after 7 towers of any kind (it was 3 Cannons).
 
 | Unlocks | Achievement |
 |---|---|
-| Solar Lance | Beat Towers level 10 for the first time |
+| Solar Laser | Beat Towers level 10 for the first time |
 | Railgun | Kill the Warden within 20 s of it spawning |
 | Thermal Shock | Hold 1,000 gold at the end of the last wave of Towers level 10 |
 | Avalanche | Win the finale Towers pass (after a Monsters pass) |

@@ -235,12 +235,15 @@ def draw_tower(surf, fx, tower, clock):
     """A tower on the map: turning, kicking back and flashing when it fires; Tesla towers crackle and
     frost towers glint now and then (`clock` is the game time, so pauses freeze them)."""
     spec = tower.spec
-    flame = spec["look"]["flame"]
-    draw_tower_shape(surf, spec, tower.pos, tower.facing, 0.0 if flame else tower.kick)
+    flame, laser = spec["look"]["flame"], spec["look"]["laser"]
+    draw_tower_shape(surf, spec, tower.pos, tower.facing, 0.0 if flame or laser else tower.kick)
     count, length, width = spec["look"]["barrels"]
     if flame:
         if tower.flame > 0:
             draw_flame_stream(fx, tower, clock)
+    elif laser:
+        if tower.flame > 0:
+            draw_laser(fx, tower, clock)
     elif tower.kick > MUZZLE_KICK:
         if count:
             d = pygame.Vector2(1, 0).rotate(tower.facing)
@@ -287,6 +290,27 @@ def draw_flame_stream(fx, tower, clock):
         img = sprites.flame_puff(round(age * (sprites.FLAME_STEPS - 1)), SCALE)
         img.set_alpha(round(255 * (1 - age) ** 0.5 * tower.flame))
         blit_center(fx, img, nozzle + d * reach * age + side * stray * FLAME_SPREAD * age)
+
+
+def draw_laser(fx, tower, clock):
+    """A laser tower's beam: one unbroken line from the lens to its target for as long as it has one, though
+    its damage lands in ticks (the tower's rate). It shimmers with the game clock, so pauses freeze it, flares
+    as each tick lands (tower.kick) and shoots out or draws back like a flame stream (tower.flame)."""
+    d = pygame.Vector2(1, 0).rotate(tower.facing)
+    barrel = tower.spec["look"]["barrels"][1]
+    lens = tower.pos + d * (barrel + 1)
+    end = lens + d * max(0.0, tower.flame_reach - barrel) * tower.flame
+    color = tower.spec["color"]
+    seed = tower.tile[0] * 7 + tower.tile[1] * 13
+    flare = tower.kick
+    bright = tower.flame * (0.85 + 0.15 * math.sin(clock * 40 + seed))
+    halo, core = mix(color, (255, 90, 20), 0.4), mix(color, (255, 255, 255), 0.8)
+    for c, width, k in ((halo, 9 + 3 * flare, 0.3), (color, 5 + 2 * flare, 0.75), (core, 2 + flare, 1.0)):
+        sdraw.line(fx, (*c, round(255 * k * bright)), lens, end, round(width))
+    for pos, r in ((lens, 6), (end, 8 + round(4 * flare))):
+        img = sprites.glow(color, r, SCALE)
+        img.set_alpha(round(255 * bright))
+        blit_center(fx, img, pos)
 
 
 def sparkle(surf, pos, r):

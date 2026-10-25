@@ -19,7 +19,7 @@
   "shot_flame": {"group": "towers", "desc": "Flame whoosh: Incinerator, Dragon", "volume": 0.45, "gap": 0.1},
   "shot_frost": {"group": "towers", "desc": "Icy pew: Frost, Chiller, Shatter", "volume": 0.4, "gap": 0.06, "max": 3, "core": true},
   "shot_volley": {"group": "towers", "desc": "Scatter of several shots at once: Hailstorm, Flak Battery", "volume": 0.45, "gap": 0.1},
-  "shot_beam": {"group": "towers", "desc": "Charged beam release: Railgun, Solar Lance, Frost Lance", "volume": 0.5, "gap": 0.12},
+  "shot_beam": {"group": "towers", "desc": "Charged beam release: Railgun, Solar Laser, Frost Lance", "volume": 0.5, "gap": 0.12},
   "shot_tesla": {"group": "towers", "desc": "Electric zap jumping between targets: Tesla Coil", "volume": 0.45, "gap": 0.1, "core": true},
   "shot_blast": {"group": "towers", "desc": "Wide, low freezing blast: Blizzard, Frostbite", "volume": 0.5, "gap": 0.12},
   "shot_hybrid": {"group": "towers", "desc": "Fire and ice together, hiss and crackle: Thermal Shock, Obsidian, Glacier Breaker", "volume": 0.5, "gap": 0.1},

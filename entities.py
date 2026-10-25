@@ -25,7 +25,7 @@ SPLIT_SPREAD = 10  # pixels between the monsters a Splitter breaks into
 HIT_FLASH = 0.08  # seconds an enemy is drawn whitened after a hit (burns don't flash)
 TURN_SPEED = 600  # degrees a second a turret is drawn turning toward its target, or an enemy round a corner
 RECOIL = 0.12  # seconds a turret is drawn kicked back after a shot
-FLAME_FADE = 0.15  # seconds a flame tower's stream takes to reach full length, or to die out
+FLAME_FADE = 0.15  # seconds a flame tower's stream (or a laser's beam) takes to reach full length, or to die out
 
 
 def turn_toward(angle, target, step):
@@ -564,7 +564,8 @@ class Tower:
             self.stats[self.kind]["shots"] += 1
             p = Projectile(self, target)
             if self.spec.get("instant"):
-                effects.append(Beam(self.pos, target.pos, self.spec["color"], 0.15, 3, bolt="chain" in self.spec))
+                if not self.spec["look"]["laser"]:  # a laser's beam is drawn all along (graphics.draw_laser)
+                    effects.append(Beam(self.pos, target.pos, self.spec["color"], 0.15, 3, bolt="chain" in self.spec))
                 p.pos = target.pos.copy()
                 p.update(0, enemies, effects)
             else:

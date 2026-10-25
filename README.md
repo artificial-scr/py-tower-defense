@@ -189,7 +189,7 @@ Tier 4   12 cross-type towers (see below)
 | Flak Battery | Minigun + Bombard | 3 explosive shots at once |
 | Dragon | Minigun + Incinerator | Rapid flash burns that ignore armor (they replace weaker burns) |
 | Railgun | Sniper + Bombard | Instant, huge, explosive |
-| Solar Lance | Sniper + Incinerator | Instant beam, heavy burn |
+| Solar Laser | Sniper + Incinerator | Continuous laser, deals 2× damage to burning foes |
 | Hailstorm | Minigun + Blizzard | 4 slowing shots at once |
 | Tesla Coil | Minigun + Shatter | Lightning that chains through 6 foes |
 | Frostbite | Sniper + Blizzard | Instant freezing blast |
