@@ -130,7 +130,7 @@ def test_twenty_distinct_levels():
 
 def test_a_pass_plays_the_first_ten_levels():
     """Levels 11-20 are kept as a backup; only the first LEVEL_COUNT are played, with their bosses."""
-    assert LEVEL_COUNT == 10 and LEVELS == ALL_LEVELS[:10]
+    assert LEVEL_COUNT == 10 and ALL_LEVELS[:10] == LEVELS
     assert BOSS_LEVELS == {10: "warden"} and ALL_BOSS_LEVELS[20] == "overlord"
 
 

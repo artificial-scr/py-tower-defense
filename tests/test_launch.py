@@ -65,7 +65,7 @@ def test_launch_scale(monkeypatch, saved, desk, scale):
         with open(main.SETTINGS_FILE, "w", encoding="utf-8") as f:
             f.write(saved)
     assert run_main(monkeypatch, [key(pygame.K_RIGHT), key(pygame.K_RETURN)]) == scale
-    assert graphics.SCALE == scale, "arrow keys don't resize"
+    assert scale == graphics.SCALE, "arrow keys don't resize"
     if saved is None:
         assert saved_settings() is None, "no scale saved"
 

@@ -17,3 +17,40 @@ dev = [
 testpaths = ["tests"]
 pythonpath = ["."]
 markers = ["slow: long simulations (full playthrough, 10x stress run); skip with -m 'not slow'"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+
+[tool.ruff.lint]
+select = [
+    "F",     # pyflakes: undefined names, unused imports/variables
+    "E",     # pycodestyle errors
+    "W",     # pycodestyle warnings
+    "I",     # isort: import order
+    "B",     # flake8-bugbear: likely bugs and design problems
+    "S",     # flake8-bandit: security
+    "BLE",   # blind `except Exception`
+    "UP",    # pyupgrade: modern syntax for the target Python
+    "C4",    # comprehensions
+    "SIM",   # simplifications
+    "PIE",   # misc. lints
+    "PERF",  # performance anti-patterns
+    "ISC",   # implicit string concatenation
+    "PLE",   # pylint errors
+    "PLW",   # pylint warnings
+    "RUF",   # ruff-specific rules
+]
+ignore = [
+    "E501",    # line length is left to the formatter
+    "E731",    # small lambdas assigned to names read fine here
+    "S311",    # `random` drives gameplay, not cryptography
+    "B905",    # zip(strict=) would turn a length mismatch into a crash mid-game
+    "RUF005",  # [*a, b] over a + [b] is a style preference
+    "SIM108",  # ternaries aren't always clearer than if/else
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]                # pytest asserts
+"tools/**" = ["S603", "S607"]        # dev scripts run git/pytest
+"analytics/**" = ["E402"]            # sys.path set before importing the game

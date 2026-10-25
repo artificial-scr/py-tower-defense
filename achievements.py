@@ -129,7 +129,7 @@ START_TOWERS, DISCOVERIES, ACHIEVEMENTS, BOSS_ACHIEVEMENTS = load_achievements(A
 UNLOCKED_BY = {a["unlocks"]: key for key, a in ACHIEVEMENTS.items()}  # tower -> achievement id
 # tower -> the towers fused to make it: the one before it in its line, or a final's two tier 3 parents.
 # A tower's achievement is hidden, and counts nothing, until the player owns all of them.
-PREREQUISITES = {k: () for k in TOWERS}
+PREREQUISITES = dict.fromkeys(TOWERS, ())
 for _parent, _options in EVOLVE.items():
     for _kind in _options:
         PREREQUISITES[_kind] = (_parent,)

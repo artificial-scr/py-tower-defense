@@ -468,7 +468,7 @@ def paint_icicle(cv, size, color, inner, f, p):
     cv.circle((*mix(inner, WHITE, 0.2), 120), core, size * 0.5)
     cv.circle((*mix(inner, WHITE, 0.35), 200), core, size * 0.36)
     sphere(cv, mix(inner, (255, 230, 120), 0.4), core, size * 0.24, 0)
-    for i, corner in enumerate(regular_polygon(V(), size * 0.72, 5, a + 36)):  # frost facets
+    for corner in regular_polygon(V(), size * 0.72, 5, a + 36):  # frost facets
         cv.line(mix(color, WHITE, 0.7), corner * 0.55, corner, max(0.6, size * 0.06))
     drip = (p * 2) % 1
     if drip < 0.6:
@@ -507,7 +507,7 @@ def paint_looter(cv, size, color, inner, f, p):
     _feet(cv, color, f, p, size, spread=0.75, foot=0.3, stride=0.6)
     sack = -f * size * 0.95 + s * size * 0.15
     blob(cv, mix(inner, (200, 140, 40), 0.25), sack, f, size * 0.72, size * 0.82, 1)
-    for k, (x, y) in enumerate(((-0.25, 0.3), (0.05, -0.2), (-0.45, -0.1))):  # coins peeking out
+    for x, y in ((-0.25, 0.3), (0.05, -0.2), (-0.45, -0.1)):  # coins peeking out
         coin = sack + (f * x + s * y) * size
         cv.circle(shade(inner, 0.6), coin, size * 0.24)
         cv.circle(mix(inner, WHITE, 0.35), coin, size * 0.19)

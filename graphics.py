@@ -124,7 +124,7 @@ OFFSET = (0, 0)  # where the game's picture starts on the display: centered in f
 
 
 def set_scale(scale):
-    global SCALE
+    global SCALE  # noqa: PLW0603 - one module-wide scale, read as graphics.SCALE
     SCALE = scale
 
 
@@ -145,7 +145,7 @@ def srect(rect):
 
 
 def set_offset(offset):
-    global OFFSET
+    global OFFSET  # noqa: PLW0603 - as SCALE
     OFFSET = tuple(offset)
 
 
@@ -316,8 +316,8 @@ def draw_laser(fx, tower, clock):
 
 def sparkle(surf, pos, r):
     """A four-pointed glint."""
-    for d in ((1, 0), (0, 1)):
-        d = pygame.Vector2(d) * r
+    for axis in ((1, 0), (0, 1)):
+        d = pygame.Vector2(axis) * r
         sdraw.line(surf, (255, 255, 255, 230), pos - d, pos + d, 1)
     sdraw.circle(surf, (255, 255, 255, 255), pos, max(1.0, r * 0.25))
 
@@ -943,7 +943,8 @@ class GameView:
         self.shade_map()
         smaller = {self.font_xl: self.font_l, self.font_l: self.font, self.font: self.font_s}
         fitted = []
-        for s, color, font in lines:
+        for s, color, wanted in lines:
+            font = wanted
             while font in smaller and font.size(s)[0] > (MAP_W - 32) * SCALE:
                 font = smaller[font]
             fitted.append((s, color, font))

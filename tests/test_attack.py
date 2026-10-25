@@ -386,7 +386,7 @@ def test_upgrades_last_the_pass_and_are_saved(attack):
     assert g.upgrades["stride"] == 1
     g.side = "towers"
     g.next_pass()
-    assert g.upgrades == {k: 0 for k in UPGRADES} and g.escort == 0, "a new pass starts without them"
+    assert g.upgrades == dict.fromkeys(UPGRADES, 0) and g.escort == 0, "a new pass starts without them"
 
 
 def test_no_tower_actions_on_the_monsters_side(attack, mouse):

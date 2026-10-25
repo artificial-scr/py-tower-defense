@@ -264,13 +264,13 @@ def _neon_lane(pen, legs, theme, rng):
         pen.rect(lane, _floor(rect, 3))
     for rect, _, _ in legs:
         x, y, w, h = _floor(rect, 3)
-        for color, width, inset in (((*theme.path, 80), 4, 0), (mix(theme.path, WHITE, 0.25), 1.2, 0)):
+        for color, width, _ in (((*theme.path, 80), 4, 0), (mix(theme.path, WHITE, 0.25), 1.2, 0)):
             for a, b in (((x, y), (x + w, y)), ((x, y + h), (x + w, y + h)), ((x, y), (x, y + h)),
                          ((x + w, y), (x + w, y + h))):
                 pen.line(color, a, b, width)
     for rect, _, _ in legs:  # cover the edge lines where legs overlap, so corners stay open
         pen.rect(lane, _floor(rect, 5))
-    for rect, a, b in legs:
+    for _, a, b in legs:
         d = (b - a).normalize()
         for i in range(int(a.distance_to(b) / 12) + 1):
             p = a + d * i * 12

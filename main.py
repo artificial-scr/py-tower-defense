@@ -1177,7 +1177,7 @@ class Game(AttackMixin, AttackView, UnlockView, TooltipView, GameView):
         start, if it has no boss yet. Unbeaten, it ends the last wave of the first level without a boss of its own
         (after a run lost to it, only the last wave of its lost_level); beaten, it comes in the wave's second half
         when a pause summoned it (press_pause)."""
-        if self.is_boss_level and self.wave_idx + 1 == self.level_waves or \
+        if (self.is_boss_level and self.wave_idx + 1 == self.level_waves) or \
                 any("boss" in ENEMY_TYPES[k] for k in self.spawn_queue):
             return
         for kind in self.profile.bosses_unlocked:
@@ -1316,7 +1316,7 @@ class Game(AttackMixin, AttackView, UnlockView, TooltipView, GameView):
             tip = self.tooltip_at(event.pos) if event.button == 3 and not (self.aiming or placing) else None
             if event.button in (1, 3):  # a right click on something opens its tooltip, any other click closes it
                 self.tooltip = tip
-            if tip or self.side == "monsters" and self.handle_attack_click(event.pos, event.button):
+            if tip or (self.side == "monsters" and self.handle_attack_click(event.pos, event.button)):
                 pass
             elif event.button == 3:
                 self.build_kind = None

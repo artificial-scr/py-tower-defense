@@ -63,7 +63,7 @@ def test_lines_keep_the_plans_to_them(game):
     bot = Bot(game, lines=("gun",))
     bot.update_dps()
     for kind, buy, _, _ in bot.options():
-        assert set(buy) == {"gun"} and "gun" in kind or kind in ("rifle", "minigun", "sniper")
+        assert (set(buy) == {"gun"} and "gun" in kind) or kind in ("rifle", "minigun", "sniper")
 
 
 def test_wide_aims_no_higher_than_tier_2(game):

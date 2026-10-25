@@ -204,7 +204,7 @@ def test_banked_gold_draws_a_few_looters_into_the_heaviest_pack(gold, looters):
         heaviest = found[0].kinds
         assert threat(heaviest) == max(threat(p.kinds) for p in packs)
         spots = [i for i, k in enumerate(heaviest) if k == "looter"]
-        assert 0 < spots[0] and spots[-1] < len(heaviest) - 1, "in the middle, never first or last"
+        assert spots[0] > 0 and spots[-1] < len(heaviest) - 1, "in the middle, never first or last"
 
 
 @pytest.mark.parametrize("tag, best", [("single", ["swarmling", "splitter", "fast"]), ("slow", ["healer", "juggernaut"]),

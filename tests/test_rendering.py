@@ -267,7 +267,7 @@ def test_every_theme_has_its_ground_path_and_props():
 def test_every_theme_has_its_ambience():
     """Particles for every theme: inside the map, fading in and out, the same at the same moment."""
     assert set(ambience.AMBIENT) == {t.name for t in levels.THEMES}
-    assert ambience.GLOWING <= set(ambience.AMBIENT)
+    assert set(ambience.AMBIENT) >= ambience.GLOWING
     for theme in levels.THEMES:
         for t in (0.0, 3.7, 125.2):
             now = ambience.particles(theme, t)
@@ -281,7 +281,7 @@ def test_every_theme_has_its_ambience():
 
 
 def test_portal_and_gate_sit_on_the_ends_of_the_path():
-    for theme, waypoints in levels.ALL_LEVELS:
+    for _, waypoints in levels.ALL_LEVELS:
         on_path = terrain.path_tiles(waypoints)
         for center, heading in ambience.ends(waypoints):
             tile = (int(center.x // TILE), int(center.y // TILE))
@@ -360,7 +360,7 @@ def frame_hashes(mouse, monkeypatch):
     for scale in (1.0, 1.5):
         for name, g in scenes(scale, mouse, monkeypatch):
             g.draw()
-            hashes[f"{scale:g}x {name}"] = hashlib.sha1(pygame.image.tobytes(g.screen, "RGB")).hexdigest()[:16]
+            hashes[f"{scale:g}x {name}"] = hashlib.sha1(pygame.image.tobytes(g.screen, "RGB"), usedforsecurity=False).hexdigest()[:16]
     return hashes
 
 

@@ -52,7 +52,7 @@ class AttackMixin:
         self.queue = []  # monster kinds drafted for the next wave, in spawn order
         self.aiming = None  # an area ability waiting for a click on the map
         self.ability_cooldowns = self.profile.abilities()  # ability -> cooldown after rank bonuses
-        self.cooldowns = {k: 0.0 for k in self.ability_cooldowns}  # ability -> seconds until ready
+        self.cooldowns = dict.fromkeys(self.ability_cooldowns, 0.0)  # ability -> seconds until ready
         self.sent_waves = {}  # wave number -> the wave as it goes into the monster record
         self.wave_started_at = 0.0
         self.defender_record = self.profile.tower_record(self.level_idx + 1)

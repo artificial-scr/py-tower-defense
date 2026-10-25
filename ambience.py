@@ -126,7 +126,7 @@ def particles(theme, t):
     out = []
     serial = 0
     for look, color, count, (vx, vy), sway, life, size in AMBIENT.get(theme.name, ()):
-        for i in range(count):
+        for _ in range(count):
             serial += 1
             n = serial * 7.31
             span = life * (0.75 + 0.5 * _hash(n + 1))
