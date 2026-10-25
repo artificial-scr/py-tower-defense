@@ -8,6 +8,7 @@ once, like the sprites.
 """
 
 import random
+from itertools import pairwise
 
 import pygame
 
@@ -23,7 +24,7 @@ WHITE = (255, 255, 255)
 
 def path_tiles(waypoints):
     tiles = set()
-    for (x0, y0), (x1, y1) in zip(waypoints, waypoints[1:]):
+    for (x0, y0), (x1, y1) in pairwise(waypoints):
         for x in range(min(x0, x1), max(x0, x1) + 1):
             for y in range(min(y0, y1), max(y0, y1) + 1):
                 tiles.add((x, y))
@@ -132,7 +133,7 @@ class _Pen:
 def _segments(waypoints):
     """Each leg of the path: (its rect of tiles in logical units, start and end tile centers)."""
     legs = []
-    for (x0, y0), (x1, y1) in zip(waypoints, waypoints[1:]):
+    for (x0, y0), (x1, y1) in pairwise(waypoints):
         left, top = min(x0, x1), min(y0, y1)
         rect = (left * TILE, top * TILE, (max(x0, x1) - left + 1) * TILE, (max(y0, y1) - top + 1) * TILE)
         legs.append((rect, V((x0 + 0.5) * TILE, (y0 + 0.5) * TILE), V((x1 + 0.5) * TILE, (y1 + 0.5) * TILE)))
@@ -338,9 +339,9 @@ def _pebble(cv, rng, color):
 
 def _crack(cv, rng, color):
     pts = [V(-7, rng.uniform(-3, 3))] + [V(-7 + i * 4.7, rng.uniform(-4, 4)) for i in range(1, 4)]
-    for a, b in zip(pts, pts[1:]):
+    for a, b in pairwise(pts):
         cv.line((*mix(color, WHITE, 0.35), 110), a + V(0, 0.9), b + V(0, 0.9), 0.8)
-    for a, b in zip(pts, pts[1:]):
+    for a, b in pairwise(pts):
         cv.line(color, a, b, 1.6)
 
 

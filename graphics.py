@@ -13,6 +13,7 @@ script); GameView reads the game state through `self`.
 import math
 import os
 from collections import Counter
+from itertools import pairwise
 
 import pygame
 
@@ -260,7 +261,7 @@ def draw_tower(surf, fx, tower, clock):
             a = (tick * 137 + seed * 53 + i * 160) % 360
             start = tower.pos + pygame.Vector2(6, 0).rotate(a)
             points = jagged(start, start + pygame.Vector2(10, 0).rotate(a + 30), tick + i, 2.5)
-            for p, q in zip(points, points[1:]):
+            for p, q in pairwise(points):
                 sdraw.line(fx, (240, 240, 140, 220), p, q, 1)
     elif "slow" in spec and "burn" not in spec:
         s = (clock * 0.6 + seed * 0.37) % 1.0
@@ -489,7 +490,7 @@ def draw_ward(surf, enemy, pos):
     if charge > 0:
         steps = max(2, round(24 * charge))
         arc = [pos + pygame.Vector2(0, -r).rotate(360 * charge * i / steps) for i in range(steps + 1)]
-        for a, b in zip(arc, arc[1:]):
+        for a, b in pairwise(arc):
             sdraw.line(surf, mix(WARD_COLOR, (40, 60, 90), 0.35), a, b, 1.5)
 
 
@@ -907,8 +908,8 @@ class GameView:
                     ("Records and unlocks are kept. Press R or click for a new run.", TEXT, self.font)]
         if self.state == "level_complete" and self.side == "monsters":
             lines = [(f"{self.theme.name} breached!", self.theme.accent, self.font_xl),
-                     (f"The towers lost {self.lives_taken} lives here: {self.lives} left for "
-                      f"{self.levels_left} more levels", TEXT, self.font_l),
+                     ((f"The towers lost {self.lives_taken} lives here: {self.lives} left for "
+                       f"{self.levels_left} more levels"), TEXT, self.font_l),
                      (f"Next up: {LEVELS[self.level_idx + 1][0].name}. Press Space or click to continue.", TEXT,
                       self.font)]
         elif self.state == "level_complete":
@@ -925,8 +926,8 @@ class GameView:
                      (f"Lost at level {self.level_idx + 1}, wave {self.wave_idx}", TEXT, self.font)] + run_over
         elif self.state == "victory" and self.side == "monsters":
             lines = [("EVERY DEFENSE BROKEN!", GOLD, self.font_xl),
-                     (f"Their last life went at level {self.level_idx + 1}, wave {self.wave_idx}. "
-                      f"Pass {self.pass_no} complete.", TEXT, self.font_l),
+                     ((f"Their last life went at level {self.level_idx + 1}, wave {self.wave_idx}. "
+                       f"Pass {self.pass_no} complete."), TEXT, self.font_l),
                      ("Next: defend against your own waves, up to this very wave,", TEXT, self.font),
                      ("where The Warden joins them.", TEXT, self.font),
                      ("Press Space or click to switch sides.", TEXT, self.font)]

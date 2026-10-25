@@ -10,6 +10,7 @@ pulse off; the portal and gate stay, still.
 """
 
 import math
+from itertools import pairwise
 
 import pygame
 
@@ -165,7 +166,7 @@ def glow_spots(theme, path_style, waypoints, accents):
     spots = [(V(p), 14, _hash(p.x * 3.1 + p.y) * math.tau) for p in accents]
     if path_style in PATH_GLOW:
         tiles = []
-        for (x0, y0), (x1, y1) in zip(waypoints, waypoints[1:]):
+        for (x0, y0), (x1, y1) in pairwise(waypoints):
             n = max(abs(x1 - x0), abs(y1 - y0))
             tiles += [(x0 + (x1 - x0) * i // n, y0 + (y1 - y0) * i // n) for i in range(n)]
         for k, (tx, ty) in enumerate(tiles):

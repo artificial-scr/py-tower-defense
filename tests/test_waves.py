@@ -1,6 +1,8 @@
 """waves.json loading and validation, the generated waves, and the scouts' counters (waves.py), in the game too."""
 
 
+from itertools import pairwise
+
 import pytest
 from helpers import assert_rejects, put, ranked_spots
 
@@ -68,7 +70,7 @@ def test_every_elite_ends_some_level_and_level_1_keeps_the_champion():
 def test_waves_get_harder():
     mults = [make_wave(level, wave).hp_mult for level, wave in LEVEL_WAVES]
     assert mults == sorted(mults) and mults[0] == 1
-    steps = [b / a for a, b in zip(mults, mults[1:])]
+    steps = [b / a for a, b in pairwise(mults)]
     assert max(steps) < 1.9, "the early boost ramps in over level 1: no wave triples the last"
     assert make_wave(1, 0).hp_mult == 12, "from level 2 on, the full boost"
 

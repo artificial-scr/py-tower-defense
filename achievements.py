@@ -93,7 +93,7 @@ def load_achievements(path):
 
     achievements, unlocked_by = {}, {}
     for key, raw in data["achievements"].items():
-        def bad(message):
+        def bad(message, key=key):
             fail(f"achievement {key!r}: {message}")
         tower = raw.get("unlocks")
         if tower not in TOWERS:
@@ -106,7 +106,7 @@ def load_achievements(path):
         achievements[key] = {"name": raw["name"], "unlocks": tower, "goals": check_goals(raw.get("goals"), bad)}
     bosses = {}
     for key, raw in data.get("bosses", {}).items():
-        def bad(message):
+        def bad(message, key=key):
             fail(f"boss achievement {key!r}: {message}")
         if key in achievements:
             bad("a tower's achievement has the same id")

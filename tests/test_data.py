@@ -142,7 +142,7 @@ def test_level_path(n):
     assert not on_map(*wps[0]) and not on_map(*wps[-1])
     assert all(on_map(*p) for p in wps[1:-1])
     segments = []
-    for (x0, y0), (x1, y1) in zip(wps, wps[1:]):
+    for (x0, y0), (x1, y1) in itertools.pairwise(wps):
         assert (x0 == x1) != (y0 == y1), "axis aligned"
         segments.append(build_path_cells([(x0, y0), (x1, y1)]))
     for i in range(len(segments)):

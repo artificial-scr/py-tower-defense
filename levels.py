@@ -3,6 +3,7 @@ are made of is in waves.py.
 """
 
 from dataclasses import dataclass
+from itertools import pairwise
 
 import pygame
 
@@ -87,7 +88,7 @@ def tile_center(tx, ty):
 
 def build_path_cells(waypoints):
     cells = set()
-    for (x0, y0), (x1, y1) in zip(waypoints, waypoints[1:]):
+    for (x0, y0), (x1, y1) in pairwise(waypoints):
         dx = (x1 > x0) - (x1 < x0)
         dy = (y1 > y0) - (y1 < y0)
         x, y = x0, y0

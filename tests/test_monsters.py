@@ -299,7 +299,7 @@ def test_an_illusion_runs_ahead_pops_on_any_hit_and_fades():
     caster = Enemy("mirage", line(), 3)
     caster.advance(100)
     fake = caster.cast_illusion()
-    every, ahead, life = ENEMY_TYPES["mirage"]["decoy"]
+    _, ahead, life = ENEMY_TYPES["mirage"]["decoy"]
     assert fake.illusion and fake.travelled == caster.travelled + ahead and fake.hp == fake.max_hp == 1
     tower = Tower("sniper", (0, 0))
     assert not fake.hit(500, (tower, "sniper")) and not fake.alive
@@ -445,7 +445,7 @@ def test_the_brood_mother_is_a_boss_no_level_uses_yet():
 
 
 def test_the_brood_mother_shoots_out_swarmlings_one_behind_two_in_front(game):
-    kind, count, every, offsets = ENEMY_TYPES["brood"]["summon"]
+    kind, count, _, offsets = ENEMY_TYPES["brood"]["summon"]
     game.start_wave()
     game.spawn_queue = []
     brood = Enemy("brood", game.path_pts, 1)
@@ -557,7 +557,7 @@ def test_he_walks_in_after_the_wardens_alert_with_a_grander_one(game):
 
 # ---- The Chairman -------------------------------------------------------------------------
 def test_the_chairman_sends_saboteurs_and_looters_in_turn(game):
-    kinds, count, every, offsets = ENEMY_TYPES["chairman"]["summon"]
+    _, count, _, _ = ENEMY_TYPES["chairman"]["summon"]
     game.load_level(3)
     game.start_wave()
     game.spawn_queue = []
@@ -573,7 +573,7 @@ def test_the_chairman_sends_saboteurs_and_looters_in_turn(game):
 
 
 def test_layoffs_silence_the_costliest_tower_in_reach():
-    every, radius, seconds = ENEMY_TYPES["chairman"]["layoff"]
+    _, radius, seconds = ENEMY_TYPES["chairman"]["layoff"]
     boss = Enemy("chairman", line(), 1)
     boss.advance(400)
     cheap, dear, far = Tower("gun", (10, 1)), Tower("gun", (11, 1)), Tower("gun", (19, 1))
@@ -585,7 +585,7 @@ def test_layoffs_silence_the_costliest_tower_in_reach():
 
 
 def test_the_chairman_lays_off_a_tower_every_few_seconds(game):
-    every, radius, seconds = ENEMY_TYPES["chairman"]["layoff"]
+    every, _, _ = ENEMY_TYPES["chairman"]["layoff"]
     game.start_wave()
     game.spawn_queue = []
     boss = Enemy("chairman", game.path_pts, 1000)

@@ -11,6 +11,7 @@ This module works in logical units and knows nothing of the layout: graphics.py 
 """
 
 import math
+from itertools import pairwise
 
 import pygame
 
@@ -352,7 +353,7 @@ def paint_jelly(cv, size, color, inner, f, p):
         across = (j - 1.5) * 0.36 * size
         pts = [-f * (0.55 + t * 0.26) * size + s * (across + math.sin(math.tau * p + t * 0.9 + j) * 0.17 * size)
                for t in range(6)]
-        for a, b in zip(pts, pts[1:]):
+        for a, b in pairwise(pts):
             cv.line(shade(color, 0.7), a, b, max(0.8, size * 0.09))
     sphere(cv, color, (0, 0), size, 1.5)
     gem(cv, inner, -f * size * 0.3, regular_polygon(-f * size * 0.3, size * (0.36 + 0.05 * pulse), 4,
@@ -366,7 +367,7 @@ def paint_cell(cv, size, color, inner, f, p):
     gem(cv, color, (0, 0), regular_polygon(V(), size * (1 + 0.05 * wob), 5, f.as_polar()[1]), 1.5)
     crack = [-f * size * (0.15 + (0.14 if i % 2 else -0.06)) + s * size * (-0.8 + i * 0.32) for i in range(6)]
     glow_k = 0.55 + 0.35 * (0.5 + 0.5 * wob)
-    for a, b in zip(crack, crack[1:]):
+    for a, b in pairwise(crack):
         cv.line(shade(color, 0.45), a, b, max(1.0, size * 0.14))
         cv.line(mix(color, WHITE, glow_k), a, b, max(0.6, size * 0.06))
 
@@ -661,7 +662,7 @@ FLAME_HEAT = ((0.0, (255, 250, 210)), (0.2, (255, 210, 80)), (0.55, (255, 100, 2
 
 def flame_color(age):
     """White-hot at the nozzle, yellow, orange, then dark red as a puff burns out (age 0 to 1)."""
-    for (a, c), (b, d) in zip(FLAME_HEAT, FLAME_HEAT[1:]):
+    for (a, c), (b, d) in pairwise(FLAME_HEAT):
         if age <= b:
             return mix(c, d, (age - a) / (b - a))
     return FLAME_HEAT[-1][1]
@@ -877,7 +878,7 @@ def paint_chairman(cv, size, color, inner, f, p):
     gem(cv, inner, f * size * 0.72, tie, 0.6)
     chain = [f * size * (0.62 + 0.1 * math.sin(math.pi * t)) + s * size * (0.12 + 0.6 * t) for t in
              (i / 6 for i in range(7))]
-    for a, b in zip(chain, chain[1:]):
+    for a, b in pairwise(chain):
         cv.line(inner, a, b, max(0.5, size * 0.04))
     cv.circle(inner, chain[-1], size * 0.08)  # the watch, in its pocket
     for k in (-1, 1):  # his arms, the cufflinks glinting

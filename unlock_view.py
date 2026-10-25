@@ -4,6 +4,7 @@ graphics.GameView, which uses these in the build panel, the branch choice and th
 """
 
 import math
+from itertools import pairwise
 
 import pygame
 
@@ -146,7 +147,7 @@ def chairman_art(surf, w, h, spec, kind, t):
         chart.append(pygame.Vector2(x, trend + 4 * math.sin(x * 0.7) + 3 * math.sin(x * 1.9)))
         x += 7
     shown = max(2, round(len(chart) * min(1.0, (t % 5) / 3)))
-    for a, b in zip(chart[:shown], chart[1:shown]):
+    for a, b in pairwise(chart[:shown]):
         sdraw.line(surf, (*red, 60), a, b, 5)
         sdraw.line(surf, (*red, 220), a, b, 2)
     tip = chart[shown - 1]
@@ -203,7 +204,7 @@ def feature_art(surf, w, h, spec, kind, t):
         glowing_eye(surf, c + (k * 9, 2), 3.2, 210 + 45 * math.sin(t * 2), bits)
     grin = [c + (math.cos(a) * 13, 12 + math.sin(a) * 6 * (0.6 + 0.4 * math.sin(t * 5))) for a in
             (math.pi * i / 10 for i in range(11))]
-    for a, b in zip(grin, grin[1:]):
+    for a, b in pairwise(grin):
         sdraw.line(surf, (*bits, 220), a, b, 2)
 
 

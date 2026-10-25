@@ -138,7 +138,7 @@ def main():
     command = ["pytest"] + ([] if selected == ALL else selected) + pytest_args
     print("Run:", "uv run " + " ".join(command), flush=True)
     if args.run:
-        return subprocess.run([sys.executable, "-m", *command], cwd=ROOT).returncode
+        return subprocess.run([sys.executable, "-m", *command], check=False, cwd=ROOT).returncode
     return 0
 
 

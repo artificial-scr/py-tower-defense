@@ -143,7 +143,7 @@ def test_every_enemy_draws_in_every_look(scale):
             assert sprites.enemy_face(kind, 0, scale, "hit").get_width() > 0
         if "corona" in design:
             assert sprites.enemy_corona(kind, 0, scale).get_width() > normal.get_width() / 2
-        r, style, eyes = sprites.eye_layout(kind, spec["size"], pygame.Vector2(1, 0))
+        r, style, _ = sprites.eye_layout(kind, spec["size"], pygame.Vector2(1, 0))
         for k in (-1, 1):
             sprites.eye(r, 0, False, scale, style, k)
             sprites.eye(r, 0, True, scale, style, k)
