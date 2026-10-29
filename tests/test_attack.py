@@ -298,26 +298,17 @@ def test_upgrade_prices_grow_with_the_rank(attack):
     assert g.upgrade_price("stride") == round(BUDGET["upgrade_price"] * level), "each upgrade has its own ranks"
 
 
-def test_buying_an_upgrade_sends_an_escort_worth_its_price(attack):
+def test_buying_an_upgrade_sends_nothing(attack):
     g = attack
     price = g.upgrade_price("plating")
     g.budget = price + 6
     g.handle_event(key(pygame.K_e))
     assert g.upgrades["plating"] == 1 and g.budget == 6
-    assert g.escort == price // ENEMY_TYPES["basic"]["cost"]
     assert not g.can_upgrade("plating"), "can't afford rank 2"
     g.draft("fast")
-    escort = g.escort
     g.send_wave()
-    assert g.spawn_queue == ["basic"] * escort + ["fast"] and g.escort == 0
-    assert g.sent_waves[1]["value"] == 5 * escort + 6, "the record (and the towers' kill gold) counts the escort"
-
-
-def test_the_escort_spreads_over_waves(attack):
-    g = attack
-    g.escort = BUDGET["escort_per_wave"] + 7
-    g.send_wave()
-    assert len(g.spawn_queue) == BUDGET["escort_per_wave"] and g.escort == 7
+    assert g.spawn_queue == ["fast"]
+    assert g.sent_waves[1]["value"] == 6, "the record (and the towers' kill gold) is only the drafted queue"
 
 
 def test_upgrades_change_every_monster_sent(attack):
@@ -349,9 +340,9 @@ def test_a_rank_bought_this_draft_can_be_sold_back(attack, mouse):
     g.budget = 10_000
     (_, rect), *_ = g.upgrade_buttons()
     g.handle_event(mouse_down(rect.center))
-    assert g.upgrades["vitality"] == 1 and g.escort > 0
+    assert g.upgrades["vitality"] == 1
     g.handle_event(mouse_down(rect.center, button=3))
-    assert g.upgrades["vitality"] == 0 and g.escort == 0 and g.budget == 10_000
+    assert g.upgrades["vitality"] == 0 and g.budget == 10_000
     g.buy_upgrade("vitality")
     g.send_wave()
     g.state = "build"
@@ -371,22 +362,20 @@ def test_upgrades_last_the_pass_and_are_saved(attack):
     g = attack
     g.budget = 10_000
     g.buy_upgrade("stride")
-    g.escort = 0
     leak(g, 1)
     for _ in range(WAVES_PER_LEVEL - 1):
         play_wave(g)
     g.reward_cards = []
-    g.escort = 75
     g.advance()
     assert g.level_idx == 1 and g.upgrades["stride"] == 1
     save = main.load_save()
-    assert save["upgrades"]["stride"] == 1 and save["escort"] == g.escort == 75
+    assert save["upgrades"]["stride"] == 1
     g.upgrades["stride"] = 0
     g.continue_game()
     assert g.upgrades["stride"] == 1
     g.side = "towers"
     g.next_pass()
-    assert g.upgrades == dict.fromkeys(UPGRADES, 0) and g.escort == 0, "a new pass starts without them"
+    assert g.upgrades == dict.fromkeys(UPGRADES, 0), "a new pass starts without them"
 
 
 def test_no_tower_actions_on_the_monsters_side(attack, mouse):

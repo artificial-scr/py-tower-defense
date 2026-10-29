@@ -4,7 +4,7 @@ queue along the bottom of the map, and the aiming circle. Mixed into graphics.Ga
 
 import pygame
 
-from attack import DEFENDER_LIVES, ESCORT_KIND
+from attack import DEFENDER_LIVES
 from graphics import (
     BAD,
     BUTTON,
@@ -147,10 +147,6 @@ class AttackView:
             return
         top = self.queue_strip_top()
         value = sum(ENEMY_TYPES[k]["cost"] for k in self.queue)
-        escort = self.escort_for_next_wave()
-        line = f"Queue: {len(self.queue)} monsters, worth {value}"
-        if escort:
-            line += f"  +{escort} escort {ENEMY_TYPES[ESCORT_KIND]['name']}s"
-        self.text(self.font_s, line, TEXT, (12, top + 4))
+        self.text(self.font_s, f"Queue: {len(self.queue)} monsters, worth {value}", TEXT, (12, top + 4))
         self.text(self.font_s, "Backspace / click icon: undo   Right click upgrade: refund", TEXT_DIM,
                   (MAP_W - 12, top + 4), "topright")

@@ -220,7 +220,7 @@ def test_continue_resumes_side_pass_and_score(screen):
 def test_old_saves_count_as_towers_pass_1():
     main.write_save({"level": 6, "gold": 500, "lives": 9, "layout": []})
     assert main.load_save() == {"side": "towers", "pass": 1, "levels_won": 6, "monster_wins": 0, "level": 6,
-                                "gold": 500, "lives": 9, "layout": [], "upgrades": {}, "escort": 0,
+                                "gold": 500, "lives": 9, "layout": [], "upgrades": {},
                                 "share_growth": 0.0, "finale": None}
 
 

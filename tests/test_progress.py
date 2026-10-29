@@ -100,7 +100,7 @@ def test_level_change_saves_a_checkpoint(game):
         data = json.load(f)
     assert data == {"side": "towers", "pass": 1, "levels_won": 0, "monster_wins": 0, "level": 1, "gold": game.gold, "lives": game.lives,
                     "layout": [{"kind": "rifle", "spent": 100, "tile": [1, 1], "targeting": "first"}],
-                    "upgrades": {"vitality": 0, "stride": 0, "plating": 0}, "escort": 0, "share_growth": 0.0,
+                    "upgrades": {"vitality": 0, "stride": 0, "plating": 0}, "share_growth": 0.0,
                     "finale": None}
 
 

@@ -163,8 +163,8 @@ def update_setting(key, value):
 # --------------------------------------------------------------------------
 def load_save():
     """The run in progress as {"side", "pass", "levels_won", "monster_wins", "share_growth", "level", "gold", "lives",
-    "layout", "upgrades", "escort", "finale"}, or None if there's no valid one. Saves from before passes existed count as
-    pass 1 on the Towers side. lives are the defender's on the Monsters side; upgrades and escort are only used there.
+    "layout", "upgrades", "finale"}, or None if there's no valid one. Saves from before passes existed count as
+    pass 1 on the Towers side. lives are the defender's on the Monsters side; upgrades are only used there.
     finale is [level, wave] (1-based) where a Towers pass ends early (see Game.finale), or None."""
     try:
         with open(SAVE_FILE, encoding="utf-8") as f:
@@ -181,7 +181,6 @@ def load_save():
                    "targeting": e.get("targeting") if e.get("targeting") in TARGETING else "first"}
                   for e in data["layout"] if e["kind"] in TOWERS]
         upgrades = {k: max(0, int(r)) for k, r in data.get("upgrades", {}).items() if k in UPGRADES}
-        escort = max(0, int(data.get("escort", 0)))
         # saves from before record tiers: every win grew the share like a normal record
         share_growth = float(data.get("share_growth", monster_wins * REWARDS["normal"]["share"]))
         finale = data.get("finale")
@@ -193,7 +192,7 @@ def load_save():
         return None
     return {"side": side, "pass": pass_no, "levels_won": levels_won, "monster_wins": monster_wins,
             "share_growth": share_growth, "level": level, "gold": gold, "lives": lives, "layout": layout,
-            "upgrades": upgrades, "escort": escort, "finale": finale}
+            "upgrades": upgrades, "finale": finale}
 
 
 def write_save(save):
@@ -279,11 +278,11 @@ class Game(AttackMixin, AttackView, UnlockView, TooltipView, GameView):
             self.side_chosen = True
             s = self.save
             self.start_run(s["level"], s["gold"], s["lives"], s["layout"], s["side"], s["pass"], s["levels_won"],
-                           s["monster_wins"], s["upgrades"], s["escort"], s["share_growth"], s["finale"])
+                           s["monster_wins"], s["upgrades"], s["share_growth"], s["finale"])
             self.untouched = False
 
     def start_run(self, idx, gold, lives, layout=(), side="towers", pass_no=1, levels_won=0, monster_wins=0,
-                  upgrades=None, escort=0, share_growth=0.0, finale=None):
+                  upgrades=None, share_growth=0.0, finale=None):
         self.finish_log("abandoned")
         if self.log_session:
             self.log_session.run += 1
@@ -297,7 +296,7 @@ class Game(AttackMixin, AttackView, UnlockView, TooltipView, GameView):
         self.finale = finale
         self.untouched = True  # nothing played yet: Continue is still on offer
         self.gold = gold
-        self.start_attack_pass(upgrades, escort)
+        self.start_attack_pass(upgrades)
         self.lives = lives
         self.speed = 1
         self.paused = False
@@ -310,7 +309,7 @@ class Game(AttackMixin, AttackView, UnlockView, TooltipView, GameView):
         self.save = {"side": self.side, "pass": self.pass_no, "levels_won": self.levels_won,
                      "monster_wins": self.monster_wins, "share_growth": self.share_growth, "level": self.level_idx,
                      "gold": self.gold, "lives": self.lives,
-                     "layout": list(layout), "upgrades": dict(self.upgrades), "escort": self.escort,
+                     "layout": list(layout), "upgrades": dict(self.upgrades),
                      "finale": list(self.finale) if self.finale else None}
         write_save(self.save)
 

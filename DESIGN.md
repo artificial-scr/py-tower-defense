@@ -119,12 +119,10 @@ Records are kept **per wave**: each level has five slots, one for each of its wa
   Up to 5 ranks each.
 - **Price:** rank r costs `upgrade_price` (25%) × r × the current level's budget (its five waves'
   budgets added up), so they stay expensive as budgets grow.
-- **Escort:** every purchase also sends Basics worth its price (price ÷ 5), so the money still turns
-  into monsters. At most `escort_per_wave` (60) go with one wave; the rest wait for the next ones,
-  across levels. Escorts are part of the wave, so they're in the monster record and pay kill gold on
-  the Towers side.
-- A rank bought in the current draft can be sold back (right click). Upgrades and the escort still
-  to send are saved with the run, and reset at the start of every Monsters pass.
+- Buying an upgrade sends nothing: the budget it costs is taken from the waves. (At first every
+  purchase also sent Basics worth its price as an escort; that was dropped.)
+- A rank bought in the current draft can be sold back (right click). Upgrades are saved with the
+  run, and reset at the start of every Monsters pass.
 - Keys `Q` `W` `E`, or click the buttons under the draft list.
 ### Draft phase (between waves)
 - The panel lists your unlocked monster types with their cost.
@@ -235,7 +233,7 @@ There are two files, both git-ignored:
 | File | Lifetime | Contents |
 |---|---|---|
 | `user/profile.json` | Forever | Unlocks and ranks (both pools), per-wave tower and monster records, `monsters_side_unlocked`, `tower_cards_unlocked`, best run |
-| `user/savegame.json` | One run | Side, pass, level, gold and lives (the defender's on the Monsters side), rebuild list (Towers side), stat upgrades and escort still to send (Monsters side), the finale (level, wave) a Towers pass ends on |
+| `user/savegame.json` | One run | Side, pass, level, gold and lives (the defender's on the Monsters side), rebuild list (Towers side), stat upgrades (Monsters side), the finale (level, wave) a Towers pass ends on |
 
 - The save becomes the **run in progress**. Continue on the start screen resumes it at the start
   of the current level.

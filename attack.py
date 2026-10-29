@@ -13,8 +13,7 @@ the last level with lives left, ends the run. The Towers pass that follows a won
 wave it was won on, with the Warden joining that wave (main.Game.finale): ending a pass early makes
 the next one shorter but harder.
 
-Stat upgrades (monsters.json) are bought with the budget and last for the rest of the pass. Each
-purchase also sends Basics worth its price as an escort, at most escort_per_wave with each wave.
+Stat upgrades (monsters.json) are bought with the budget and last for the rest of the pass.
 
 The controls on this side are listed in README.md (Controls).
 """
@@ -33,16 +32,14 @@ DEFENDER_LIVES = 20  # for the whole pass
 QUEUE_MAX = 150  # drafted monsters per wave; keeps very long waves (and frame times) in check
 DRAFT_ROWS = 10  # monster kinds listed in the panel, and digit keys to draft them
 UPGRADE_KEYS = (pygame.K_q, pygame.K_w, pygame.K_e)  # in monsters.json order
-ESCORT_KIND = "basic"
 
 
 class AttackMixin:
     # ---- pass and level setup ------------------------------------------------
-    def start_attack_pass(self, upgrades=None, escort=0):
+    def start_attack_pass(self, upgrades=None):
         """Pass-long state on the Monsters side: the defender's lives and the stat upgrades bought."""
         self.lives = DEFENDER_LIVES
         self.upgrades = {k: min(int((upgrades or {}).get(k, 0)), spec["max"]) for k, spec in UPGRADES.items()}
-        self.escort = escort  # Basics still to send for upgrades bought (see buy_upgrade)
 
     def setup_attack_level(self):
         """Called by load_level on the Monsters side."""
@@ -152,13 +149,12 @@ class AttackMixin:
                 and self.budget >= self.upgrade_price(key))
 
     def buy_upgrade(self, key):
-        """A rank of a stat upgrade for the rest of the pass, plus an escort of Basics worth its price."""
+        """A rank of a stat upgrade for the rest of the pass."""
         if not self.can_upgrade(key):
             return
         price = self.upgrade_price(key)
         self.budget -= price
         self.upgrades[key] += 1
-        self.escort += price // ENEMY_TYPES[ESCORT_KIND]["cost"]
         self.bought.append((key, price))
         self.sound("upgrade_buy")
         self.log_event("upgrade", upgrade=key, rank=self.upgrades[key], price=price)
@@ -170,7 +166,6 @@ class AttackMixin:
                 price = self.bought.pop(i)[1]
                 self.budget += price
                 self.upgrades[key] -= 1
-                self.escort -= price // ENEMY_TYPES[ESCORT_KIND]["cost"]
                 self.sound("upgrade_sell")
                 self.log_event("upgrade_sold", upgrade=key, rank=self.upgrades[key], price=price)
                 return
@@ -186,20 +181,14 @@ class AttackMixin:
                 mods[spec["stat"]] *= 1 + spec["per_rank"] * rank
         return mods
 
-    def escort_for_next_wave(self):
-        return min(self.escort, int(BUDGET["escort_per_wave"]))
-
     def send_wave(self):
-        """Start the next wave with the escort and the drafted queue (an empty one is allowed: it saves the
-        budget)."""
+        """Start the next wave with the drafted queue (an empty one is allowed: it saves the budget)."""
         if self.state != "build" or self.wave_idx >= WAVES_PER_LEVEL:
             return
         self.hp_mult = wave_hp_mult(self.level_idx, self.wave_idx)
         self.wave_mods = self.upgrade_mods()
-        escort = self.escort_for_next_wave()
-        self.escort -= escort
         self.bought = []
-        self.spawn_queue = [ESCORT_KIND] * escort + self.queue
+        self.spawn_queue = list(self.queue)
         fight_mods = {**self.wave_mods, "armor": self.defender_mods["armor"]}  # the defender's Piercing card
         self.wave_idx += 1
         self.sent_waves[self.wave_idx] = {"value": sum(ENEMY_TYPES[k]["cost"] for k in self.spawn_queue),

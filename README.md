@@ -99,8 +99,8 @@ The towers on the map are your **tower record** for the level, and you have to g
 - **Stat upgrades:** Vitality (+15% HP), Stride (+10% speed, up to +50%) and Plating (+2 armor), up
   to 5 ranks each, bought during the draft with `Q` `W` `E` or the buttons under the draft list.
   They last for the rest of the pass. They're expensive (a quarter of the level's budget times the
-  rank), but each one also sends Basics worth its price as an escort (at most 60 per wave). Right
-  click an upgrade to undo a rank bought in this draft.
+  rank), and the budget they cost isn't sent as monsters. Right click an upgrade to undo a rank
+  bought in this draft.
 - **Abilities:** during a wave, press their number (or click them) once they're ready. Area
   abilities then need a click on the map.
 - **Lives last the whole pass:** the defender has 20 lives for all 10 levels. Take at least one in
@@ -262,7 +262,7 @@ There are two files in `user/`, both git-ignored:
 - **`user/profile.json`** is kept forever: your unlocks, the towers you own and your progress toward
   the others, the records for every level and wave, your milestones and your best run.
 - **`user/savegame.json`** is the run in progress, saved at the start of every level (on the Monsters side
-  with the defender's lives, your upgrades and any escort still to send). On the start screen,
+  with the defender's lives and your upgrades). On the start screen,
   press **C** to continue it from the start of that level. Losing a level ends the run and deletes it.
 
 ## Modding
@@ -276,7 +276,7 @@ the game stops with a message that says what's wrong.
 - **`evolution.json`**: the three tier 1 → 3 lines and the twelve tier 4 recipes.
 - **`monsters.json`**: every monster's stats, cost, look and mechanics (`armor`, `heal_aura`, `split`,
   `phase`, `slow_floor`, `summon`), the abilities, the stat upgrades, and the Monsters-side rules
-  (`share_start`, `starter_picks`, `upgrade_price`, `escort_per_wave`, `max_lives_per_level`,
+  (`share_start`, `starter_picks`, `upgrade_price`, `max_lives_per_level`,
   `pace_per_life`, `pace_max`, `pace_min`) and the reward tiers (`rewards`).
 - **`unlocks.json`**: both card pools, with each card's effect, numbers per rank, max rank, weight and
   rarity.

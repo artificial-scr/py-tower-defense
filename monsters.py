@@ -28,7 +28,7 @@ ABILITY_EXTRAS = ("radius", "amount", "duration")
 EFFECTS = {"disable": ("duration",), "range": ("amount", "duration"), "haste": ("amount", "duration"),
            "heal": ("amount",), "shield": ("amount", "duration")}
 TARGETS = ("area", "all")
-BUDGET_FIELDS = ("share_start", "starter_picks", "upgrade_price", "escort_per_wave", "max_lives_per_level",
+BUDGET_FIELDS = ("share_start", "starter_picks", "upgrade_price", "max_lives_per_level",
                  "pace_per_life", "pace_max", "pace_min")
 TIERS = ("weak", "normal", "strong")
 TIER_FIELDS = ("cards", "rare", "share")
