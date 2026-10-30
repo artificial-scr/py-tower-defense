@@ -2,6 +2,7 @@
 .serena/
 __pycache__/
 build/
+export/
 logs/
 user/
 *.bak

@@ -68,6 +68,8 @@ def shape_points(shape, center, r, rot):
         return regular_polygon(center, r, 4, rot)
     if shape == "triangle":
         return regular_polygon(center, r, 3, rot)
+    if shape == "pentagon":
+        return regular_polygon(center, r, 5, rot)
     if shape == "hexagon":
         return regular_polygon(center, r, 6, rot)
     if shape == "octagon":

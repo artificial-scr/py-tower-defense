@@ -2,7 +2,7 @@
   "_comment": [
     "Tower stats and looks, loaded when the game starts. How towers fuse is in evolution.json.",
     "Colors are [r, g, b] or a name from the palette. Look: layers are [shape, radius, color] drawn",
-    "bottom-up (shape: circle, square, diamond, triangle, hexagon, octagon, star); barrels are",
+    "bottom-up (shape: circle, square, diamond, triangle, pentagon, hexagon, octagon, star); barrels are",
     "[count, length, width]; \"flame\": true draws the shots as a stream of fire, \"laser\": true (for instant",
     "towers) as one unbroken beam. Towers bought from the panel (tier 1 in evolution.json) need a cost.",
     "Optional mechanics: splash, slow + slow_time, burn + burn_time, chain, multishot, instant, vs_slowed, vs_burning.",
@@ -134,7 +134,7 @@
       "damage": 32,
       "rate": 1.0,
       "proj_speed": 320,
-      "look": {"layers": [["hexagon", 13, "incinerator"], ["circle", 6, [255, 220, 80]]], "barrels": [1, 13, 9],
+      "look": {"layers": [["pentagon", 13, "incinerator"], ["circle", 6, [0, 0, 0]]], "barrels": [1, 13, 9],
                "flame": true},
       "splash": 60,
       "burn": 25,

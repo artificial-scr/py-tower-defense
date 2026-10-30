@@ -15,7 +15,7 @@ TOWERS_FILE = os.path.join(HERE, "towers.json")
 EVOLUTION_FILE = os.path.join(HERE, "evolution.json")
 
 # Shapes a tower layer can use (sprites.layer draws them).
-SHAPES = ("circle", "square", "diamond", "triangle", "hexagon", "octagon", "star")
+SHAPES = ("circle", "square", "diamond", "triangle", "pentagon", "hexagon", "octagon", "star")
 # Optional mechanics a tower can have:
 #   splash      radius damaged around the impact point
 #   slow        speed multiplier applied for slow_time seconds
