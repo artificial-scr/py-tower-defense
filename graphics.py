@@ -86,6 +86,8 @@ def wrap(text, width):
 
 
 _caps = {}  # font -> (top, bottom) of its capital letters within a rendered line, in pixels
+_texts = {}  # (font, text, color) -> rendered line: most labels are the same every frame
+TEXT_CACHE_SIZE = 1024  # past this many lines the cache starts over (counters keep making new ones)
 
 
 def load_font(size, weight="medium"):
@@ -106,8 +108,14 @@ def blit_text(surf, font, s, color, pos, anchor="topleft", alpha=None):
     letters, not the font's line box: "top" is the top of the capitals, "bottom" the baseline,
     and centered text has its capitals centered, so labels sit in the middle of their buttons.
     Returns the capitals' box, in screen pixels."""
-    img = font.render(s, True, color)
+    key = (font, s, tuple(color))
+    img = _texts.get(key)
+    if img is None:
+        if len(_texts) >= TEXT_CACHE_SIZE:
+            _texts.clear()
+        img = _texts[key] = font.render(s, True, color)
     if alpha is not None:
+        img = img.copy()  # the cached line stays opaque
         img.set_alpha(alpha)
     top, bottom = _caps[font]
     box = pygame.Rect(0, 0, img.get_width(), bottom - top)
@@ -158,6 +166,58 @@ def mouse_pos():
     return to_logical(pygame.mouse.get_pos())
 
 
+class FxLayer(pygame.Surface):
+    """The see-through layer over the map (ranges, beams, flames, explosions). It remembers which CELL
+    squares were drawn on, so each frame clears and shows only those: blending the whole layer costs
+    about 2 ms at fullscreen scale even when it's empty. Draw on it with blit, fill or sdraw, which mark."""
+
+    CELL = 64  # screen pixels
+
+    def __init__(self, size):
+        super().__init__(size, pygame.SRCALPHA)
+        self.cells = set()  # (column, row) of the squares drawn on since the last clear
+
+    def mark(self, rect):
+        if rect.width and rect.height:
+            c = self.CELL
+            rows = range(rect.top // c, (rect.bottom - 1) // c + 1)
+            self.cells.update((x, y) for x in range(rect.left // c, (rect.right - 1) // c + 1) for y in rows)
+        return rect
+
+    def blit(self, source, dest, area=None, special_flags=0):
+        return self.mark(super().blit(source, dest, area, special_flags))
+
+    def fill(self, color, rect=None, special_flags=0):
+        return self.mark(super().fill(color, rect, special_flags))
+
+    def spans(self):
+        """The marked squares as rects, neighbours in a row joined, none overlapping (a spot shown twice
+        would be blended twice)."""
+        c = self.CELL
+        runs = []
+        for x, y in sorted(self.cells, key=lambda cell: (cell[1], cell[0])):
+            if runs and runs[-1].y == y * c and runs[-1].right == x * c:
+                runs[-1].width += c
+            else:
+                runs.append(pygame.Rect(x * c, y * c, c, c))
+        bounds = self.get_rect()
+        return [r.clip(bounds) for r in runs]
+
+    def clear(self):
+        for r in self.spans():
+            super().fill((0, 0, 0, 0), r)
+        self.cells.clear()
+
+    def show(self, surf):
+        for r in self.spans():
+            surf.blit(self, r.topleft, r)
+
+
+def _marked(surf, rect):
+    """What pygame.draw changed on `surf`, noted if it's an FxLayer."""
+    return surf.mark(rect) if isinstance(surf, FxLayer) else rect
+
+
 class ScaledDraw:
     """pygame.draw (plus fill) taking logical coordinates and drawing at SCALE."""
 
@@ -166,19 +226,20 @@ class ScaledDraw:
         return max(1, round(w * SCALE)) if w else 0
 
     def circle(self, surf, color, center, radius, width=0):
-        return pygame.draw.circle(surf, color, sp(center), radius * SCALE, self.width(width))
+        return _marked(surf, pygame.draw.circle(surf, color, sp(center), radius * SCALE, self.width(width)))
 
     def line(self, surf, color, a, b, width=1):
-        return pygame.draw.line(surf, color, sp(a), sp(b), self.width(width))
+        return _marked(surf, pygame.draw.line(surf, color, sp(a), sp(b), self.width(width)))
 
     def rect(self, surf, color, rect, width=0, border_radius=0):
-        return pygame.draw.rect(surf, color, srect(rect), self.width(width), round(border_radius * SCALE))
+        return _marked(surf, pygame.draw.rect(surf, color, srect(rect), self.width(width),
+                                              round(border_radius * SCALE)))
 
     def polygon(self, surf, color, points, width=0):
-        return pygame.draw.polygon(surf, color, [sp(p) for p in points], self.width(width))
+        return _marked(surf, pygame.draw.polygon(surf, color, [sp(p) for p in points], self.width(width)))
 
     def ellipse(self, surf, color, rect, width=0):
-        return pygame.draw.ellipse(surf, color, srect(rect), self.width(width))
+        return _marked(surf, pygame.draw.ellipse(surf, color, srect(rect), self.width(width)))
 
     def fill(self, surf, color, rect):
         return surf.fill(color, srect(rect))
@@ -584,12 +645,13 @@ class GameView:
     def build_view(self):
         """Everything whose size depends on the display scale. Done once per scale change."""
         _caps.clear()
+        _texts.clear()
         sprites.clear()
         self.font_s = load_font(11)
         self.font = load_font(14)
         self.font_l = load_font(22, "bold")
         self.font_xl = load_font(36, "bold")
-        self.fx_layer = pygame.Surface(sp((MAP_W, MAP_H)), pygame.SRCALPHA)
+        self.fx_layer = FxLayer(srect((0, 0, MAP_W, MAP_H)).size)
         if hasattr(self, "theme"):
             self.build_map()
 
@@ -610,6 +672,7 @@ class GameView:
     def build_map(self):
         """The level's map picture and its ambience (portal, gate, particles, glow)."""
         self.map_surface, accents = terrain.map_layers(self.theme, self.waypoints, SCALE)
+        self.map_surface = self.map_surface.convert()  # the display's pixel format: blitted every frame
         self.scenery = ambience.Scenery(self.theme, terrain.PATH_STYLES[self.theme.name], self.waypoints, accents)
 
     def set_display(self, scale, fullscreen):
@@ -658,11 +721,9 @@ class GameView:
         self.scenery.draw_under(screen, self.clock, SCALE, self.ambient)
 
         fx = self.fx_layer
-        fx.fill((0, 0, 0, 0))
+        fx.clear()
         if self.selected and not self.dragging:
             self.draw_range(fx, self.selected.pos, self.selected.range, (255, 255, 255))
-        if self.build_kind or self.dragging:
-            fx.blit(terrain.grid_lines(SCALE, (255, 255, 255), 50), (0, 0))
         self.draw_ghost(fx)
         self.draw_drag_preview(fx)
 
@@ -685,7 +746,9 @@ class GameView:
             ef.draw(fx)
         if self.side == "monsters":
             self.draw_attack_map(fx)
-        screen.blit(fx, (0, 0))
+        if self.build_kind or self.dragging:  # straight on the screen: on fx it would mark the whole map
+            screen.blit(terrain.grid_lines(SCALE, (255, 255, 255), 50), (0, 0))
+        fx.show(screen)
         if self.side == "monsters":
             self.draw_queue_text()
         mx, my = mouse_pos()
@@ -898,9 +961,12 @@ class GameView:
         self.screen.blit(band, sp((0, MAP_H / 2 - 55)))
 
     def shade_map(self, alpha=160):
-        shade = pygame.Surface(sp((MAP_W, MAP_H)), pygame.SRCALPHA)
-        shade.fill((0, 0, 0, alpha))
-        self.screen.blit(shade, (0, 0))
+        def make():
+            shade = pygame.Surface(sp((MAP_W, MAP_H)), pygame.SRCALPHA).convert_alpha()
+            shade.fill((0, 0, 0, alpha))
+            return shade
+
+        self.screen.blit(sprites.cached(("shade", alpha, SCALE), make), (0, 0))
 
     def draw_state_message(self):
         """The message for the level's state: level complete, run over, pass won."""
